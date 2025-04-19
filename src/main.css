@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+	--font-sans: Inter;
+	--font-mono: "Source Code Pro";
+
+	--color-zinc-150: #f0f0f2;
+	--color-zinc-850: #1e1e21;
+}
+
+@custom-variant dark (&:is(.dark, .dark *));
+@custom-variant theme (&:is(.dark *,.light *));
+@custom-variant enabled (&:not(disabled));
+
+h3,h2,h1 {
+	/* font-family: var(--font-sans); */
+}
+
+html {
+	font-family: var(--font-mono);
+}
+
+button {
+	cursor: pointer;
+}
