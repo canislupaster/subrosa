@@ -14,7 +14,7 @@ function App({theme: initialTheme}: {theme: Theme}) {
       
     </div> */}
    
-    <Editor/>
+    <Editor />
   </Container></ThemeContext.Provider>;
 }
 

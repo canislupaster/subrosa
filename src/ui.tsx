@@ -290,7 +290,7 @@ export function cloneRef<T>(...refs: (Ref<T>|undefined)[]): (x: T|null)=>void {
 		for (const r of refs) {
 			if (typeof r == "function") r(x);
 			else if (r!=null) r.current=x;
-		};
+		}
 	};
 }
 
@@ -355,6 +355,7 @@ export const AppTooltip = forwardRef(({
 		ref={cloneRef(targetRef, ref)}
 		onClickOutside={()=>setOpen(false)}
 		positions={placement ?? ['top', 'right', 'left', 'bottom']}
+		containerStyle={{ zIndex: "100000" }}
 		padding={-15}
 		parentElement={useContext(ModalContext)?.current ?? undefined}
 		content={({position, childRect, popoverRect}: PopoverState) => {
@@ -395,7 +396,7 @@ export function Dropdown({parts, trigger, onOpenChange, ...props}: {
 
 	//these components are fucked up w/ preact and props don't merge properly with container element
 	return <AppTooltip onOpenChange={onOpenChange}
-		className="rounded-sm dark:bg-zinc-900 bg-zinc-100 border-0 px-0 py-0 max-w-60 overflow-y-auto justify-start max-h-[min(90dvh,30rem)]" 
+		className="rounded-sm dark:bg-zinc-900 bg-zinc-100 border-0 px-0 py-0 max-w-60 overflow-y-auto justify-start max-h-[min(90dvh,30rem)] z-50" 
 		content={parts.map((x,i) => {
 			if (x.type=="act") {
 				return <Button key={x.key ?? i} disabled={x.disabled}
@@ -651,4 +652,12 @@ export function useDisposable(effect: ()=>Disposable|undefined, deps?: unknown[]
 		return ()=>{ obj?.[Symbol.dispose](); }
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, deps);
+}
+
+// awful time complexity lmfao
+export function mapWith<K,V>(map: Readonly<Map<K,V>>, k: K, v?: V) {
+	const newMap = new Map(map);
+	if (v!==undefined) newMap.set(k, v);
+	else newMap.delete(k);
+	return newMap;
 }

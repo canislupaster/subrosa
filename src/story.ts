@@ -4,5 +4,5 @@ type Stage = {
 };
 
 const storyText = [
-	{}
+	{""}
 ];
