@@ -45,9 +45,9 @@ function shuffle<T>(s: T[]): T[] {
 export const puzzles = [
 	{
 		// Caesar
-		name: "Your first puzzle",
+		name: "Decrypting your password.",
 		key: "salad",
-		blurb: "Can you learn the controls!?",
+		blurb: "Company cultures are weird.",
 		generator: defaultGen,
 		solve(inp) {
 			const key: number = 2;
@@ -57,9 +57,9 @@ export const puzzles = [
 	},
 	{
 		// Reverse
-		name: "Turn it around!",
+		name: "How much do they pay me, exactly?",
 		key: "elzzup",
-		blurb: "Sometimes there are hints in the url...",
+		blurb: "Money is important.",
 		generator: defaultGen,
 		solve(inp) {
 			return inp.split("").reverse().join("");

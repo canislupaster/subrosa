@@ -206,27 +206,144 @@ export const data: Stage[] = [
     puzzleTy[0],
     {
         type: "story",
-        name: "The Mysterious Kiln 2",
-        key: "end",
-        blurb: "what thing do what".repeat(10),
+        name: "Chapter 2",
+        key: "first_payslip",
+        blurb: "Karen, who?",
         para: [
-            <StoryParagraph>
-                Welcome to the world of Kiln! You awaken in a dimly lit workshop, the scent of clay and smoke in the air. [pause] A mysterious kiln stands before you, its surface warm to the touch.
+            <StoryParagraph noCursor={true}>
+                <pre>
+:          -------   -------                                      @@@@@@@%                                                 @@@@@@@               <br />
+:          ------=- -======-                                      @@@@@@@@                                                @@@@@@@@               <br />
+:          -------- -======-                                      @@@@@@@@                                                @@@@@@@@               <br />
+:          -------- -======-                                      @@@@@@@@                                                @@@@@@@@               <br />
+:                   -======-                                      @@@@@@@@                                                @@@@@@@@               <br />
+: ----------------  -======-  ---==--             @@@@@@@@@@@@@   @@@@@@@@      @@@@@@@@@@@@@@@@@@@      @@@@@@@@@@@@     @@@@@@@@     @@@@@@@@@ <br />
+:------------------ -======- --=====--          @@@@@@@@@@@@@@@@  @@@@@@@@    @@@@@@@@@@@@@@@@@@@@@    @@@@@@@@@@@@@@@@@  @@@@@@@@    @@@@@@@@@  <br />
+:------------------ -======- -======--         @@@@@@@@@@@@@@@@@  @@@@@@@@   @@@@@@@@@@@@@@@@@@@@@@   @@@@@@@@@@@@@@@@@@@ @@@@@@@@  @@@@@@@@@    <br />
+: ----------------   ------- --------          @@@@@@@       @@   @@@@@@@@  @@@@@@@@@@  @@@@@@@@@@@  @@@@@@@@@   @@@@@@@  @@@@@@@@@@@@@@@@@@     <br />
+:                                              @@@@@@@@@@@@       @@@@@@@@ @@@@@@@@        @@@@@@@@ @@@@@@@@              @@@@@@@@@@@@@@@@       <br />
+: *******  *******   ................           @@@@@@@@@@@@@@@   @@@@@@@@ @@@@@@@         @@@@@@@@ @@@@@@@               @@@@@@@@@@@@@@         <br />
+:********  ******** .---------------..             @@@@@@@@@@@@@@ @@@@@@@@ @@@@@@@@        @@@@@@@@ @@@@@@@               @@@@@@@@@@@@@@@%       <br />
+:******** ********* .---------------..                   @@@@@@@@ @@@@@@@@  @@@@@@@@      @@@@@@@@@  @@@@@@@@     @@@@%   @@@@@@@@@@@@@@@@@@     <br />
+: ******* *********  ...----------...           @@@@@@   @@@@@@@@ @@@@@@@@  @@@@@@@@@@@@@@@@@@@@@@@  @@@@@@@@@@@@@@@@@@@@ @@@@@@@@  @@@@@@@@@@   <br />
+:         *********                            @@@@@@@@@@@@@@@@@  @@@@@@@@   @@@@@@@@@@@@@@@@@@@@@@   @@@@@@@@@@@@@@@@@@  @@@@@@@@   @@@@@@@@@%  <br />
+:         ********* ....--:                     @@@@@@@@@@@@@@@   @@@@@@@@      @@@@@@@@@@@@@@@@@@@      %@@@@@@@@@@@@    @@@@@@@@     @@@@@@@@@ <br />
+:         ********* .------.                          @@@@                          @@@                       @@@                                <br />
+:          ******** .------.                                                                                                                     <br />
+:          *******   ......                                                                                                                      <br />
+                </pre>
             </StoryParagraph>,
             <StoryParagraph>
-                An old note lies nearby: "To unlock the kiln's secret, solve the puzzle within." [pause] Will you accept the challenge?
+                Three days into the puzzle, you’ve figured it out.
+                As soon as the login screen resolves into a snazzy desktop, a Slack notification fouls the new-desktop smell.
+                You’re impressed – they’ve already ensnared you into the corporate hive-mind without action on your part.
+                It’s Karen, no last name (and no profile photo), who claims to be your mentor for the internship period.
             </StoryParagraph>,
-            <StoryParagraph end={{
-                type: "choice",
-                key: "intro_choice",
-                choices: [
-                    { value: "accept", label: "Accept the challenge" },
-                    { value: "decline", label: "Walk away" }
-                ]
-            }}>
-                What will you do?
-            </StoryParagraph>
-        ],
+            <StoryParagraph>
+                Looking around at the sea of empty desks around you, you choose to believe this at face value. Karen introduces herself as a bouldering and hiking enthusiast who migrated from the Midwest to work on awesome and world-changing things at Subrose, giving her the unenviable distinction of having the exact same story as one in three female software engineers in the Bay Area.
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>You’re worried that the previous thought makes you sound like an ass, and you’re probably right.
+                Keeping to the stereotype, she doesnt seem to know that punctuation exists</p>
+                Karen sends you some more cryptography exercises and you finish off your first week of work,
+                having only met the receptionist and not having mustered up the courage to talk to the indistinct figures on the far reaches of the office floor.
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                Remember how you didn’t know anything about Subrose Systems when you accepted your offer,
+                and how their website didn’t either?
+                </p>
+                <p>
+                The handful of coworkers you’ve met have been added to that list.
+                The tasks are abstract puzzles, and your supervisor, Karen, is far more excited about your puzzle-solving speed than any tangible output.
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                In your most private childhood dreams, you wanted to grow up and <i>become a dinosaur</i>.
+                As a teenager, you imagined yourself <i>working on rockets that went boom</i>.
+                </p>
+                As a twenty year old, your lofty ambitions have been besieged by the endless buffet of free food and a paycheck
+                large enough to forgive the existential guilt of abandoning all idealism.
+            </StoryParagraph>,
+            <StoryParagraph>
+                Speaking of guilt, you haven’t thanked Mikah yet for the referral.
+                You’ve made first contact with the denizens that inhabit the far reaches of the office, and some of them do seem to recognize Mikah’s name though.
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                There’s sweaty Derek, who bikes to work despite your private hopes that he would give it up,
+                or at least discover deodorant. He has an office somewhere in the twisted maze of hallways at
+                the far end of the open plan area.</p>
+                <p>There's Egor Gagushin with a desk near the fire exits, who somehow has the vanity Slack username of <b>“eggag33”</b> – something you immediately envy him for.</p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                There are a few other people who come in daily,
+                but you haven’t yet been able to corner them into conversation.
+                Besides the receptionist, everyone seems surprised at interacting with another human being in person. You wonder when it’ll happen to you.
+            </StoryParagraph>,
+            <StoryParagraph>
+                Another week’s gone by. You’ve joked about Karen still taking you through training to Derek,
+                only to be met with a blank look as Derek asked, ‘Who’s Karen?”.
+                You stop short of proving her existence by pulling up your punctuation-less Slack chats.
+            </StoryParagraph>,
+            <StoryParagraph>
+                <pre>        
+:      .=-------------------------:+-                          <br />
+:       :........................  :=+.                        <br />
+:       :........................  .::-=                       <br />
+:       :........................  .:..:==                     <br />
+:       :........................  .:...::=-                   <br />
+:       :......................... :=------=*=                 <br />
+:       :.....                       .   ....:+.               <br />
+:       :..                                   .                <br />
+:       :..  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@= ..:                <br />
+:       :..  .                              ..:                <br />
+:       :..                                 ..:                <br />
+:       :..  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@* ..:                <br />
+:       :..                                 ..:                <br />
+:       :..                                 ..:                <br />
+:       :.. .@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ ..:                <br />
+:       :..                                 ..:                <br />
+:       :....                             ....:                <br />
+:      .........................................               <br />
+:    #############################################@@@@*        <br />
+:   ########################################### -.:::*@@@      <br />
+:   -#########################################:-###     @@     <br />
+:   -###### ......  ###        :###: ..     #.-*##+     %@@    <br />
+:   -#######..####.  ##  #####  =###  #######--*##+      +     <br />
+:   -#######.       ###  +####   ###       -#*-*##*            <br />
+:   -#######.  -:*#####  #####  :###  #######...=#:.========:  <br />
+:   -######=. #########   #+    ####  ####*...:....:-==+==++## <br />
+:   -######+  #########      .######  ####*.:-----....:-----=* <br />
+:   +######################################.------.@@::-----=+ <br />
+:    ######################################.:----:.@@.:-----=+ <br />
+:                                         ..------....:-----=* <br />
+:      .::::::::::::::::::::::::::::::::::=#*+++++++++++++++#+ <br />
+:                                           ................   <br />
+                </pre>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                Just before leaving for the day, you receive a locked PDF payslip.
+                Surely there’s been a mistake, why would your payslip be <i>password-protected</i>?
+                The email, surely flouting a dozen state laws about payslip documents, states "<b>Worthy are those who claim this prize.</b>"
+                </p>
+                <p>
+                After a nervous laugh and email to HR, you’ve realized they’re serious.
+                Your options are either fighting this in court or just solving the puzzle they want you to solve,
+                which when presented like that, are no options at all. Hey, you’re doing this on company time.
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                You confide in Derek, only for him to sympathize. "It keeps our skills sharp.” And then, in an about turn, he declares, “No cheating.”
+                </p>
+                <p>
+                You open your payslip. That car may come sooner than you imagined.
+                </p>
+            </StoryParagraph>,
+        ]
     },
 	puzzleTy[1],
 	puzzleTy[2],
