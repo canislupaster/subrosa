@@ -56,7 +56,7 @@ export const puzzles = [
 	},
 	{
 		// Reverse
-		name: "You're first puzzle",
+		name: "Turn it around",
 		key: "elzzup",
 		blurb: "fun Have!",
 		generator: defaultGen,
@@ -68,7 +68,7 @@ export const puzzles = [
 		// Incremental Caesar
 		name: "Caesar but different",
 		key: "btoc",
-		blurb: "Inspiring quote",
+		blurb: "It's even more secure than the original!",
 		generator: defaultGen,
 		solve(inp) {
 			const len: number = inp.length;
@@ -89,7 +89,7 @@ export const puzzles = [
 		// Segment Reverse
 		name: "Annoying puzzle",
 		key: "pain",
-		blurb: "Don't have fun!",
+		blurb: "We made this one extra spicy! 🌶️ Allocate a few hours or something.",
 		generator() {
 			return fill(defaultGenLen, ()=>(Math.random() > 0.8 ? "x" : randString(alpha, 1))).join("");
 		},
@@ -112,7 +112,7 @@ export const puzzles = [
 		// Keyword Substitution
 		name: "Secret",
 		key: "keyword",
-		blurb: `Hope you read the story!`,
+		blurb: `Hint: maybe there are some clues in the story!`,
 		generator: defaultGen,
 		solve(inp) {
 			const key = "mikah"; // change
