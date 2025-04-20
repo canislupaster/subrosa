@@ -227,12 +227,12 @@ export function step(prog: ProgramState) {
 		if (i<0) return;
 
 		if (rhs==undefined) {
-			get(lhs).current = typeof l=="string" ? (l.length>=i ? 0 : l[i]) : l;
+			get(idx).current = typeof l=="string" ? (i>=l.length ? -1 : charToNum[l[i]] ?? -1) : l;
 		} else {
 			const s = castToStr(rhs);
 			let outS: string|null=null;
 			if (typeof l=="string" && i>=l.length) {
-				outS=[ ...l, fill(i-l.length, 0), s ].join("");
+				outS=[ ...l, fill(i-l.length, -1), s ].join("");
 			} else if (typeof l=="string") {
 				outS=`${l.slice(0,i)}${s}${l.slice(i+1)}`;
 			} else {
