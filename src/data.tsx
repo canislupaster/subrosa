@@ -245,8 +245,9 @@ export const data: Stage[] = [
             <StoryParagraph>
                 <p>You’re worried that the previous thought makes you sound like an ass, and you’re probably right.
                 Keeping to the stereotype, she doesnt seem to know that punctuation exists</p>
-                Karen sends you some more cryptography exercises and you finish off your first week of work,
+                <p>Karen sends you some more cryptography exercises and you finish off your first week of work,
                 having only met the receptionist and not having mustered up the courage to talk to the indistinct figures on the far reaches of the office floor.
+                </p>
             </StoryParagraph>,
             <StoryParagraph>
                 <p>
@@ -263,8 +264,10 @@ export const data: Stage[] = [
                 In your most private childhood dreams, you wanted to grow up and <i>become a dinosaur</i>.
                 As a teenager, you imagined yourself <i>working on rockets that went boom</i>.
                 </p>
+                <p>
                 As a twenty year old, your lofty ambitions have been besieged by the endless buffet of free food and a paycheck
                 large enough to forgive the existential guilt of abandoning all idealism.
+                </p>
             </StoryParagraph>,
             <StoryParagraph>
                 Speaking of guilt, you haven’t thanked Mikah yet for the referral.
