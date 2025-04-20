@@ -4,13 +4,13 @@ import { Anchor, bgColor, Button, LocalStorage, useDisposable, Text, Divider, te
 import clsx from "clsx";
 import { defaultGen, Puzzle } from "./puzzles";
 
-function useStoryState<T>(key: string) {
+export function useStoryState<T=string>(key: string) {
 	const [x, setX] = useState<T>();
 	useEffect(()=>{ setX(LocalStorage.storyState?.[key] as T|undefined); }, [key]);
 	return [x, useCallback((newX: T)=>{
 		LocalStorage.storyState = {...LocalStorage.storyState, [key]: newX as unknown};
 		setX(newX);
-	}, [key])];
+	}, [key])] as const;
 }
 
 type TerminalEvent = {

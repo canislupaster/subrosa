@@ -45,7 +45,7 @@ export const puzzles = [
 	{
 		name: "Reverse",
 		key: "reverse",
-		blurb: "Reverses string",
+		blurb: "Can you reverse a string? It may prove difficult.",
 		generator: defaultGen,
 		solve(inp) {
 			return inp.split("").reverse().join("");
@@ -54,7 +54,7 @@ export const puzzles = [
 	{
 		name: "Caesar",
 		key: "caesar",
-		blurb: "Increments all letters by key",
+		blurb: "Ah, Caesar's famous cipher. For such a brilliant commander, how did he have any faith in it?",
 		generator: defaultGen,
 		solve(inp) {
 			const key: number = 2;
