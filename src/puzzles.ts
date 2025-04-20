@@ -4,6 +4,7 @@ import { charMap, charMod, charToNum, numToChar } from "./eval";
 
 export type Puzzle = {
 	name: string, blurb: ComponentChildren,
+	key: string,
 	generator: ()=>string, // generate an input
 	solve: (inp: string)=>string, // encrypt an input
 };

@@ -2,7 +2,7 @@
 @import "tailwindcss";
 
 @theme {
-	--font-sans: Inter;
+	--font-big: Chivo;
 	--font-mono: "Source Code Pro";
 
 	--color-zinc-150: #f0f0f2;
@@ -14,7 +14,7 @@
 @custom-variant enabled (&:not(disabled));
 
 h3,h2,h1 {
-	/* font-family: var(--font-sans); */
+	font-family: var(--font-big);
 }
 
 html {

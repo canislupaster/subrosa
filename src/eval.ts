@@ -65,7 +65,8 @@ export type EditorState = Readonly<{
 	input: string,
 	stepsPerS: number,
 
-	puzzle?: Puzzle
+	puzzle?: Puzzle,
+	solved: boolean
 }>;
 
 export class InterpreterError extends Error {
@@ -271,8 +272,10 @@ export function step(prog: ProgramState) {
 export type Verdict = { type: "RE"|"WA"|"AC"|"TLE" };
 
 export function test({ input, output, proc, procs }: {
-	input: string, output: string,
-	proc: number, procs: ReadonlyMap<number,Procedure>
+	input: string,
+	output: string,
+	proc: number,
+	procs: ReadonlyMap<number,Procedure>
 }): Verdict {
 	const reg = {current: input};
 	try {

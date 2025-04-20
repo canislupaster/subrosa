@@ -5,6 +5,8 @@ import { twMerge } from "tailwind-merge";
 import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
 import { forwardRef, SetStateAction } from "preact/compat";
 import clsx from "clsx";
+import { useLocation } from "preact-iso";
+import { Procedure } from "./eval";
 
 // dump of a bunch of UI & utility stuff ive written...
 
@@ -26,7 +28,7 @@ export const bgColor = {
 	md: "dark:bg-zinc-850 bg-zinc-150 dark:disabled:bg-zinc-600",
 	hover: "dark:hover:bg-zinc-700 hover:bg-zinc-150",
 	secondary: "dark:bg-zinc-900 bg-zinc-150",
-	green: "dark:enabled:bg-green-600 enabled:bg-green-400",
+	green: "dark:enabled:bg-green-800 enabled:bg-green-400",
 	sky: "dark:enabled:bg-sky-600 enabled:bg-sky-300",
 	red: "dark:enabled:bg-red-800 enabled:bg-red-300",
 	rose: "dark:enabled:bg-rose-900 enabled:bg-rose-300",
@@ -241,7 +243,7 @@ export function Text({className, children, v, ...props}:
 		case "lg": return <h3 className={twMerge(clsx("text-xl font-display font-extrabold", textColor.contrast, className))} {...props} >{children}</h3>;
 		case "dim": return <span className={twMerge(clsx("text-sm text-gray-500 dark:text-gray-400", className))} {...props} >{children}</span>;
 		case "sm": return <p className={twMerge(clsx("text-sm text-gray-800 dark:text-gray-200", className))} {...props} >{children}</p>;
-		case "code": return <code className={twMerge(clsx("text-gray-800 dark:text-gray-200 font-semibold rounded-sm p-0.5", bgColor.md, className))} {...props} >{children}</code>;
+		case "code": return <code className={twMerge(clsx("break-all text-gray-800 dark:text-gray-200 font-semibold rounded-sm p-0.5", bgColor.md, className))} {...props} >{children}</code>;
 		case "err": return <span className={twMerge(clsx("text-red-500", className))} {...props} >{children}</span>;
 		default: return <p className={className} {...props} >{children}</p>;
 	}
@@ -653,7 +655,14 @@ export function throttle(ms: number) {
 
 export type LocalStorage = Partial<{
 	theme: Theme,
-	storyState: Record<string, unknown>
+	storyState: Record<string, unknown>,
+	solvedPuzzles: Set<string>,
+	readStory: Set<string>,
+
+	// user procedures across levels
+	procedures: Map<number, Procedure>,
+	// entry point is always id -1
+	puzzleProcs: Map<string, Procedure>
 }>;
 
 const localStorageKeys: (keyof LocalStorage)[] = [
@@ -661,18 +670,36 @@ const localStorageKeys: (keyof LocalStorage)[] = [
 ];
 export const LocalStorage = {} as unknown as LocalStorage;
 
+export function stringifyExtra(value: unknown) {
+	return JSON.stringify(value, (_,v: unknown)=>{
+		if (v instanceof Map) return { __dtype: "map", value: [...v.entries()] };
+		else if (v instanceof Set) return { __dtype: "set", value: [...v.values()] };
+		return v;
+	});
+}
+
+export function parseExtra(str: string): unknown {
+	return JSON.parse(str, (_,v)=>{
+		const v2 = v as { __dtype: "set", value: [unknown][] }
+			|{ __dtype: "map", value: [unknown,unknown][] }|{ __dtype: undefined };
+		if (v2.__dtype=="map") return new Map(v2.value);
+		else if (v2.__dtype=="set") return new Set(v2.value);
+		return v2;
+	});
+}
+
 for (const k of localStorageKeys) {
 	let v: unknown;
 	Object.defineProperty(LocalStorage, k, {
 		get() {
 			if (v!=undefined) return v;
 			const vStr = localStorage.getItem(k);
-			v = vStr!=null ? JSON.parse(vStr) : undefined;
+			v = vStr!=null ? parseExtra(vStr) : undefined;
 			return v;
 		},
 		set(newV) {
 			v=newV;
-			localStorage.setItem(k, JSON.stringify(newV));
+			localStorage.setItem(k, stringifyExtra(newV));
 		}
 	});
 }
@@ -686,11 +713,17 @@ export function useDisposable(effect: ()=>Disposable|undefined, deps?: unknown[]
 }
 
 // awful time complexity lmfao
-export function mapWith<K,V>(map: ReadonlyMap<K,V>, k: K, v?: V) {
+export function mapWith<K,V>(map: ReadonlyMap<K,V>|null, k: K, v?: V) {
 	const newMap = new Map(map);
 	if (v!==undefined) newMap.set(k, v);
 	else newMap.delete(k);
 	return newMap;
+}
+
+export function setWith<K>(set: ReadonlySet<K>|null, k: K) {
+	const newSet = new Set(set);
+	newSet.add(k);
+	return newSet;
 }
 
 export type SetFn<T> = (cb: (old: T)=>T)=>void;
@@ -708,4 +741,10 @@ export function mapSetFn<T,R>(x: SetFn<T>, f: (x: R, old: T)=>T, get: (x: T)=>R)
 		if (typeof nv=="function") x(old=>(f((nv as (v: R)=>R)(get(old)), old)));
 		else x(old=>f(nv, old));
 	};
+}
+
+// idk i usually use pushstate iirc or smh i guess not today!
+export function useGoto() {
+	const loc = useLocation();
+	return (path: string)=>loc.route(path);
 }

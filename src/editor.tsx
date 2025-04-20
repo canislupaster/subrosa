@@ -1,14 +1,15 @@
 import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { Procedure, Node, Register, RegisterRef, EditorState, push, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit } from "./eval";
-import { Alert, Anchor, anchorStyle, bgColor, borderColor, Button, containerDefault, Divider, Dropdown, DropdownPart, fill, HiddenInput, IconButton, Input, mapSetFn, mapWith, Modal, Select, SetFn, Text, throttle } from "./ui";
+import { Procedure, Node, Register, RegisterRef, EditorState, push, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, Verdict, test } from "./eval";
+import { Alert, Anchor, anchorStyle, bgColor, borderColor, Button, containerDefault, Divider, Dropdown, DropdownPart, fill, HiddenInput, IconButton, Input, Loading, LocalStorage, mapSetFn, mapWith, Modal, parseExtra, Select, SetFn, setWith, stringifyExtra, Text, textColor, ThemeSpinner, throttle, useGoto } from "./ui";
 import { twMerge } from "tailwind-merge";
-import { IconCaretRightFilled, IconChevronCompactDown, IconChevronLeft, IconChevronRight, IconCircleMinus, IconCirclePlus, IconCirclePlusFilled, IconInfoCircle, IconMenu2, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconTrash, IconX } from "@tabler/icons-preact";
+import { IconArrowRight, IconCaretRightFilled, IconChevronCompactDown, IconChevronLeft, IconChevronRight, IconCircleCheckFilled, IconCircleMinus, IconCirclePlus, IconCirclePlusFilled, IconInfoCircle, IconMenu2, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, Ref } from "preact";
 import { dragAndDrop, useDragAndDrop } from "@formkit/drag-and-drop/react";
 import { animations, parentValues, performSort, remapNodes, setParentValues } from "@formkit/drag-and-drop";
 import clsx from "clsx";
 import { SetStateAction } from "preact/compat";
 import { Puzzle } from "./puzzles";
+import testWorker from "./testworker?worker";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-4 items-center pl-1 text-sm relative`);
 const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2 nodrag");
@@ -491,7 +492,7 @@ function ProcEditor({
 					<IconChevronLeft size={32} />
 				</Anchor>}
 
-				{!isUserProc ? <Text v="bold" >Procedure {proc.name}</Text>
+				{!isUserProc ? <Text v="bold" >Procedure <Text v="code" >{proc.name}</Text></Text>
 				: <>
 					<Text v="bold" >Procedure</Text>
 					<HiddenInput value={proc.name} onChange={(ev)=>{
@@ -579,60 +580,127 @@ function ProcEditor({
 
 const makeProc = (name: string): Procedure => ({
 	name, registerList: [], registers: new Map(),
-	nodeList: [], nodes: new Map(), maxNode: 0, maxRegister: 0
+	nodeList: [], nodes: new Map(), maxNode: 0, maxRegister: 0,
 });
 
-export function PuzzleInput({puzzle, input, output, setInput}: {
-	puzzle: Puzzle, input: string, output: string|null,
-	setInput: (x: string)=>void,
+export function PuzzleInput({puzzle, edit, output, setInput, setSolved}: {
+	puzzle: Puzzle, edit: EditorState, output: string|null,
+	setInput: (x: string)=>void, setSolved: ()=>void
 }) {
+	const input = edit.input;
 	const [input2, setInput2] = useState(input);
 	useEffect(()=>setInput2(input), [input]);
 	const [err, setErr] = useState(false);
 
-	const up = (v: string) => {
+	const up = useCallback((v: string) => {
 		const err=!validTextRe.test(v);
 		setErr(err);
-		if (!err) setInput(input2);
+		if (!err) setInput(v);
 		setInput2(v);
-	};
+	}, [setInput]);
 	
 	const solution = useMemo(()=>puzzle.solve(input), [input, puzzle]);
 
-	return <div className="flex flex-col items-stretch" >
-		<Text>{puzzle.blurb}</Text>
-		<span className="h-4" />
+	const [submission, setSubmission] = useState<{type: "judging"}|{
+		type: "done", verdict: Verdict
+	}|null>(null);
+
+	useEffect(()=>{
+		if (submission?.type=="judging") {
+			const worker = new testWorker();
+
+			const tc = puzzle.generator();
+			worker.postMessage(stringifyExtra({
+				input: tc, output: puzzle.solve(tc),
+				proc: edit.active, procs: edit.procs
+			} satisfies Parameters<typeof test>[0]))
+			
+			worker.onmessage = (msg)=>{
+				const v = parseExtra(msg.data as string) as ReturnType<typeof test>;
+				setSubmission({type: "done", verdict: v});
+				up(tc);
+				
+				if (v.type=="AC") {
+					LocalStorage.solvedPuzzles = setWith(LocalStorage.solvedPuzzles??null, puzzle.key);
+					setSolved();
+				}
+			};
+			
+			worker.onerror = (err)=>{
+				console.error("worker error", err);
+				setSubmission(null);
+
+				if (err instanceof Error) throw err;
+				else throw new Error("unknown worker error");
+			};
+			
+			return ()=>worker.terminate();
+		}
+	}, [edit.active, edit.procs, input, puzzle, setSolved, solution, submission?.type, up])
+
+	const goto = useGoto();
+
+	return <div className="flex flex-col items-stretch gap-2" >
+		<Text className="mb-1" >{puzzle.blurb}</Text>
 		
-		<div className="flex flex-row gap-2" >
-			<Text v="dim" >Input</Text>
-			<Anchor onClick={()=>up(puzzle.generator())} >(randomize)</Anchor>
+		<div className="flex flex-row gap-2 -mb-1" >
+			<Text v="dim" >
+				Input
+				<Anchor onClick={()=>up(puzzle.generator())} className="ml-2" >(randomize)</Anchor>
+			</Text>
 		</div>
-		
-		{err && <Alert bad title="Invalid input"
-			txt="Your input should only contain lowercase alphabetical characters and spaces" />}
 
 		<Input value={input2} onChange={(ev)=>up(ev.currentTarget.value)} />
 		
+		{err && <Alert bad title="Invalid input"
+			txt="Your input should only contain lowercase alphabetical characters and spaces" />}
+		
 		<div className={blankStyle} >
 			{input.length>0 ? <>
-				<div className="flex flex-row flex-wrap gap-4" >
+				<div className="flex flex-row flex-wrap gap-4 items-center justify-center" >
 					<Text v="code" >{input}</Text>
-					<IconChevronRight />
+					<IconArrowRight />
 					<Text v="code" >{solution}</Text>
 				</div>
 				
 				{output==input ? <Alert className={bgColor.green} title="Test passed"
 					txt="Your program output the same text." /> : output!=null && <>
-					<Alert bad title="Test failed" txt={<>
+					<Alert bad title="Test failed" txt={<div className="flex flex-col gap-1" >
 						Your program output:
 						<Text v="code" >{output}</Text>
-					</>} />
+					</div>} />
 				</>}
 			</> : <>
 				<IconInfoCircle />
 				After generating or entering an input above, you will see the target output here.
 			</>}
 		</div>
+		
+		<Text v="sm" >
+			Submit when you're ready for your solution to be judged against a random testcase. You will need to match the output exactly to pass this level.
+		</Text>
+
+		<Button onClick={()=>{
+			setSubmission({type: "judging"});
+		}} disabled={submission?.type=="judging"} icon={
+			submission?.type=="judging" && <ThemeSpinner size="sm" />		
+		} >
+			Submit solution
+		</Button>
+		
+		{submission?.type=="done" && (submission.verdict.type=="AC"
+			? <Alert className={bgColor.green} title="You passed" txt={<>
+				Congratulations -- onwards!
+				<Button onClick={()=>goto("/menu")} >Back to menu</Button>
+			</>} />
+			: <Alert bad title="Test failed" txt={
+				`Verdict: ${({
+					WA: "wrong answer",
+					RE: "runtime error",
+					TLE: "time limit exceeded"
+				} as const)[submission.verdict.type]}`
+			} />
+		)}
 	</div>;
 }
 
@@ -769,10 +837,11 @@ export function Editor({edit, setEdit, openSidebar}: {
 	const [open, setOpen] = useState(false);
 
 	const setInput = useCallback((inp: string)=>setEdit(e=>({...e, input: inp})), [setEdit]);
+	const markSolved = useCallback(()=>setEdit(e=>({...e, solved: true})), [setEdit]);
 	useEffect(()=>setOutput(null), [edit.input, setOutput]);
 
 	return <div className={clsx("grid h-dvh gap-x-4 pl-3 px-5", runStatus.type=="stopped" ? "editor" : "editor-running")} >
-		<div className="editor-top flex flex-row gap-2 py-1 justify-between items-center pb-1" >
+		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center pb-1" >
 			<div className="flex flex-row gap-2 items-center" >
 				<IconButton icon={<IconMenu2 />} onClick={()=>openSidebar()} />
 				
@@ -803,19 +872,23 @@ export function Editor({edit, setEdit, openSidebar}: {
 				<Text v="dim" >{runStatus.type}</Text>
 			</div>
 
-			{edit.puzzle ? <button className={twMerge(anchorStyle, "flex flex-col items-center")}
+			{edit.puzzle ? <button className={twMerge(anchorStyle, "flex flex-row p-1 grow items-center justify-center gap-2")}
 				onClick={()=>setOpen(true)} >
-				<Text v="md" >{edit.puzzle.name}</Text>
-				<Text v="dim" >Click to test</Text>
-			</button> : <Text v="md" >
+				<div className="flex flex-col items-center" >
+					<Text v="md" >{edit.puzzle.name}</Text>
+					<Text v="dim" >Puzzle info and input</Text>
+				</div>
+				{edit.solved && <IconCircleCheckFilled className="fill-green-400" size={32} />}
+			</button> : <Text v="md" className={textColor.dim} >
 				No puzzle
 			</Text>}
 
-			<img src="/logo.svg" className="max-h-full ml-auto" />
+			<img src="/logo.svg" className="max-h-full" />
 		</div>
 		
 		{edit.puzzle && <Modal open={open} onClose={()=>setOpen(false)} title={edit.puzzle.name} >
-			<PuzzleInput puzzle={edit.puzzle} input={edit.input} output={output} setInput={setInput} />
+			<PuzzleInput puzzle={edit.puzzle} edit={edit} output={output}
+				setInput={setInput} setSolved={markSolved} />
 		</Modal>}
 		
 		{runState && <div className="flex flex-col editor-right-down gap-2 mt-2 min-h-0" >

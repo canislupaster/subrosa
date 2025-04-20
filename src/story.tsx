@@ -2,6 +2,7 @@ import { ComponentChild, ComponentChildren, createContext, Fragment } from "prea
 import { useCallback, useContext, useEffect, useRef, useState } from "preact/hooks";
 import { Anchor, bgColor, Button, LocalStorage, useDisposable, Text, Divider, textColor, borderColor } from "./ui";
 import clsx from "clsx";
+import { defaultGen, Puzzle } from "./puzzles";
 
 function useStoryState<T>(key: string) {
 	const [x, setX] = useState<T>();
@@ -218,11 +219,10 @@ export function StoryParagraph({ children, end }: {
 	</>;
 }
 
-type Stage = {
-	type: "puzzle",
-} | {
+export type Stage = Puzzle&{type: "puzzle"} | {
 	type: "story",
 	name: string,
+	key: string,
 	para: ComponentChild[]
 };
 
