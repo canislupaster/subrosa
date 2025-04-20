@@ -859,7 +859,7 @@ export function Editor({edit, setEdit, nextStage}: {
 		setRunStatus({type: "running", step: step ?? false});
 	};
 	
-	const [open, setOpen] = useState(false);
+	const [open, setOpen] = useState(true);
 
 	const setInput = useCallback((inp: string)=>setEdit(e=>({...e, input: inp})), [setEdit]);
 	const markSolved = useCallback(()=>setEdit(e=>({...e, solved: true})), [setEdit]);

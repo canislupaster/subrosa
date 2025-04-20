@@ -135,13 +135,13 @@ export function push(prog: ProgramState, procI: number, params: RegisterRef[]) {
 }
 
 const [charStart, charEnd] = ["a", "z"].map(x=>x.charCodeAt(0));
-export const charMod = charEnd-charStart+2;
+export const charMod = charEnd-charStart+1;
 export const charMap = [
-	[" ", 0],
-	...fill(charEnd-charStart+1, i=>[String.fromCharCode(charStart+i), i+1])
+	[" ", -1],
+	...fill(charEnd-charStart+1, i=>[String.fromCharCode(charStart+i), i])
 ] as [string, number][];
 export const charToNum = Object.fromEntries(charMap);
-export const numToChar = charMap.map(x=>x[0]);
+export const numToChar = Object.fromEntries(charMap.map(([a,b])=>[b,a])) as Record<number,string>;
 
 export const stackLimit = 1024;
 export const strLenLimit = 1024;
@@ -171,7 +171,7 @@ export function step(prog: ProgramState) {
 	
 	const castToNum = (r: number)=>{
 		let v = get(r).current;
-		if (typeof v=="string") v=v.length>0 ? charToNum[v]??0 : 0;
+		if (typeof v=="string") v=v.length>0 ? charToNum[v]??-1 : 0;
 		return v;
 	};
 
@@ -219,6 +219,8 @@ export function step(prog: ProgramState) {
 	const arrOp = (idx: number, lhs: number, rhs?: number) => {
 		const l = get(lhs).current;
 		const i = castToNum(idx);
+		if (i<0) return;
+
 		if (rhs==undefined) {
 			get(lhs).current = typeof l=="string" ? (l.length>=i ? 0 : l[i]) : l;
 		} else {
