@@ -350,7 +350,7 @@ export const data: Stage[] = [
         type: "story",
         name: "Chapter 3",
         key: "team_lunch",
-        blurb: "Like terminites emerging from the woodwork.",
+        blurb: "Like termites emerging from the woodwork.",
         para: [
             <StoryParagraph noCursor={true}>
                 <pre>
@@ -603,8 +603,8 @@ export const data: Stage[] = [
     {
         type: "story",
         name: "Chapter 5",
-        key: "late_night_clarity",
-        blurb: "People vanish here... professionally, at least.",
+        key: "mushrooms",
+        blurb: "Are mushroos vegetables?",
         para: [
             <StoryParagraph>
                 <p>
