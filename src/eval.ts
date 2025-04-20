@@ -231,7 +231,7 @@ export function step(prog: ProgramState) {
 		} else {
 			const s = castToStr(rhs);
 			let outS: string|null=null;
-			if (typeof l=="string" && l.length>=i) {
+			if (typeof l=="string" && i>=l.length) {
 				outS=[ ...l, fill(i-l.length, 0), s ].join("");
 			} else if (typeof l=="string") {
 				outS=`${l.slice(0,i)}${s}${l.slice(i+1)}`;
