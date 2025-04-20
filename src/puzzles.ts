@@ -43,18 +43,10 @@ function shuffle<T>(s: T[]): T[] {
 
 export const puzzles = [
 	{
-		name: "Reverse",
-		key: "reverse",
-		blurb: "Can you reverse a string? It may prove difficult.",
-		generator: defaultGen,
-		solve(inp) {
-			return inp.split("").reverse().join("");
-		}
-	},
-	{
-		name: "Caesar",
-		key: "caesar",
-		blurb: "Ah, Caesar's famous cipher. For such a brilliant commander, how did he have any faith in it?",
+		// Caesar
+		name: "Your first puzzle",
+		key: "atob",
+		blurb: "Have fun!",
 		generator: defaultGen,
 		solve(inp) {
 			const key: number = 2;
@@ -63,9 +55,20 @@ export const puzzles = [
 		}
 	},
 	{
-		name: "Incremental Caesar",
-		key: "inc-caesar",
-		blurb: "Increments each letter by its index",
+		// Reverse
+		name: "You're first puzzle",
+		key: "elzzup",
+		blurb: "fun Have!",
+		generator: defaultGen,
+		solve(inp) {
+			return inp.split("").reverse().join("");
+		}
+	},
+	{
+		// Incremental Caesar
+		name: "Caesar but different",
+		key: "btoc",
+		blurb: "Inspiring quote",
 		generator: defaultGen,
 		solve(inp) {
 			const len: number = inp.length;
@@ -83,9 +86,10 @@ export const puzzles = [
 	// 	}
 	// },
 	{
-		name: "Segment Reverse",
-		key: "seg-reverse",
-		blurb: "Reverses each segment of plaintext, separated by 'x's",
+		// Segment Reverse
+		name: "Annoying puzzle",
+		key: "pain",
+		blurb: "Don't have fun!",
 		generator() {
 			return fill(defaultGenLen, ()=>(Math.random() > 0.8 ? "x" : randString(alpha, 1))).join("");
 		},
@@ -105,14 +109,13 @@ export const puzzles = [
 		}
 	},
 	{
-		name: "Keyword Substitution",
-		key: "keyword-sub",
-		blurb: `Substitution cipher. Given key of distinct letters, 
-				generate ciphertext alphabet by appending remaining letters 
-				in alphabet to keyword.`,
+		// Keyword Substitution
+		name: "Secret",
+		key: "keyword",
+		blurb: `Hope you read the story!`,
 		generator: defaultGen,
 		solve(inp) {
-			const key = "thomas"; // change
+			const key = "mikah"; // change
 			let cipherAlphabet = key;
 			for (const char of alpha) {
 				if (!key.includes(char)) {
@@ -123,12 +126,35 @@ export const puzzles = [
 		}
 	},
 	{
-		name: "Atbash",
-		key: "atbash",
-		blurb: "Replace each character with the opposite side of the alphabet.",
+		// Atbash
+		name: "bash",
+		key: "shell",
+		blurb: "Turn around, bright eyed",
 		generator: defaultGen,
 		solve(inp) {
 			return fill(inp.length, i=>numToChar[alphaLen-1-charToNum[inp.charAt(i)]]).join("");
+		}
+	},
+	{
+		// Base 13
+		name: "Rot 13",
+		key: "rot-13",
+		blurb: "Not actually rot 13, don't try..",
+		generator: defaultGen,
+		solve(inp) {
+			let sum = 0;
+			const base = 13;
+			for (let i = inp.length-1; i >= 0; --i) {
+				sum *= alphaLen;
+				sum += charToNum[inp.charAt(i)];
+			}
+
+			const res: string[] = [];
+			while (sum) {
+				res.push(numToChar[sum % base]);
+				sum = Math.floor(sum / base);
+			}
+			return res.reverse().join("");
 		}
 	},
 	// Probably boring with normal plaintext
@@ -137,9 +163,10 @@ export const puzzles = [
 	// 	blurb: ""
 	// }
 	{
-		name: "Half Interleave",
-		key: "half-interleave",
-		blurb: "Interleaves first and second half of the string",
+		// Half interleave
+		name: "Autumn But Not Really",
+		key: "leaf",
+		blurb: "(Summer)",
 		generator: defaultGen,
 		solve(inp) {
 			return fill(inp.length, i=>inp.charAt(i % 2 == 0 ? Math.floor(i / 2) : 
@@ -147,19 +174,21 @@ export const puzzles = [
 		}
 	},
 	{
-		name: "Vigenere",
-		key: "vigenere",
-		blurb: "Caesar but keyed on a string",
+		// Vigenere
+		name: "Blaze",
+		key: "vinegar",
+		blurb: "This one is actually impossible sorry",
 		generator: defaultGen,
 		solve(inp) {
-			const key = "thomas"; // change
+			const key = "waas"; // change
 			return fill(inp.length, i=>charAdd(inp.charAt(i), charToNum[key.charAt(i % key.length)])).join("");
 		}
 	},
 	{
-		name: "Alphabet Derangement",
-		key: "alphabet",
-		blurb: "Split text into maximal segments of alphabetical order, shuffle each segment, separated by x",
+		// Alphabet Derangement
+		name: "ABCs",
+		key: "abcdfghijklmnopqrstuvwxyz",
+		blurb: "aeHv fnu!",
 		generator: defaultGen,
 		solve(inp) {
 			const seg: string[] = [];
