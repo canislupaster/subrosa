@@ -34,7 +34,7 @@ function charAdd(c: string, ct: number) {
 
 function shuffle<T>(s: T[]): T[] {
 	for (let i = s.length-1; i >= 0; --i) {
-		let ri = randInt(0, i);
+		const ri = randInt(0, i);
 		[s[i], s[ri]] = [s[ri], s[i]];
 	}	
 	return s;
@@ -86,10 +86,10 @@ export const puzzles = [
 		},
 		solve(inp) {
 			let result = "";
-			let seg: string[] = [];
+			const seg: string[] = [];
 			for (const char of inp) {
 				if (char == "x") {
-					result += seg.reverse().join("") + "x";
+					result += `${seg.reverse().join("")}x`;
 					seg.length = 0;
 				} else {
 					seg.push(char);
@@ -106,7 +106,7 @@ export const puzzles = [
 				in alphabet to keyword.`,
 		generator: defaultGen,
 		solve(inp) {
-			let key = "thomas"; // change
+			const key = "thomas"; // change
 			let cipherAlphabet = key;
 			for (const char of alpha) {
 				if (!key.includes(char)) {
@@ -143,7 +143,7 @@ export const puzzles = [
 		blurb: "Caesar but keyed on a string",
 		generator: defaultGen,
 		solve(inp) {
-			let key = "thomas"; // change
+			const key = "thomas"; // change
 			return fill(inp.length, i=>charAdd(inp.charAt(i), charToNum[key.charAt(i % key.length)])).join("");
 		}
 	},
@@ -152,11 +152,11 @@ export const puzzles = [
 		blurb: "Split text into maximal segments of alphabetical order, shuffle each segment, separated by x",
 		generator: defaultGen,
 		solve(inp) {
-			let seg: string[] = [];
+			const seg: string[] = [];
 			let res = "";
 			for (const char of inp) {
 				if (seg.length != 0 && charToNum[seg[seg.length-1]] > charToNum[char]) {
-					res += shuffle(seg).join("") + "x";
+					res += `${shuffle(seg).join("")}x`;
 					seg.length = 0;
 				} 
 				seg.push(char);
