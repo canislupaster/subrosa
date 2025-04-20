@@ -14,19 +14,20 @@ function randString(chars: string[], len: number) {
 	return fill(len, ()=>chars[Math.floor(chars.length*Math.random())]).join("");
 }
 
-const alphaLen: number = charMod;
+const alphaLen: number = 26;
 // abcdefghijklmnopqrstuvwxyz
-// const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i)); 
-const alpha = charMap.map(x=>x[0]);
+const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i)); 
+// const alpha = charMap.map(x=>x[0]);
 const defaultGenLen: number = 10;
 // Uniform random int
 const randInt = (min: number, max: number)=>Math.floor(Math.random() * (max - min + 1)) + min;
-export const defaultGen = ()=>randString(alpha, defaultGenLen);
+export const defaultGen = ()=>randString(alpha.splice(alpha.indexOf(" "), 1), defaultGenLen); // Don't generate spaces
 
-// Assumes we are working with lowercase alphabet forever!!
 // Adds ct to c[0], wrapping around both directions
-function charAdd(c: string, ct: number) {
-	const cc = (charToNum[c.charAt(0)] + ct % alphaLen + alphaLen) % alphaLen;
+// Skips space
+function charAdd(c: string, ct: number) : string {
+	if (charToNum[c.charAt(0)] == charToNum[" "]) return " ";
+	const cc = (charToNum[c.charAt(0)] + ct % 26 + 26) % 26;
 	if (cc < 0 || cc >= alphaLen) {
 		throw new Error("Invalid character in charAdd");
 	}
@@ -45,8 +46,8 @@ export const puzzles = [
 	{
 		// Caesar
 		name: "Your first puzzle",
-		key: "atob",
-		blurb: "Have fun!",
+		key: "salad",
+		blurb: "Can you learn the controls!?",
 		generator: defaultGen,
 		solve(inp) {
 			const key: number = 2;
@@ -56,9 +57,9 @@ export const puzzles = [
 	},
 	{
 		// Reverse
-		name: "You're first puzzle",
+		name: "Tutorial part 2",
 		key: "elzzup",
-		blurb: "fun Have!",
+		blurb: "You'll never figure out this one...",
 		generator: defaultGen,
 		solve(inp) {
 			return inp.split("").reverse().join("");
@@ -67,8 +68,10 @@ export const puzzles = [
 	{
 		// Incremental Caesar
 		name: "Caesar but different",
-		key: "btoc",
-		blurb: "Inspiring quote",
+		key: "olive-oil",
+		blurb: `Caesar dressing is named after Caesar Cardini, who invented it at a Caesar's in Tijuana, Mexico,
+		 when the kitchen was overwhelmed and short on ingredients. It was originally prepared tableside,
+		 and it is still prepared tableside at the original venue. -Wikipedia`,
 		generator: defaultGen,
 		solve(inp) {
 			const len: number = inp.length;
@@ -87,9 +90,9 @@ export const puzzles = [
 	// },
 	{
 		// Segment Reverse
-		name: "Annoying puzzle",
+		name: "This is actually the hardest one",
 		key: "pain",
-		blurb: "Don't have fun!",
+		blurb: "It's all downhill from here",
 		generator() {
 			return fill(defaultGenLen, ()=>(Math.random() > 0.8 ? "x" : randString(alpha, 1))).join("");
 		},
@@ -112,7 +115,7 @@ export const puzzles = [
 		// Keyword Substitution
 		name: "Secret",
 		key: "keyword",
-		blurb: `Hope you read the story!`,
+		blurb: `Hope you read the story! It's essential to progression... (Kartavya spent so much time on it)`,
 		generator: defaultGen,
 		solve(inp) {
 			const key = "mikah"; // change
@@ -129,7 +132,7 @@ export const puzzles = [
 		// Atbash
 		name: "bash",
 		key: "shell",
-		blurb: "Turn around, bright eyed",
+		blurb: "Originally used to encrypt Hebrew...",
 		generator: defaultGen,
 		solve(inp) {
 			return fill(inp.length, i=>numToChar[alphaLen-1-charToNum[inp.charAt(i)]]).join("");
@@ -139,7 +142,7 @@ export const puzzles = [
 		// Base 13
 		name: "Rot 13",
 		key: "rot-13",
-		blurb: "Not actually rot 13, don't try..",
+		blurb: "Definitely not rot-13. Don't even try!",
 		generator: defaultGen,
 		solve(inp) {
 			let sum = 0;
@@ -164,9 +167,9 @@ export const puzzles = [
 	// }
 	{
 		// Half interleave
-		name: "Autumn But Not Really",
+		name: "Tricky transposition",
 		key: "leaf",
-		blurb: "(Summer)",
+		blurb: "Puzzle invented by ChatGPT. Can you solve it!?",
 		generator: defaultGen,
 		solve(inp) {
 			return fill(inp.length, i=>inp.charAt(i % 2 == 0 ? Math.floor(i / 2) : 
@@ -175,9 +178,9 @@ export const puzzles = [
 	},
 	{
 		// Vigenere
-		name: "Blaze",
+		name: "Secret 2",
 		key: "vinegar",
-		blurb: "This one is actually impossible sorry",
+		blurb: "Since you love secret keywords so much, here's another...",
 		generator: defaultGen,
 		solve(inp) {
 			const key = "waas"; // change
