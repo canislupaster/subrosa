@@ -50,7 +50,7 @@ export type ProgramState<T=RegisterRef> = Readonly<{
 	stack: {
 		proc: number,
 		registers: ReadonlyMap<number,T>,
-		i: number,
+		i: number
 	}[];
 }>;
 
@@ -156,8 +156,13 @@ export function step(prog: ProgramState) {
 
 	const nodeI = lastProc.nodeList[last.i];
 	if (nodeI==undefined) {
+		if (prog.stack.length<=1) return false;
 		prog.stack.pop();
-		return prog.stack.length>0;
+		// increment to next node after call in previous frame
+		// `i` should always track active node (either going to be evaluated
+		// or caller waiting for procs to return)
+		prog.stack[prog.stack.length-1].i++;
+		return true;
 	}
 	
 	const x = lastProc.nodes.get(nodeI);
@@ -252,6 +257,7 @@ export function step(prog: ProgramState) {
 		arrOp(x.idx, x.lhs, x.rhs);
 	} else if (x.op=="call") {
 		push(prog, x.procRef, x.params.map(v=>get(v)));
+		next=last.i; // increment on pop frame to record current node accurately
 	} else if (x.op=="goto") {
 		let to: number|undefined;
 		if (x.ref==undefined) to=lastProc.nodeList.length;

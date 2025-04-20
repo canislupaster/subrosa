@@ -3,7 +3,7 @@ import { Procedure, Node, Register, RegisterRef, EditorState, push, clone, step,
 import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, containerDefault, debounce, Divider, Dropdown, DropdownPart, fill, HiddenInput, IconButton, Input, Loading, LocalStorage, mapSetFn, mapWith, Modal, parseExtra, Select, SetFn, setWith, stringifyExtra, Text, textColor, ThemeSpinner, throttle, useDebounce, useFnRef, useGoto } from "./ui";
 import { twMerge } from "tailwind-merge";
 import { IconArrowRight, IconCaretRightFilled, IconChevronCompactDown, IconChevronLeft, IconChevronRight, IconCircleCheckFilled, IconCircleMinus, IconCirclePlus, IconCirclePlusFilled, IconInfoCircle, IconMenu2, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconTrash, IconX } from "@tabler/icons-preact";
-import { ComponentChild, Ref } from "preact";
+import { ComponentChild, ComponentChildren, Ref } from "preact";
 import { dragAndDrop, useDragAndDrop } from "@formkit/drag-and-drop/react";
 import { animations, parentValues, performSort, remapNodes, setParentValues } from "@formkit/drag-and-drop";
 import clsx from "clsx";
@@ -278,7 +278,7 @@ function RegisterEditor({p, reg, setReg}: {
 	const regI = p.regMap.get(reg)!;
 	const regV = p.proc.registers.get(reg)!;
 
-	const [value, setValue] = useState<string>("");
+	const [value, setValue] = useState<string>(regV.type=="value" ? regV.value.toString() : "");
 	const [err, setErr] = useState<string|null>(null);
 	const [err2, setErr2] = useState<boolean>(false);
 
@@ -389,10 +389,10 @@ const dragOpts = {
 
 function ProcEditor({
 	proc, setProc, procs, userProcList, isUserProc,
-	addProc, setProcList, delProc, openProc, runState
+	addProc, setProcList, delProc, openProc, runState, stack
 }: {
 	proc: Procedure, setProc: SetFn<Procedure>,
-	runState: ProcRunState|null
+	runState: ProcRunState|null, stack?: ComponentChildren
 }&UserProcs) {
 	const nodeRefs = useRef(new Map<number|null,HTMLDivElement>());
 	const [disableArrows, setDisableArrows] = useState(false);
@@ -586,7 +586,8 @@ function ProcEditor({
 		
 		<div className="flex flex-col gap-2 editor-right min-h-0" >
 			<Text v="bold" className="mb-2" >Registers</Text>
-			<ul className="flex flex-col gap-2 overflow-y-auto" ref={registerList} >
+			<ul className={clsx("flex flex-col gap-2 overflow-y-auto", stack!=undefined && "max-h-1/3")}
+				ref={registerList} >
 				{proc.registerList.map(r=>
 					<RegisterEditor key={r} p={data} reg={r} setReg={setReg} />
 				)}
@@ -602,6 +603,8 @@ function ProcEditor({
 					<Text v="sm" >Add register</Text>
 				</Button>
 			</ul>
+			
+			{stack}
 		</div>
 	</>;
 }
@@ -846,6 +849,7 @@ export function Editor({edit, setEdit, nextStage}: {
 
 		return ()=>{
 			clearInterval(int);
+			setRunState(clone(v));
 			rl[Symbol.dispose]();
 		};
 	}, [edit.entryProc, edit.input, edit.procs, edit.stepsPerS, runStatus]);
@@ -866,7 +870,28 @@ export function Editor({edit, setEdit, nextStage}: {
 	useEffect(()=>setOutput(null), [edit.input, setOutput]);
 	const goto = useGoto();
 
-	return <div className={clsx("grid h-dvh gap-x-4 pl-3 px-5 w-full", runStatus.type=="stopped" ? "editor" : "editor-running")} >
+	const stack = runState && <div className="flex flex-col editor-right-down gap-2 min-h-0" >
+		<Divider className="mb-0" />
+		<Text v="bold" >Stack</Text>
+
+		{runError && <Alert bad title="Runtime error" txt={runError.txt()} />}
+
+		{runState.stack.length==0 ? <div className={blankStyle} >
+			The stack is empty.
+		</div> : <div className={`flex flex-col ${borderColor.default} border-1 overflow-y-auto`} >
+			{runState.stack.flat().map((v,i)=>{
+				const p = edit.procs.get(v.proc);
+				return <button key={i}
+					className={clsx("w-full py-0.5 px-1 not-last:border-b-1", bgColor.default, borderColor.default, bgColor.hover, !p || edit.active==v.proc && "dark:bg-zinc-700!")}
+					disabled={!p || edit.active==v.proc}
+					onClick={()=>setEdit(e=>({...e, active: v.proc}))} >
+					{p?.name ?? "(deleted)"}: {"#"}{v.i+1}
+				</button>;
+			}).reverse()}
+		</div>}
+	</div>;
+
+	return <div className="grid h-dvh gap-x-4 pl-3 px-5 w-full editor" >
 		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center pb-1" >
 			<div className="flex flex-row gap-2 items-center h-full" >
 				<button onClick={()=>goto("/menu")}
@@ -876,26 +901,27 @@ export function Editor({edit, setEdit, nextStage}: {
 
 				<span className="w-2" />
 				
-				<IconButton icon={<IconPlayerTrackPrevFilled />} disabled={edit.stepsPerS<0.2}
-					onClick={()=>mod(0.5)} />
-
-				<IconButton icon={runStatus.type!="running" ? <IconPlayerPlayFilled className="fill-green-400" /> : <IconPlayerPauseFilled />}
-					onClick={()=>play()} />
-
-				{runStatus.type!="running" && <IconButton icon={<IconPlayerSkipForwardFilled className="fill-green-400" />}
-					onClick={()=>play(true)} />}
-					
 				{runStatus.type!="stopped" && <IconButton icon={<IconPlayerStopFilled className="fill-red-500" />}
 					onClick={()=>{ setRunStatus({type: "stopped"}) }} />}
-				<IconButton disabled={edit.stepsPerS>500} icon={<IconPlayerTrackNextFilled />}
-					onClick={()=>mod(2)} />
 
+				
+				<IconButton icon={runStatus.type!="running" ? <IconPlayerPlayFilled className="fill-green-400" /> : <IconPlayerPauseFilled />}
+					disabled={runStatus.type=="done"} onClick={()=>play()} />
+
+				{runStatus.type!="running" && <IconButton icon={<IconPlayerSkipForwardFilled className="fill-green-400" />}
+					disabled={runStatus.type=="done"} onClick={()=>play(true)} />}
+					
 				<span className="w-2" />
+
+				<IconButton icon={<IconPlayerTrackPrevFilled />} disabled={edit.stepsPerS<0.2}
+					onClick={()=>mod(0.5)} />
 
 				<Button className="py-1 h-fit" onClick={()=>setEdit(e=>({...e, stepsPerS: 5}))} >
 					Speed: {edit.stepsPerS}
 				</Button>
 				
+				<IconButton disabled={edit.stepsPerS>500} icon={<IconPlayerTrackNextFilled />}
+					onClick={()=>mod(2)} />
 				<span className="w-2" />
 
 				<Text v="dim" >{runStatus.type}</Text>
@@ -918,26 +944,6 @@ export function Editor({edit, setEdit, nextStage}: {
 				setInput={setInput} setSolved={markSolved} nextStage={nextStage} />
 		</Modal>}
 		
-		{runState && <div className="flex flex-col editor-right-down gap-2 mt-2 min-h-0" >
-			<Text v="bold" >Stack</Text>
-
-			{runError && <Alert bad title="Runtime error" txt={runError.txt()} />}
-
-			{runState.stack.length==0 ? <div className={blankStyle} >
-				The stack is empty.
-			</div> : <div className={`flex flex-col ${borderColor.default} border-1 overflow-y-auto`} >
-				{runState.stack.map((v,i)=>{
-					const p = edit.procs.get(v.proc);
-					return <button key={i}
-						className={`w-full py-0.5 px-1 not-last:border-b-1 ${bgColor.default} ${borderColor.default} ${bgColor.hover}`}
-						disabled={!p || edit.active==v.proc}
-						onClick={()=>setEdit(e=>({...e, active: v.proc}))} >
-						{p?.name ?? "(deleted)"}: {"#"}{v.i+1}
-					</button>;
-				}).reverse()}
-			</div>}
-		</div>}
-
 		<Modal open={confirmDelete} onClose={()=>setConfirmDelete(false)} title="Delete procedure?" className="flex flex-col gap-2" >
 			<Text>Are you sure you want to delete {activeProc?.name}?</Text>
 			<div className="flex flex-row gap-2" >
@@ -981,6 +987,7 @@ export function Editor({edit, setEdit, nextStage}: {
 			addProc={()=>setNewProc({...newProc, open: true})}
 			delProc={()=>setConfirmDelete(true)}
 			openProc={(i)=>setEdit(v=>({...v, active: i ?? v.entryProc}))}
-			runState={activeProcRunState} />}
+			runState={activeProcRunState}
+			stack={stack} />}
 	</div>;
 }
