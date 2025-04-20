@@ -35,7 +35,7 @@ html {
 	font-family: var(--font-mono);
 }
 
-button {
+button:not(:disabled) {
 	cursor: pointer;
 }
 
@@ -61,16 +61,29 @@ button {
 		"b e d" 1.8fr / 1.2fr 1fr 0.7fr;
 }
 
-.editor-running {
-	grid-template:
-		"a a a" 3.5rem
-		"b c d" 1fr
-		"b e f" 1.8fr / 1.2fr 1fr 0.7fr;
-}
-
 .editor-top { grid-area: a; }
 .editor-left { grid-area: b; }
 .editor-right { grid-area: d; }
-.editor-right-down { grid-area: f; }
 .editor-mid-up { grid-area: c; }
 .editor-mid-down { grid-area: e; }
+
+.main-text p {
+  text-indent: 1rem;
+}
+
+.main-text p:not(:last-child) {
+  margin-bottom: 1rem;
+}
+
+@keyframes blinker { to { opacity: 0; } }
+.blink {
+  animation: blinker 0.7s cubic-bezier(0.98, -0.01, 0.09, 1.01) infinite alternate
+}
+
+.main-text > span {
+  @apply self-stretch flex flex-col;
+}
+
+.main-text pre {
+  @apply text-[12px] self-center;
+}

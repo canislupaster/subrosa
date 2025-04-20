@@ -184,7 +184,7 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
 
 function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
   const goto = useGoto();
-  return <div className="md:w-2xl w-md flex flex-col" >
+  return <div className="md:w-2xl w-md flex flex-col pb-[50dvh] pt-10" >
     <Logo className="w-1/3" />
     <Story stage={stage} next={i+1>=data.length ? undefined : ()=>{
       LocalStorage.readStory = setWith(LocalStorage.readStory??null, stage.key);

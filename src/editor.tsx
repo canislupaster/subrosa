@@ -203,7 +203,7 @@ function CallInner({
 			<div className="flex flex-row flex-wrap gap-1" >
 				{params.map((param, i)=>
 					<RegisterPicker key={i} p={p} x={i>=node.params.length ? -1 : node.params[i]}
-						desc={param.name!=undefined ? `#${i}: ${param.name}` : `#${i}`}
+						desc={param.name!=undefined ? `#${i+1}: ${param.name}` : `#${i+1}`}
 						setX={setNode==undefined ? undefined : (nx)=>setNode({
 							...node, params: node.params.length<=i
 								? [...node.params, ...fill(i-node.params.length,-1), nx]

@@ -34,37 +34,38 @@ class TerminalEffect {
 	cursorElem: HTMLElement | null = null;
 	msgs: TerminalMsg[] = [];
 	current: number = -1;
-	interval: number;
+	interval: number|undefined;
 
 	step = 8;
 	wait = 3;
 	inPause = -1;
 
-	constructor(private root: HTMLElement) {
-    this.interval = setInterval(()=>this.update(), 50);
+	constructor(private root: HTMLElement, private render: boolean) {
+    if (!render) this.interval = setInterval(()=>this.update(), 50);
 	}
 
 	moveCursor() {
 		if (this.cursorElem) this.cursorElem.remove();
+		if (this.render || this.current>=this.msgs.length) return;
 
 		this.cursorElem = document.createElement("span");
 		this.cursorElem.textContent = "█";
 		this.cursorElem.style.position="absolute";
-		this.cursorElem.classList.add("cursor");
+		// this.cursorElem.classList.add("cursor");
+		this.cursorElem.classList.add("blink");
 
-		if (this.current == this.msgs.length) {
-			this.cursorElem.classList.add("blink");
-		} else {
-			this.msgs[this.current].elem.appendChild(this.cursorElem);
-		}
-
-		this.root.scrollTo(0, this.root.scrollHeight);
+		this.msgs[this.current].elem.appendChild(this.cursorElem);
 	}
 	
 	onEnd?: ()=>void;
 
 	update(step: number=this.step, wait: number=this.wait) {
-		if (this.current >= this.msgs.length || --this.inPause > 0) return;
+		if (this.current >= this.msgs.length || --this.inPause > 0) {
+			return;
+		}
+
+		const scroll = document.scrollingElement!;
+		const byBottom = scroll.scrollTop > scroll.scrollHeight - scroll.clientHeight - 75;
 
 		if (this.current != -1 && this.msgs[this.current].ev.length > 0) {
 			let eaten = 0;
@@ -91,6 +92,8 @@ class TerminalEffect {
 			}
 
 			if (this.msgs[this.current].ev.length == 0) this.inPause = wait;
+			
+			if (byBottom) scroll.scrollIntoView({ behavior: "smooth", block: "end" });
 		}
 
 		if (this.inPause <= 0 && (this.current == -1 || this.msgs[this.current].ev.length == 0)) {
@@ -137,11 +140,10 @@ class TerminalEffect {
 	}
 	
 	renderAll() {
+		if (this.interval!=undefined) clearInterval(this.interval);
 		while (this.current<this.msgs.length) {
 			this.update(Number.MAX_VALUE, 0);
 		}
-
-		clearInterval(this.interval);
 	}
 
 	private append(content: string | HTMLElement) {
@@ -180,7 +182,7 @@ export function StoryParagraph({ children, end, noCursor }: {
 	useDisposable(()=>{
 		if (!ref.current) return;
 
-		const fx = new TerminalEffect(ref.current)
+		const fx = new TerminalEffect(ref.current, !ctx.active || noCursor==true);
 		if (ctx.active) setDone(false);
 		fx.onEnd = ()=>setDone(true);
 		fx.addMsg({ type: "server", content: [...src.current?.childNodes ?? []] });
@@ -191,7 +193,7 @@ export function StoryParagraph({ children, end, noCursor }: {
 
 	return <>
 		<div hidden ref={src} >{children}</div>
-		<div ref={ref} className={ctx.active ? "dark:text-green-300" : textColor.dim} />
+		<div ref={ref} className={clsx(ctx.active ? "dark:text-green-300" : textColor.dim, "main-text flex flex-col w-full")} />
 
 		{done && end?.choices && <div className="flex flex-row gap-2 flex-wrap" >
 			{end.choices.map(v=>
@@ -239,7 +241,7 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 	}, [index, next, stage.para.length])
 	
 	return <div className="flex flex-col gap-2 justify-start items-start max-w-2xl grow" >
-		<Text v="big" className="my-8" >{stage.name}</Text>
+		<Text v="big" className="my-4" >{stage.name}</Text>
 		{stage.para.slice(0, index+1).map((v,i)=><Fragment key={i} >
 			<StoryContext.Provider value={{
 				active: index==i, last: next==undefined ? "end"
