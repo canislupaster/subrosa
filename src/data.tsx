@@ -360,10 +360,12 @@ export const data: Stage[] = [
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
+                <p>
                 You confide in Derek, only for him to sympathize. "It keeps our skills sharp.” And then, in an about turn, he declares, “No cheating.”
-            </StoryParagraph>,
-            <StoryParagraph>
+                </p>
+                <p>
                 You open your payslip. That car may come sooner than you imagined.
+                </p>
             </StoryParagraph>,
         ]
     },
