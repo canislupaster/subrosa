@@ -350,7 +350,7 @@ export const data: Stage[] = [
         type: "story",
         name: "Chapter 3",
         key: "team_lunch",
-        blurb: "Like terminites emerging from the woodwork.",
+        blurb: "Like termites emerging from the woodwork.",
         para: [
             <StoryParagraph noCursor={true}>
                 <pre>
@@ -478,9 +478,9 @@ export const data: Stage[] = [
 	puzzleTy[2],
     {
         type: "story",
-        name: "Chapter 3",
-        key: "team_lunch",
-        blurb: "Like terminites emerging from the woodwork.",
+        name: "Chapter 4",
+        key: "late_night_clarity",
+        blurb: "People vanish here... professionally, at least.",
         para: [
             <StoryParagraph noCursor={true}>
                 <pre>
@@ -600,6 +600,142 @@ export const data: Stage[] = [
         ]
     },
 	puzzleTy[3],
+    {
+        type: "story",
+        name: "Chapter 5",
+        key: "mushrooms",
+        blurb: "Are mushroos vegetables?",
+        para: [
+            <StoryParagraph>
+                <p>
+                    The words "PROMOTION APPROVED 🎉" blink cheerfully across your screen. You lean back, basking momentarily in the triumph of deciphering Project Chrysalis. For a fleeting second, corporate absurdity feels almost bearable.
+                </p>
+                <p>
+                    You want to share this with a friend – the only friend you have here. You impulsively Slack Karen, optimism buoying your usually cautious approach. "Hey Karen, have you heard from Mikah lately?"
+                </p>
+                <p>
+                    Dots dance briefly at the bottom of the Slack window, then pause. Finally, Karen responds.
+                </p>
+                <p>
+                    "mikahs been fired"
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    Your heart plummets, optimism extinguished instantly. Fingers hovering hesitantly over the keyboard, 
+                    you manage a shaky reply: "Why?"
+                </p>
+                <p>
+                    "bad culture fit" Karen sends back quickly, no punctuation—her signature disregard now more irritating than quirky.
+                </p>
+                <p>
+                    Days blur again into puzzles and cryptic meetings. You're spiraling. 
+                    There's only the ping of new puzzles on your desktop, a regular paycheck that you have no clue how to spend, 
+                    and lunch debates that strain sanity. Today, the debate circles around mushrooms.
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph noCursor={true}>
+                <pre>
+%%%%%%%%%%%%@@@@@@@@@@@@@%%%%%%%%%@@%%%%%%%%%%%%%%%%%%%%%%%%@@%%%%%%%%%@@@@@@@@@% <pre />
+%%%%%%%%%%%%%%%%%@@@@@@@%%%%%%%%%%@@@%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% <pre />
+###%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%@%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%###%%%%%%%%%%% <pre />
+####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%################%%% <pre />
+#####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%##########****########### <pre />
+######%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%########***********######## <pre />
+######%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%########*************####### <pre />
+#######%%%%%%%%%%%%%%%%%%%%%%%%%@@@@%%%%%%%%%%%%%%%%#########***********######### <pre />
+#######%%%%%%%%%%%%%%%%%%%%%%%%@@@@@@%%%%%%%%%%#*+===--=---==+**################# <pre />
+###########%%%%%%%%%%%%%%%%%%%%@@@@%%%%%%%%%++*#####*****++===--=*############### <pre />
+###########%%%%%%%%%%%%%%%%%%%@@%%%%%%%%%#*##**####%%%#%%%%%##*+===#############% <pre />
+############%%%%%%%%%%%%%%%%%%@@%%%%%%%#***+**####%%###########**++=#%%%%%%%%%%%% <pre />
+#################%%%%%%%%%%%%%%%%%%%%%#**++****####*#*+++****###**++=%%%%%%%%%%%% <pre />
+######################%%%%%%%%%%%%%%%#*++++**#*####*+=--=**+******+++%%%%%%%%%%%% <pre />
+%#####################%%%%%%%%%%%%%%%#+=+**##**####+=----=***##+++++*%%%%%%%%%%%% <pre />
+%######################%%%%%%%%%%%%%%#=+*##**###*##+=--::-#%##****++#%%%%%%%%%%%% <pre />
+%%####################%%%%%%%%%%%%%%%#*=+*#########+=--::-+##*+++++*%%%%%%%%%%%%% <pre />
+%%#########%%%%%%%%%%%%%%%%%%%%%%%#*++*+=*#########*=--:::-*#*++++*%%%%%%%%%%%%%% <pre />
+%%%%######%%%%%%%%%%%%%%%%%%%%%%*=**++**#+++**#####*==-::::+**++*#%%%%%%%%%%%%%%% <pre />
+%%%%%%###%%%%%%%%%%%%%%%%%%%%%#*+++++++**##*+++*****==-::::===+#%%%%%%%%%%%%%%%%% <pre />
+%%%%%%%%%%%%%%%%%%%%%##########*****+===*##*##*++=+*+=--:::=#%%%%%@@@@%%%%%%%%%%% <pre />
+%%%%%%%%%#%%%%%%###############*+*#***+++*%########*+==----+%%%%%%%@@@@%%%%%%%%%% <pre />
+%%%%%%%%%%%%%###################*#%%%##*++#####%%%%*++==---+%%%%%%%%%%@@@%%@@@@@@ <pre />
+@%%%%%%%%%%%%##################%%%%%%%%#*++#%%%#%%*+====---*%%%%%%%%%%%%@@@@@@@@@ <pre />
+@@%%%%%%%%%%%%#########%@%@@%@%%%%##%%##*+=+##%%#*+====--==#@@@@@%%%%@@@@@@@@@@@@ <pre />
+@@%%%%%%%%%%%%%%####%%**###%%%%%#%#*+*******#%@%##=========#%%@@@@@@@@@@@@@@@@@@@ <pre />
+@@%%%%%%%%%%%%%%%#**#****##%#%###%%%#*#*#**#%@@@%#+======++%%###%%%@@@@@@@@@@@@@@ <pre />
+%##%%%####******###******#%%@%#####%######%%##%%*+======++*%@@%%%#**####*%@@@@@@@ <pre />
+###%%%%%#*########%#####****####*#####%%%%%%%%@@%%#++=+++*%%%%%%###%%**####%%%@@@ <pre />
+%%####%%#*##********#%%%%##****#####%@%@@@@@@@%@@%**++***#@%@%%##%%#%%%@@@@%%%%%@ <pre />
+%##%##%%%#+**###########*######%#%%%%@@@@@@@@@@@%%#######@@%%%%#%%###%@@@@@@@%%%@ <pre />
+                </pre>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    "Are mushrooms vegetables?" Derek asks earnestly. "They're both temporary fruiting bodies solely existing to propagate their species."
+                </p>
+                <p>
+                    "I'm a temporary fruiting body solely existing to propagate my species," you blurt. Silence descends. You stare forlornly at your fusion taco, suddenly aware of how little fruiting you've been doing lately.
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    Late one evening, while mindlessly deciphering a puzzle involving "integrated synergistic paradigms," 
+                    Munir's head pops into your cubicle. His eyes, tired yet mischievous, shine dimly.
+                </p>
+                <p>
+                    "The second one ducks," Munir starts.
+                </p>
+                <p>
+                    You stare blankly. Munir raises an expectant eyebrow.
+                </p>
+                <p>
+                    "Two time travelers walk into a bar," he concludes with exaggerated patience.
+                </p>
+                <p>
+                    You offer a weak chuckle, but your distracted expression doesn't fool Munir. His face softens as he asks,
+                    "You seemed pretty sad about Mikah being fired."
+                </p>
+                <p>
+                    "It's everything," you admit wearily. "What are we even doing here, Munir?"
+                </p>
+                <p>
+                    He sighs sympathetically. "Honestly? Maybe it's time to ask Karen directly."
+                </p>
+                <p>
+                    Summoning all remaining resolve, you type a terse Slack message: "Karen, seriously, what does Subrose actually do?"
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    An agonizing pause follows, long enough to mentally update your résumé, when Karen's response finally flashes up:
+                </p>
+                <p>
+                    "warcrimes as a service"
+                </p>
+                <p>
+                    Your pulse quickens. But before panic fully sets in, another message pops up instantly:
+                </p>
+                <p>
+                    "lol kidding we re just a WaaS relax"
+                </p>
+                <p>
+                    You sink back into your chair, knowing perhaps even less than before. The weirdness has gotten to you – 
+                    the isolation; the pointlessness of it all; and then being told you're working on WaaS, whatever the fruit that is.
+                </p>
+                <p>
+                    You send another message to Mikah like another pancake joining an already diabetes-inducing stack. 
+                    Perhaps he knows what WaaS stands for.
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    Like foot fungus reappearing, it happens slowly and then all at once.
+                    Three dots dance on the chat window, resolving into a ping! that reads,
+                    "You're probably tired of puzzles by now. But this is important. Prove to me you're ready to find out the truth."
+                </p>
+            </StoryParagraph>,
+        ]
+    },
 	puzzleTy[4],
 	puzzleTy[5],
 	puzzleTy[6],
