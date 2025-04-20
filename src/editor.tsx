@@ -582,8 +582,8 @@ const makeProc = (name: string): Procedure => ({
 	nodeList: [], nodes: new Map(), maxNode: 0, maxRegister: 0
 });
 
-export function PuzzleInput({puzzle, input, setInput}: {
-	puzzle: Puzzle, input: string,
+export function PuzzleInput({puzzle, input, output, setInput}: {
+	puzzle: Puzzle, input: string, output: string|null,
 	setInput: (x: string)=>void,
 }) {
 	const [input2, setInput2] = useState(input);
@@ -614,11 +614,21 @@ export function PuzzleInput({puzzle, input, setInput}: {
 		<Input value={input2} onChange={(ev)=>up(ev.currentTarget.value)} />
 		
 		<div className={blankStyle} >
-			{input.length>0 ? <div className="flex flex-row flex-wrap gap-4" >
-				<Text v="code" >{input}</Text>
-				<IconChevronRight />
-				<Text v="code" >{solution}</Text>
-			</div> : <>
+			{input.length>0 ? <>
+				<div className="flex flex-row flex-wrap gap-4" >
+					<Text v="code" >{input}</Text>
+					<IconChevronRight />
+					<Text v="code" >{solution}</Text>
+				</div>
+				
+				{output==input ? <Alert className={bgColor.green} title="Test passed"
+					txt="Your program output the same text." /> : output!=null && <>
+					<Alert bad title="Test failed" txt={<>
+						Your program output:
+						<Text v="code" >{output}</Text>
+					</>} />
+				</>}
+			</> : <>
 				<IconInfoCircle />
 				After generating or entering an input above, you will see the target output here.
 			</>}
@@ -633,6 +643,7 @@ export function Editor({edit, setEdit, openSidebar}: {
 	const [runStatus, setRunStatus] = useState<{ type: "done"|"paused"|"stopped" }
 		|{ type: "running", step: boolean }>({type: "stopped"});
 	const [runError, setRunError] = useState<InterpreterError|null>(null);
+	const [output, setOutput] = useState<string|null>(null);
 
 	console.log(runState, runStatus, runError);
 
@@ -709,7 +720,11 @@ export function Editor({edit, setEdit, openSidebar}: {
 		const doStep = ()=>{
 			const xd = handle(()=>{
 				const ret = step(v);
-				if (!ret) { cont=false; setRunStatus({type: "done"}); }
+				if (!ret) {
+					cont=false;
+					setOutput(v.outputRegister.current.toString());
+					setRunStatus({type: "done"});
+				}
 			});
 			cont&&=xd;
 		};
@@ -753,6 +768,9 @@ export function Editor({edit, setEdit, openSidebar}: {
 	
 	const [open, setOpen] = useState(false);
 
+	const setInput = useCallback((inp: string)=>setEdit(e=>({...e, input: inp})), [setEdit]);
+	useEffect(()=>setOutput(null), [edit.input, setOutput]);
+
 	return <div className={clsx("grid h-dvh gap-x-4 pl-3 px-5", runStatus.type=="stopped" ? "editor" : "editor-running")} >
 		<div className="editor-top flex flex-row gap-2 py-1 justify-between items-center pb-1" >
 			<div className="flex flex-row gap-2 items-center" >
@@ -776,7 +794,9 @@ export function Editor({edit, setEdit, openSidebar}: {
 
 				<span className="w-2" />
 
-				<Button className="py-1 h-fit" onClick={()=>setEdit(e=>({...e, stepsPerS: 1}))} >Speed: {edit.stepsPerS}</Button>
+				<Button className="py-1 h-fit" onClick={()=>setEdit(e=>({...e, stepsPerS: 1}))} >
+					Speed: {edit.stepsPerS}
+				</Button>
 				
 				<span className="w-2" />
 
@@ -795,7 +815,7 @@ export function Editor({edit, setEdit, openSidebar}: {
 		</div>
 		
 		{edit.puzzle && <Modal open={open} onClose={()=>setOpen(false)} title={edit.puzzle.name} >
-			<PuzzleInput puzzle={edit.puzzle} input={edit.input} setInput={v=>setEdit(e=>({...e, input: v}))} />
+			<PuzzleInput puzzle={edit.puzzle} input={edit.input} output={output} setInput={setInput} />
 		</Modal>}
 		
 		{runState && <div className="flex flex-col editor-right-down gap-2 mt-2 min-h-0" >
