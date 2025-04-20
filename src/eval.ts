@@ -30,7 +30,7 @@ export type Node = Readonly<{
 	params: readonly number[] // maps to procedure params in order
 } | {
 	op: "add"|"sub"|"set"|"access",
-	lhs: number, rhs: number // lhs +=,-=,= rhs, lhs[rhs]
+	lhs: number, rhs: number // lhs +=,-=,= rhs, lhs = rhs[lhs]
 } | {
 	op: "setIdx",
 	lhs: number, rhs: number, idx: number
@@ -38,13 +38,18 @@ export type Node = Readonly<{
 
 export type RegisterRef = { current: number|string };
 
-export type Procedures = Readonly<{
+export type EditorState = Readonly<{
 	userProc: Map<number, Procedure>,
-	mainProc: Procedure
+	userProcList: number[],
+
+	entryProc: number,
+	active: number,
+	
+	
 }>;
 
 export type ProgramState = Readonly<{
-	procs: Procedures,
+	procs: EditorState,
 	stack: {
 		proc: Procedure,
 		toList: Map<number, number>,
@@ -102,6 +107,18 @@ export function step(prog: ProgramState) {
 		if (!v) throw new InterpreterError({ type: "noRegister" })
 		return v;
 	};
+	
+	const castToNum = (r: number)=>{
+		let v = get(r).current;
+		if (typeof v=="string") v=v.length>0 ? v.charCodeAt(0) : 0;
+		return v;
+	};
+
+	const castToStr = (r: number)=>{
+		let v = get(r).current;
+		if (typeof v=="number") v=String.fromCharCode(v);
+		return v;
+	};
 
 	const compute = (op: "add"|"sub"|"set", l: RegisterRef, r: RegisterRef) => {
 		const swap = typeof l=="number" && typeof r=="string";
@@ -134,11 +151,28 @@ export function step(prog: ProgramState) {
 		else l.current=out;
 	};
 
+	const arrOp = (idx: number, lhs: number, rhs?: number) => {
+		const l = get(lhs).current;
+		const i = castToNum(idx);
+		if (rhs==undefined) {
+			get(lhs).current = typeof l=="string" ? (l.length>=i ? 0 : l[i]) : l;
+		} else {
+			const s = castToStr(rhs);
+			if (typeof l=="string" && l.length>=i) {
+				get(lhs).current=[ ...l, [...new Array(i-l.length) as unknown[]].map(()=>0), s ].join("");
+			} else if (typeof l=="string") {
+				get(lhs).current = `${l.slice(0,i)}${s}${l.slice(i+1)}`;
+			}
+		}
+	};
+
 	let next = last.i+1;
 	if (x.op=="add" || x.op=="sub" || x.op=="set") {
 		compute(x.op, get(x.lhs), get(x.rhs));
 	} else if (x.op=="inc" || x.op=="dec") {
 		compute(x.op=="inc" ? "add" : "sub", get(x.lhs), { current: 1 });
+	} else if (x.op=="access") {
+	} else if (x.op=="setIdx") {
 	} else if (x.op=="call") {
 		const v = prog.procs.userProc.get(x.procRef);
 		if (!v) throw new InterpreterError({ type: "noProcedure" });

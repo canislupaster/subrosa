@@ -17,7 +17,8 @@ export const textColor = {
 	link: "text-gray-700 dark:text-gray-200 underline-offset-2 transition-all hover:text-black dark:hover:text-gray-50 hover:bg-cyan-800/5 dark:hover:bg-cyan-100/5 cursor-pointer underline decoration-dashed decoration-1",
 	blueLink: "dark:text-blue-200 text-sky-800",
 	star: "dark:text-amber-400 text-amber-600",
-	gray: "dark:text-gray-200 text-gray-700"
+	gray: "dark:text-gray-200 text-gray-700",
+	dim: "dark:text-gray-400 text-gray-500"
 };
 
 export const bgColor = {
@@ -58,7 +59,7 @@ export function Input({className, icon, ...props}: InputProps) {
 }
 
 export function HiddenInput({className, ...props}: JSX.InputHTMLAttributes<HTMLInputElement>&{className?: string}) {
-	return <input className={twMerge(clsx("bg-transparent border-0 outline-none border-b-2 focus:outline-none focus:theme:border-blue-500 transition duration-300 px-1 py-px", borderColor.default, className))}
+	return <input className={twMerge(clsx("bg-transparent border-0 outline-none border-b-2 focus:outline-none focus:theme:border-blue-500 transition duration-300 px-1 py-px pb-0 -mb-px", borderColor.default, className))}
 		{...props} />;
 }
 
@@ -74,14 +75,14 @@ export type ButtonProps = JSX.HTMLAttributes<HTMLButtonElement>&{
 };
 
 export function Button({className, disabled, icon, ...props}: ButtonProps) {
-	return <button disabled={disabled} className={twMerge(clsx("flex flex-row justify-center gap-1.5 px-4 py-1.5 items-center rounded-sm group", interactiveContainerDefault, icon && "pl-3", className))} {...props} >
+	return <button disabled={disabled} className={twMerge(clsx("flex flex-row justify-center gap-1.5 px-4 py-1.5 items-center group", interactiveContainerDefault, icon && "pl-3", className))} {...props} >
 		{icon}
 		{props.children}
 	</button>;
 }
 
 export const IconButton = ({className, icon, disabled, ...props}: {icon?: ComponentChildren, disabled?: boolean, className?: string}&JSX.IntrinsicElements["button"]) =>
-	<button className={twMerge(clsx("rounded-full p-2 flex items-center justify-center", interactiveContainerDefault, className))} disabled={disabled} {...props} >
+	<button className={twMerge(clsx("rounded-full p-1.5 flex items-center justify-center", interactiveContainerDefault, className))} disabled={disabled} {...props} >
 		{icon}
 	</button>;
 
@@ -305,30 +306,30 @@ export const AppTooltip = forwardRef(({
 	noClick?: boolean, noHover?: boolean,
 	className?: string
 }&Omit<JSX.HTMLAttributes<HTMLDivElement>,"content">, ref)=>{
-	const [open, setOpen] = useState(false);
+	const [open, setOpen] = useState<number>(0);
 	const [reallyOpen, setReallyOpen] = useState<number|null>(null);
 	const {count, incCount} = useContext(PopupCountCtx);
 	
 	const unInteract = useCallback((p: PointerEvent) => {
-		if (p.pointerType=="mouse") setOpen(false);
-	}, [setOpen]);
-
-	const interact = useCallback((p: PointerEvent) => {
-		if (p.pointerType=="mouse") setOpen(true);
+		if (p.pointerType=="mouse") setOpen(0);
 	}, [setOpen]);
 
 	const isOpen = reallyOpen==count;
 
+	const interact = useCallback((p: PointerEvent) => {
+		if (p.pointerType=="mouse") setOpen(i=>i+1);
+	}, [setOpen]);
+
 	useEffect(()=>{
 		let tm: number;
-		if (open) tm = setTimeout(()=>setReallyOpen(incCount()), 200);
+		if (open>0) tm = setTimeout(()=>setReallyOpen(incCount()), 200);
 		else tm = setTimeout(() => setReallyOpen(null), 500);
 		return ()=>clearTimeout(tm);
 	}, [incCount, open]);
 
 	useEffect(()=>{
 		onOpenChange?.(isOpen);
-	}, [isOpen, onOpenChange])
+	}, [isOpen, onOpenChange, setOpen])
 
 	const targetRef = useRef<HTMLDivElement>(null);
 	
@@ -338,8 +339,8 @@ export const AppTooltip = forwardRef(({
 			["pointerenter", noHover ? noCb : interact],
 			["pointerleave", noHover ? noCb : unInteract],
 			["click", noClick ? noCb : (ev: PointerEvent)=>{
-				if (!reallyOpen) { setOpen(true); setReallyOpen(incCount()); }
-				else { setOpen(false); setReallyOpen(null); }
+				if (!isOpen) { setOpen(i=>i+1); setReallyOpen(incCount()); }
+				else { setOpen(0); setReallyOpen(null); }
 				ev.stopPropagation();
 			}]
 		] as const;
@@ -353,10 +354,10 @@ export const AppTooltip = forwardRef(({
 
 	return <Popover
 		ref={cloneRef(targetRef, ref)}
-		onClickOutside={()=>setOpen(false)}
+		onClickOutside={()=>setOpen(0)}
 		positions={placement ?? ['top', 'right', 'left', 'bottom']}
 		containerStyle={{ zIndex: "100000" }}
-		padding={-15}
+		padding={5}
 		parentElement={useContext(ModalContext)?.current ?? undefined}
 		content={({position, childRect, popoverRect}: PopoverState) => {
 			if (!position) return <></>;
@@ -387,7 +388,7 @@ export const AppTooltip = forwardRef(({
 
 export type DropdownPart = ({type: "txt", txt?: ComponentChildren}
 	| { type: "act", name?: ComponentChildren, act: ()=>void,
-			disabled?: boolean, active?: boolean })&{key?: string|number};
+			disabled?: boolean, active?: boolean })&{key?: unknown};
 
 export function Dropdown({parts, trigger, onOpenChange, ...props}: {
 	trigger?: ComponentChildren, parts: DropdownPart[], onOpenChange?: (x:boolean)=>void
@@ -397,6 +398,7 @@ export function Dropdown({parts, trigger, onOpenChange, ...props}: {
 	//these components are fucked up w/ preact and props don't merge properly with container element
 	return <AppTooltip onOpenChange={onOpenChange}
 		className="rounded-sm dark:bg-zinc-900 bg-zinc-100 border-0 px-0 py-0 max-w-60 overflow-y-auto justify-start max-h-[min(90dvh,30rem)] z-50" 
+		noHover
 		content={parts.map((x,i) => {
 			if (x.type=="act") {
 				return <Button key={x.key ?? i} disabled={x.disabled}
@@ -414,6 +416,34 @@ export function Dropdown({parts, trigger, onOpenChange, ...props}: {
 		})} {...props} >
 		{trigger}
 	</AppTooltip>;
+}
+
+export function Select<T>({ options, value, setValue, placeholder, className, ...props }: {
+	options: { label: ComponentChildren, value?: T, key?: unknown, disabled?: boolean }[],
+	value?: T, setValue?: (x: T)=>void,
+	placeholder?: ComponentChildren,
+	className?: string
+}&Partial<ComponentProps<typeof Dropdown>>) {
+	const curOpt = value==undefined ? undefined : options.find(x=>x.value==value);
+
+	return <Dropdown parts={options.map(opt=>{
+		const v=opt.value;
+		return v==undefined ? {
+			type: "txt", txt: opt.label, key: opt.key
+		} : {
+			type: "act", name: opt.label,
+			active: opt.value==value,
+			disabled: opt.disabled,
+			act() { setValue?.(v); }, key: opt.key
+		};
+	})}
+	trigger={<div>
+		<Button className={twMerge("pr-3", className)} >
+			{curOpt==undefined ? placeholder : curOpt.label}
+			<IconChevronDown />
+		</Button>
+	</div>}
+	{...props} />
 }
 
 export type Theme = "light"|"dark";
@@ -622,11 +652,12 @@ export function throttle(ms: number) {
 }
 
 export type LocalStorage = Partial<{
-	theme: Theme
+	theme: Theme,
+	storyState: Record<string, unknown>
 }>;
 
 const localStorageKeys: (keyof LocalStorage)[] = [
-	"theme"
+	"theme", "storyState"
 ];
 export const LocalStorage = {} as unknown as LocalStorage;
 
@@ -661,3 +692,5 @@ export function mapWith<K,V>(map: Readonly<Map<K,V>>, k: K, v?: V) {
 	else newMap.delete(k);
 	return newMap;
 }
+
+export type SetFn<T> = (cb: (old: T)=>T)=>void;

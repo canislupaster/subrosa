@@ -3,6 +3,7 @@ import { render } from "preact";
 import { useState } from "preact/hooks";
 import { Editor } from "./editor";
 import "preact/devtools";
+import { Story, StoryParagraph } from "./story";
 
 
 function App({theme: initialTheme}: {theme: Theme}) {
@@ -15,6 +16,24 @@ function App({theme: initialTheme}: {theme: Theme}) {
     </div> */}
    
     <Editor />
+    {/* <Story stage={{
+      type: "story",
+      name: "abc",
+      para: [
+        <StoryParagraph key={0} end={{
+          type: "choice",
+          key: "mychoice",
+          choices: [
+            { value: "hi", label: "bc" }
+          ]
+        }} >
+          {"hi there abc".repeat(5)}
+        </StoryParagraph>,
+        <StoryParagraph key={0} >
+          hi there abc def
+        </StoryParagraph>
+      ]
+    }} /> */}
   </Container></ThemeContext.Provider>;
 }
 

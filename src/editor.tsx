@@ -1,11 +1,13 @@
-import { MutableRef, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Procedure, Node, Register } from "./eval";
-import { bgColor, Button, containerDefault, Dropdown, DropdownPart, HiddenInput, Input, mapWith, Text, throttle } from "./ui";
+import { Alert, bgColor, borderColor, Button, containerDefault, Divider, Dropdown, DropdownPart, HiddenInput, IconButton, Input, mapWith, Select, SetFn, Text, throttle } from "./ui";
 import { twMerge } from "tailwind-merge";
-import { IconCaretRightFilled, IconChevronCompactDown, IconCircleMinus, IconCirclePlus, IconCirclePlusFilled, IconPlus } from "@tabler/icons-preact";
+import { IconCaretRightFilled, IconChevronCompactDown, IconCircleMinus, IconCirclePlus, IconCirclePlusFilled, IconPlus, IconX } from "@tabler/icons-preact";
 import { ComponentChild, Ref } from "preact";
-import { useDragAndDrop } from "@formkit/drag-and-drop/react";
+import { dragAndDrop, useDragAndDrop } from "@formkit/drag-and-drop/react";
 import { animations, parentValues, performSort, remapNodes, setParentValues } from "@formkit/drag-and-drop";
+import clsx from "clsx";
+import { SetStateAction } from "preact/compat";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-4 items-center pl-1 text-sm relative`);
 const nameInputProps = { minLength: 5, maxLength: 20, pattern: "^\w+$" } as const;
@@ -22,6 +24,7 @@ type ProcData = {
 	proc: Procedure,
 	nodeRefs: MutableRef<Map<number|undefined, HTMLDivElement>>,
 	regMap: Map<number, number>,
+	regParam: Map<number, number>,
 	nodeMap: Map<number|undefined, number>,
 	disableArrows: boolean
 };
@@ -29,27 +32,20 @@ type ProcData = {
 function RegisterPicker({p, x, setX, desc}: {
 	p: ProcData, x: number, setX?: (x: number)=>void, desc: string
 }) {
-	const v = p.proc.registers.get(x);
-	const regI = v==undefined ? undefined : p.regMap.get(x);
-	const trigger = <div>
-		<div className="flex flex-col" >
-			<Text v="sm" >{desc}</Text>
-			<Button>{regI!=undefined ? `#${regI+1}${v!.name ? `: ${v!.name}` : ""}` : "(unset)"}</Button>
-		</div>
+	return <div className="flex flex-col" >
+		<Text v="sm" >{desc}</Text>
+		<Select options={[
+			{ label: "(unset)", value: -1 },
+			...p.proc.registerList.map((r,i)=>{
+				const v = p.proc.registers.get(r)!;
+				return {
+					label: `#${i+1}${v.name ? `: ${v.name}` : ""}`,
+					value: r
+				};
+			})
+		]}
+		value={x} setValue={setX} />
 	</div>;
-
-	if (!setX) return trigger;
-
-	return <Dropdown parts={[
-		{ type: "act", name: "(unset)", act() { setX(-1); } },
-		...p.proc.registerList.map((r,i)=>{
-			const v = p.proc.registers.get(r)!;
-			return {
-				type: "act", act() { setX(r) },
-				name: `#${i+1}${v.name ? `: ${v.name}` : ""}`
-			} satisfies DropdownPart
-		})
-	]} trigger={trigger} />;
 }
 
 function iconURL(x: Node) {
@@ -67,8 +63,8 @@ function GotoArrow({p, node, nodeI}: {p: ProcData, node: Node&{op: "goto"}, node
 		const el2 = p.nodeRefs.current.get(nodeI);
 		const rect = rectRef.current, arrow=arrowRef.current
 		if (!el || !el2 || !rect || !arrow) return;
-		
-		const ts = setTimeout(()=>{
+
+		const updateArrow = ()=>{
 			let a = el2.getBoundingClientRect()
 			let b = el.getBoundingClientRect();
 
@@ -94,7 +90,10 @@ function GotoArrow({p, node, nodeI}: {p: ProcData, node: Node&{op: "goto"}, node
 			for (const k in obj) {
 				rect.style[k as ObjKey]=obj[k as ObjKey];
 			}
-		}, 100);
+		};
+
+		updateArrow();
+		const ts = setTimeout(()=>updateArrow(), 100);
 
 		return ()=>{
 			clearTimeout(ts);
@@ -149,10 +148,12 @@ function GotoInner({p, node, setNode, nodeI}: {
 	</>;
 }
 
-function ProcNode({p, node, setNode, nodeI, idx}: {
+function ProcNode({p, node, setNode: setNode2, nodeI, idx}: {
 	p: ProcData, node: Node, nodeI?: number, idx?: number
-	setNode?: (x: Node)=>void
+	setNode: (x: Node|null, i: number)=>void
 }) {
+	const setNode = nodeI==undefined ? undefined : (newNode: Node|null)=>setNode2(newNode, nodeI);
+
 	let inner: ComponentChild;
 	if (node.op=="goto") {
 		inner=<GotoInner p={p} node={node} nodeI={nodeI} setNode={setNode} />;
@@ -170,34 +171,78 @@ function ProcNode({p, node, setNode, nodeI, idx}: {
 		<img src={`/${iconURL(node)}`} className="w-10 cursor-move mb-4" />
 		{idx && <Text v="dim" className="absolute left-1 bottom-1" >{idx}</Text>}
 		{inner}
+		{setNode && <IconButton icon={<IconX />} onClick={()=>{ setNode(null); }}
+			className="-mr-2 ml-auto float-end" />}
 	</div>;
 }
 
 type DragNode = { type: "proc"|"builtin", i: number};
+const SelectRegisterType = Select<"param"|"string"|"number">;
 
 function RegisterEditor({p, reg, setReg}: {
-	p: ProcData, reg: number, setReg: (x: Register)=>void
+	p: ProcData, reg: number, setReg: (x: Register|null, i: number)=>void,
 }) {
 	const regI = p.regMap.get(reg)!;
 	const regV = p.proc.registers.get(reg)!;
 
-	return <div className={twMerge(nodeStyle, "flex flex-col")} >
-		<div className="flex flex-row" >
+	const [value, setValue] = useState<string>("");
+	const [err, setErr] = useState<string|null>(null);
+
+	const regTy = regV.type=="param" ? null : typeof regV.value;
+	const emptyReg = useMemo(()=>({type: "value", name: regV.name} as const), [regV.name]);
+	const paramI = p.regParam.get(reg);
+
+	useEffect(()=>{
+		if (regTy=="string") {
+			setReg({...emptyReg, value}, reg);
+			setErr(null);
+		} else if (regTy=="number") {
+			const numV = Number.parseInt(value, 10);
+			if (!/^\d+$/.test(value) || isNaN(numV)) setErr("Invalid number");
+			else { setReg({...emptyReg, value: numV}, reg); setErr(null); }
+		}
+	}, [value, regTy, setReg, emptyReg, reg]);
+
+	return <div className={twMerge(nodeStyle, "flex flex-col pl-2 items-stretch gap-1 pr-1")} >
+		<div className="flex flex-row gap-2 mb-1 items-center" >
 			<Text v="bold" >{"#"}{regI+1}</Text>
 			<HiddenInput value={regV.name==undefined ? "(unnamed)" : regV.name}
 				onChange={(ev)=>{
 					if (ev.currentTarget.checkValidity()) setReg({
 						...regV, name: ev.currentTarget.value
-					});
+					}, reg);
 				}} {...nameInputProps} />
+			<IconButton className="ml-auto" icon={<IconX />} onClick={()=>{
+				setReg(null, reg);
+			}} />
 		</div>
+
+		<Text v="dim" >Register type:</Text>
+		<SelectRegisterType className="w-full" options={[
+			{ label: "Parameter", value: "param" },
+			{ label: "String", value: "string" },
+			{ label: "Number", value: "number" }
+		] as const} value={regV.type=="param" ? "param"
+			: typeof regV.value=="string" ? "string" : "number"}
+			setValue={v=>{
+				if (v=="param") setReg({...regV, type: "param"}, reg);
+				else if (v=="number") setReg({...regV, type: "value", value: 0}, reg);
+				else if (v=="string") setReg({...regV, type: "value", value: value.toString()}, reg);
+			}} />
+
+		{regV.type=="value" && <>
+			<Input className={clsx(err && borderColor.red)} value={value} onChange={ev=>setValue(ev.currentTarget.value)} />
+			{err && <Alert bad txt={err} />}
+		</>}
 		
-		<Input value={regV.type} ></Input>
+		{paramI!=undefined && <>
+			<Text v="smbold" className="self-center pt-2" >Parameter {"#"}{paramI+1}</Text>
+		</>}
 	</div>;
 }
 
-function ProcEditor({proc, setProc, noRename}: {
-	proc: Procedure, setProc: (x: Procedure)=>void, noRename?: boolean
+function ProcEditor({proc, setProc}: {
+	proc: Procedure, setProc: SetFn<Procedure>
 }) {
 	const nodeRefs = useRef(new Map<number|undefined,HTMLDivElement>());
 	const [disableArrows, setDisableArrows] = useState(false);
@@ -206,6 +251,8 @@ function ProcEditor({proc, setProc, noRename}: {
 			proc,
 			nodeRefs,
 			regMap: new Map(proc.registerList.map((v,i)=>[v,i])),
+			regParam: new Map(proc.registerList.filter(a=>proc.registers.get(a)?.type=="param")
+				.map((x,i)=>[x,i])),
 			nodeMap: new Map([
 				...proc.nodeList.map((v,i)=>[v,i] satisfies [number|undefined, number]),
 				[undefined, proc.nodeList.length]
@@ -216,17 +263,18 @@ function ProcEditor({proc, setProc, noRename}: {
 
 	const initDragNodes = proc.nodeList.map(i=>({i, type: "proc"} satisfies DragNode));
 
-	const updateFromDrag = (xs: DragNode[]) => {
-		const newNodes = new Map(proc.nodes);
+	const updateFromDrag = useCallback((xs: DragNode[]) => setProc(p=>{
+		const newNodes = new Map(p.nodes);
 		const nodeList = xs.map(v=>{
 			if (v.type=="proc") return v.i;
 			newNodes.set(newNodes.size, builtinNodes[v.i]);
 			return newNodes.size-1;
 		});
 
-		setProc({ ...proc, nodeList, nodes: newNodes });
-	};
+		return { ...p, nodeList, nodes: newNodes };
+	}), [setProc]);
 
+	// shitty stuff to accept builtin / procs
 	const [nodeRef, dragNodes, setDragNodes] = useDragAndDrop<HTMLUListElement, DragNode>(initDragNodes, {
 		group: "proc", plugins: [animations()],
 		performTransfer({ initialParent, targetParent, draggedNodes, targetNodes }) {
@@ -274,15 +322,41 @@ function ProcEditor({proc, setProc, noRename}: {
 		return ()=>nodeRefs.current.delete(node);
 	};
 
-	return <div className="flex flex-row gap-4" >
-		<div className="flex flex-col items-stretch gap-4 ml-[4rem]" >
+	const setReg = useCallback((newReg: Register|null, i: number)=>setProc(p=>({
+		...p, registers: mapWith(p.registers,i,newReg ?? undefined),
+		registerList: newReg==null ? p.registerList.filter(j=>j!=i) : p.registerList
+	})), [setProc]);
+
+	const setNode = useCallback((newNode: Node|null, i: number)=>{
+		setProc(p=>({
+			...p,
+			nodes: mapWith(p.nodes, i, newNode ?? undefined),
+			nodeList: newNode==null ? p.nodeList.filter(j=>j!=i) : p.nodeList
+		}));
+	}, [setProc]);
+	
+	const registerList = useRef<HTMLUListElement>(null);
+	const setRegisterList: Dispatch<SetStateAction<number[]>> = useCallback((nv)=>{
+		if (typeof nv=="function") setProc(p=>({...p, registerList: nv(p.registerList)}));
+		else setProc(p=>({...p, registerList: nv}));
+	}, [setProc]);
+
+	useEffect(()=>{
+		dragAndDrop({
+			parent: registerList.current,
+			state: [ proc.registerList, setRegisterList]
+		});
+	}, [proc.registerList, setRegisterList])
+
+	return <div className="grid grid-cols-[1.2fr_1fr_0.7fr] gap-4 pl-3" >
+		<div className="flex flex-col items-stretch gap-2 ml-[4rem]" >
 			<div className="mb-4" >
 				{noRename ? <Text v="bold" >Procedure {proc.name}</Text>
 				: <div className="flex flex-row gap-2" >
 					<Text v="bold" >Procedure</Text>
 					<HiddenInput value={proc.name} onChange={(ev)=>{
 						if (ev.currentTarget.checkValidity())
-							setProc({...proc, name: ev.currentTarget.value})
+							setProc(p=>({...p, name: ev.currentTarget.value}))
 					}} className="w-fit" {...nameInputProps} />
 				</div>}
 			</div>
@@ -291,23 +365,19 @@ function ProcEditor({proc, setProc, noRename}: {
 				{dragNodes.flatMap((v,i)=>{
 					const node = get(v);
 					return [
-						...node==undefined ? [] : [
-							<div key={`${v.type}${v.i}${i}`}
-								ref={v.type=="proc" ? nodeRefSetter(v.i) : undefined} >
+						<div key={`${v.type}${v.i}${i}`}
+							ref={v.type=="proc" ? nodeRefSetter(v.i) : undefined} >
 
-								<ProcNode p={procData} node={node} idx={i+1} setNode={v.type=="proc" ? (node)=>{
-									setProc({ ...proc, nodes: mapWith(proc.nodes, v.i, node) });
-								} : undefined} nodeI={v.type=="proc" ? v.i : undefined} />
-							</div>,
-						],
-						...node.op=="goto" && v.type=="proc" ? [
+							{node!=undefined && <ProcNode p={procData} node={node} idx={i+1} setNode={setNode} nodeI={v.type=="proc" ? v.i : undefined} />}
+						</div>,
+						...node && node.op=="goto" && v.type=="proc" ? [
 							<GotoArrow key={`arrow${v.i}`} p={procData} node={node} nodeI={v.i} />
 						] : [],
 						<IconChevronCompactDown className="self-center nodrag" key={`sep${i}`} />
 					];
 				})}
 			
-				<div className={twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 nodrag")} ref={nodeRefSetter(undefined)} >
+				<div className={twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 nodrag px-2")} ref={nodeRefSetter(undefined)} >
 					{proc.nodeList.length==0 ? <>
 						<IconPlus />
 						<Text v="sm" >Use the library on the right to add nodes</Text>
@@ -320,21 +390,36 @@ function ProcEditor({proc, setProc, noRename}: {
 			</ul>
 		</div>
 		
-		<div className="flex flex-col gap-4" >
+		<div className="flex flex-col gap-2" >
 			<Text v="bold" className="mb-4" >Built-in</Text>
-			<ul className="flex flex-col gap-2" ref={builtinRef} >
-				{builtinNodes.map(v=><ProcNode key={v.op} p={procData} node={v} />)}
+			<ul className="flex flex-col gap-2 overflow-y-auto max-h-56" ref={builtinRef} >
+				{builtinNodes.map(v=><ProcNode key={v.op} p={procData} node={v} setNode={setNode} />)}
+			</ul>
+			
+			<Divider />
+
+			<Text v="bold" className="mb-4" >Built-in</Text>
+			<ul className="flex flex-col gap-2 overflow-y-auto max-h-56" ref={builtinRef} >
+				{builtinNodes.map(v=><ProcNode key={v.op} p={procData} node={v} setNode={setNode} />)}
 			</ul>
 		</div>
 		
-		<div className="flex flex-col gap-4" >
+		<div className="flex flex-col gap-2" >
 			<Text v="bold" className="mb-4" >Registers</Text>
-			<ul className="flex flex-col gap-2" >
-				{proc.registerList.map(r=><RegisterEditor key={r} p={procData} reg={r}
-					setReg={(newReg)=>{ setProc({
-						...proc, registers: mapWith(proc.registers,r,newReg)
-					}) }} />)}
+			<ul className="flex flex-col gap-2" ref={registerList} >
+				{proc.registerList.map(r=>
+					<RegisterEditor key={r} p={procData} reg={r} setReg={setReg} />
+				)}
 			</ul>
+			<Button className={twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 nodrag px-2 w-full")} onClick={()=>{
+				setProc(p=>({
+					...p, registerList: [...p.registerList, p.registers.size],
+					registers: mapWith(p.registers, p.registers.size, { type: "value", value: "" })
+				}))
+			}} >
+				<IconPlus />
+				<Text v="sm" >Add register</Text>
+			</Button>
 		</div>
 	</div>
 }
@@ -351,6 +436,12 @@ export function Editor() {
 	});
 
 	return <div>
-		<ProcEditor proc={test} setProc={setTest} />
+		<ProcEditor proc={test} setProc={useCallback((n: (x: Procedure)=>Procedure)=>{
+			setTest((old)=>{
+				const xd = n(old);
+				console.log(xd);
+				return xd;
+			});
+		}, [setTest])} />
 	</div>;
 }
