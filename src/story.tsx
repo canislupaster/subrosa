@@ -63,21 +63,21 @@ class TerminalEffect {
 	
 	onEnd?: ()=>void;
 
-	update() {
+	update(step: number=this.step, wait: number=this.wait) {
 		if (this.current >= this.msgs.length || --this.inPause > 0) return;
 
 		if (this.current != -1 && this.msgs[this.current].ev.length > 0) {
 			let eaten = 0;
-			while (eaten < this.step && this.msgs[this.current].ev.length > 0) {
+			while (eaten < step && this.msgs[this.current].ev.length > 0) {
 				const ev = this.msgs[this.current].ev[0];
 				if (ev.type == "text") {
-					const len = Math.min(this.step - eaten, ev.content.length);
+					const len = Math.min(step - eaten, ev.content.length);
 					this.msgs[this.current].elem.append(ev.content.slice(0, len));
 					ev.content = ev.content.slice(len);
 					if (ev.content.length == 0) this.msgs[this.current].ev.shift();
 					eaten += len;
 				} else if (ev.type == "pause") {
-					this.inPause = this.wait;
+					this.inPause = wait;
 					this.msgs[this.current].ev.shift();
 					break;
 				} else if (ev.type == "start") {
@@ -90,7 +90,7 @@ class TerminalEffect {
 				}
 			}
 
-			if (this.msgs[this.current].ev.length == 0) this.inPause = this.wait;
+			if (this.msgs[this.current].ev.length == 0) this.inPause = wait;
 		}
 
 		if (this.inPause <= 0 && (this.current == -1 || this.msgs[this.current].ev.length == 0)) {
@@ -104,43 +104,44 @@ class TerminalEffect {
 		this.moveCursor();
 	}
 
-	addMsg(msg: Omit<TerminalMsg, "elem"|"ev">, render = false) {
+	addMsg(msg: Omit<TerminalMsg, "elem"|"ev">) {
 		const elem = document.createElement("span");
 
 		const ev: TerminalEvent[] = [];
 		msg.content = msg.content.map(x=>x.cloneNode(true));
 		elem.replaceChildren(...msg.content);
 
-		if (render) {
-			this.current = this.msgs.length;
-			this.append(elem);
-			this.append("\n");
-			this.moveCursor();
-		} else {
-			const t = (elem: HTMLElement) => {
-				for (const e of elem.childNodes) {
-					if (e.nodeType == Node.TEXT_NODE) {
-						ev.push(
-							...e.textContent!.split("[pause]")
-								.map(x=>({ type: "text", content: x } as const))
-								.reduce((a,b): TerminalEvent[] =>
-									(a.length > 0 ? [...a, { type: "pause" }, b] : [b]),
-									[] satisfies TerminalEvent[]
-								)
-						);
-					} else {
-						ev.push({ type: "start", node: e.cloneNode(false) as HTMLElement });
-						t(e as HTMLElement);
-						ev.push({ type: "end" });
-					}
+		const t = (elem: HTMLElement) => {
+			for (const e of elem.childNodes) {
+				if (e.nodeType == Node.TEXT_NODE) {
+					ev.push(
+						...e.textContent!.split("[pause]")
+							.map(x=>({ type: "text", content: x } as const))
+							.reduce((a,b): TerminalEvent[] =>
+								(a.length > 0 ? [...a, { type: "pause" }, b] : [b]),
+								[] satisfies TerminalEvent[]
+							)
+					);
+				} else {
+					ev.push({ type: "start", node: e.cloneNode(false) as HTMLElement });
+					t(e as HTMLElement);
+					ev.push({ type: "end" });
 				}
-			};
+			}
+		};
 
-			t(elem);
-			elem.replaceChildren();
-		}
+		t(elem);
+		elem.replaceChildren();
 
 		this.msgs.push({ ...msg, ev, elem });
+	}
+	
+	renderAll() {
+		while (this.current<this.msgs.length) {
+			this.update(Number.MAX_VALUE, 0);
+		}
+
+		clearInterval(this.interval);
 	}
 
 	private append(content: string | HTMLElement) {
@@ -158,7 +159,7 @@ class TerminalEffect {
 }
 
 const StoryContext = createContext(undefined as unknown as {
-	active: boolean, last: boolean, next: ()=>void
+	active: boolean, last: "end"|"chapter"|"next", next: ()=>void
 });
 
 export function StoryParagraph({ children, end }: {
@@ -181,7 +182,8 @@ export function StoryParagraph({ children, end }: {
 		const fx = new TerminalEffect(ref.current)
 		if (ctx.active) setDone(false);
 		fx.onEnd = ()=>setDone(true);
-		fx.addMsg({ type: "server", content: [...src.current?.childNodes ?? []] }, !ctx.active);
+		fx.addMsg({ type: "server", content: [...src.current?.childNodes ?? []] });
+		if (!ctx.active) fx.renderAll();
 
 		return fx;
 	}, [ctx, setDone]);
@@ -200,8 +202,9 @@ export function StoryParagraph({ children, end }: {
 		
 		{done && (end?.type!="choice" || choice!=null) && <div className="w-full py-2 flex flex-row justify-center gap-4 items-center" >
 			<Divider className="w-auto grow" />
-			{ctx.active && <>
-					<Anchor onClick={()=>{
+			{ctx.active && (ctx.last=="end" ? <>
+			</> : <>
+				<Anchor onClick={()=>{
 					if (end?.type=="choice" && choice!=null) {
 						LocalStorage.storyState = {
 							...LocalStorage.storyState,
@@ -211,10 +214,10 @@ export function StoryParagraph({ children, end }: {
 
 					ctx.next();
 				}} >
-					{ctx.last ? "Next chapter" : "Continue"}
+					{"" : ctx.last=="chapter" ? "Next chapter" : "Continue"}
 				</Anchor>
 				<Divider className="w-auto grow" />
-			</>}
+			</>)}
 		</div>}
 	</>;
 }
@@ -223,6 +226,7 @@ export type Stage = Puzzle&{type: "puzzle"} | {
 	type: "story",
 	name: string,
 	key: string,
+	blurb: ComponentChildren,
 	para: ComponentChild[]
 };
 

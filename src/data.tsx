@@ -9,6 +9,7 @@ export const data: Stage[] = [
 		type: "story",
 		name: "The Mysterious Kiln",
 		key: "intro",
+		blurb: "what thing do what".repeat(10),
 		para: [
 			<StoryParagraph>
 				Welcome to the world of Kiln! You awaken in a dimly lit workshop, the scent of clay and smoke in the air. [pause] A mysterious kiln stands before you, its surface warm to the touch.
