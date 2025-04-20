@@ -44,6 +44,7 @@ function useValidity(callback: (v: string)=>void): {
 }
 
 type EditData = {
+	i: number,
 	proc: Procedure,
 	procs: ReadonlyMap<number, Procedure>,
 	nodeRefs: MutableRef<Map<number|null, HTMLDivElement>>,
@@ -324,7 +325,8 @@ function RegisterEditor({p, reg, setReg}: {
 	return <div className={twMerge(nodeStyle, "flex flex-col pl-2 items-stretch gap-1 pr-1")} >
 		<div className="flex flex-row gap-2 mb-1 items-center" >
 			<Text v="bold" >{"#"}{regI+1}</Text>
-			<HiddenInput defaultValue={regV.name==null ? "" : regV.name}
+			<HiddenInput key={p.i}
+				defaultValue={regV.name==null ? "" : regV.name}
 				placeholder={"(unnamed)"}
 				{...useValidity(v=>setReg({ ...regV, name: v.length==0 ? null : v }, reg))}
 				{...nameInputProps} />
@@ -388,17 +390,17 @@ const dragOpts = {
 };
 
 function ProcEditor({
-	proc, setProc, procs, userProcList, isUserProc,
+	proc, i: procI, setProc, procs, userProcList, isUserProc,
 	addProc, setProcList, delProc, openProc, runState, stack
 }: {
-	proc: Procedure, setProc: SetFn<Procedure>,
+	proc: Procedure, i: number, setProc: SetFn<Procedure>,
 	runState: ProcRunState|null, stack?: ComponentChildren
 }&UserProcs) {
 	const nodeRefs = useRef(new Map<number|null,HTMLDivElement>());
 	const [disableArrows, setDisableArrows] = useState(false);
 	const data: EditData = useMemo(()=>{
 		return {
-			proc, procs,
+			i: procI, proc, procs,
 			nodeRefs,
 			regMap: new Map(proc.registerList.map((v,i)=>[v,i])),
 			regParam: new Map(proc.registerList.filter(a=>proc.registers.get(a)?.type=="param")
@@ -410,7 +412,7 @@ function ProcEditor({
 			disableArrows,
 			runRegisters: runState?.registers ?? null
 		} as const;
-	}, [proc, procs, disableArrows, runState?.registers]);
+	}, [procI, proc, procs, disableArrows, runState?.registers]);
 
 	const nodeForUserProc = useCallback((i: number): Node => {
 		const proc = procs.get(i)!;
@@ -526,7 +528,7 @@ function ProcEditor({
 				{!isUserProc ? <Text v="bold" >Procedure <Text v="code" >{proc.name}</Text></Text>
 				: <>
 					<Text v="bold" >Procedure</Text>
-					<HiddenInput defaultValue={proc.name} {...procNameValidity} className="w-fit -mb-1" />
+					<HiddenInput key={procI} defaultValue={proc.name} {...procNameValidity} className="w-fit -mb-1" />
 				</>}
 				
 				{isUserProc && <IconButton className="ml-auto" icon={<IconTrash />} onClick={()=>{delProc();}} />}
@@ -979,7 +981,9 @@ export function Editor({edit, setEdit, nextStage}: {
 			</form>
 		</Modal>
 
-		{activeProc && <ProcEditor proc={activeProc}
+		{activeProc && <ProcEditor
+			proc={activeProc}
+			i={edit.active}
 			setProc={setProc}
 			procs={edit.procs}
 			userProcList={edit.userProcList}
