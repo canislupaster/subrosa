@@ -115,7 +115,7 @@ export const puzzles = [
 		// Keyword Substitution
 		name: "Secret",
 		key: "keyword",
-		blurb: `Hope you read the story! It's essential to progression... (Kartavya spent so much time on it)`,
+		blurb: `Maybe there are some clues in the story!`,
 		generator: defaultGen,
 		solve(inp) {
 			const key = "mikah"; // change

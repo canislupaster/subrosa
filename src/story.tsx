@@ -162,8 +162,9 @@ const StoryContext = createContext(undefined as unknown as {
 	active: boolean, last: "end"|"chapter"|"next", next: ()=>void
 });
 
-export function StoryParagraph({ children, end }: {
+export function StoryParagraph({ children, end, noCursor }: {
 	children?: ComponentChildren,
+	noCursor?: boolean,
 	end?: {
 		type: "choice", key: string, choices: {
 			value: string, label: ComponentChildren
@@ -183,7 +184,7 @@ export function StoryParagraph({ children, end }: {
 		if (ctx.active) setDone(false);
 		fx.onEnd = ()=>setDone(true);
 		fx.addMsg({ type: "server", content: [...src.current?.childNodes ?? []] });
-		if (!ctx.active) fx.renderAll();
+		if (!ctx.active || noCursor==true) fx.renderAll();
 
 		return fx;
 	}, [ctx, setDone]);
