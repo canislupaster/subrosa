@@ -67,11 +67,9 @@ export const puzzles = [
 	},
 	{
 		// Incremental Caesar
-		name: "Caesar but different",
+		name: "Team Puzzles are Just the Thing You Need.",
 		key: "olive-oil",
-		blurb: `Caesar dressing is named after Caesar Cardini, who invented it at a Caesar's in Tijuana, Mexico,
-		 when the kitchen was overwhelmed and short on ingredients. It was originally prepared tableside,
-		 and it is still prepared tableside at the original venue. -Wikipedia`,
+		blurb: `Three employees walk into a bar. They don't get drunk.`,
 		generator: defaultGen,
 		solve(inp) {
 			const len: number = inp.length;
@@ -90,9 +88,9 @@ export const puzzles = [
 	// },
 	{
 		// Segment Reverse
-		name: "This is actually the hardest one",
+		name: "You gotta work for your promotions.",
 		key: "implementation-challenge",
-		blurb: "It's all downhill from here",
+		blurb: "There's no free lunch, even in sunny California.",
 		generator() {
 			return fill(defaultGenLen, ()=>(Math.random() > 0.8 ? "x" : randString(alpha, 1))).join("");
 		},
@@ -113,9 +111,9 @@ export const puzzles = [
 	},
 	{
 		// Keyword Substitution
-		name: "Secret",
+		name: "Can you handle the truth?",
 		key: "keyword",
-		blurb: `Maybe there are some clues in the story!`,
+		blurb: `The first real puzzle you're solving.`,
 		generator: defaultGen,
 		solve(inp) {
 			const key = "mikah"; // change
