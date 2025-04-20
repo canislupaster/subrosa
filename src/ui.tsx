@@ -1,9 +1,9 @@
 import { ComponentChildren, JSX, ComponentProps, createContext, ComponentChild, Ref, RefObject } from "preact";
-import { useCallback, useContext, useEffect, useRef, useState } from "preact/hooks";
+import { Dispatch, useCallback, useContext, useEffect, useRef, useState } from "preact/hooks";
 import { IconChevronDown, IconChevronUp, IconInfoCircleFilled, IconInfoTriangleFilled, IconLoader2, IconX } from "@tabler/icons-preact";
 import { twMerge } from "tailwind-merge";
 import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
-import { forwardRef } from "preact/compat";
+import { forwardRef, SetStateAction } from "preact/compat";
 import clsx from "clsx";
 
 // dump of a bunch of UI & utility stuff ive written...
@@ -30,7 +30,7 @@ export const bgColor = {
 	sky: "dark:enabled:bg-sky-600 enabled:bg-sky-300",
 	red: "dark:enabled:bg-red-800 enabled:bg-red-300",
 	rose: "dark:enabled:bg-rose-900 enabled:bg-rose-300",
-	highlight: "dark:bg-amber-600 bg-amber-200",
+	highlight: "dark:bg-yellow-800 bg-amber-200",
 	restriction: "dark:bg-amber-900 bg-amber-100",
 	divider: "dark:bg-zinc-500 bg-zinc-400",
 	contrast: "dark:bg-white bg-black"
@@ -51,15 +51,15 @@ export const interactiveContainerDefault = `${textColor.default} ${bgColor.defau
 export type InputProps = {icon?: ComponentChildren, className?: string}&JSX.InputHTMLAttributes<HTMLInputElement>;
 export function Input({className, icon, ...props}: InputProps) {
 	return <div className={twMerge("relative", className)} >
-		<input type="text" className={clsx("w-full p-2 border-2 transition duration-300 rounded-none", icon && "pl-11", interactiveContainerDefault, borderColor.focus)} {...props} />
-		{icon && <div className="absolute left-0 my-auto pl-3 top-0 bottom-0 flex flex-row items-center" >
+		<input type="text" className={clsx("w-full p-2 border-2 transition duration-300 rounded-none", icon!=undefined && "pl-11", interactiveContainerDefault, borderColor.focus)} {...props} />
+		{icon!=undefined && <div className="absolute left-0 my-auto pl-3 top-0 bottom-0 flex flex-row items-center" >
 			{icon}
 		</div>}
 	</div>;
 }
 
 export function HiddenInput({className, ...props}: JSX.InputHTMLAttributes<HTMLInputElement>&{className?: string}) {
-	return <input className={twMerge(clsx("bg-transparent border-0 outline-none border-b-2 focus:outline-none focus:theme:border-blue-500 transition duration-300 px-1 py-px pb-0 -mb-px", borderColor.default, className))}
+	return <input className={twMerge(clsx("bg-transparent border-0 outline-none border-b-2 focus:outline-none focus:theme:border-blue-500 transition duration-300 px-1 py-px pb-0.5 h-fit", borderColor.default, className))}
 		{...props} />;
 }
 
@@ -75,25 +75,24 @@ export type ButtonProps = JSX.HTMLAttributes<HTMLButtonElement>&{
 };
 
 export function Button({className, disabled, icon, ...props}: ButtonProps) {
-	return <button disabled={disabled} className={twMerge(clsx("flex flex-row justify-center gap-1.5 px-4 py-1.5 items-center group", interactiveContainerDefault, icon && "pl-3", className))} {...props} >
+	return <button disabled={disabled} className={twMerge(clsx("flex flex-row justify-center gap-1.5 px-4 py-1.5 items-center group", interactiveContainerDefault, icon!=undefined && "pl-3", className))} {...props} >
 		{icon}
 		{props.children}
 	</button>;
 }
 
 export const IconButton = ({className, icon, disabled, ...props}: {icon?: ComponentChildren, disabled?: boolean, className?: string}&JSX.IntrinsicElements["button"]) =>
-	<button className={twMerge(clsx("rounded-full p-1.5 flex items-center justify-center", interactiveContainerDefault, className))} disabled={disabled} {...props} >
+	<button className={twMerge(clsx("rounded-sm p-1.5 flex items-center justify-center h-fit aspect-square", interactiveContainerDefault, className))} disabled={disabled} {...props} >
 		{icon}
 	</button>;
 
-export const Anchor = forwardRef<HTMLAnchorElement>((
-	{className,children,...props}: JSX.AnchorHTMLAttributes<HTMLAnchorElement>, ref
-) => {
-	const classN = twMerge(clsx(
-		"text-gray-600 dark:text-gray-300 inline-flex flex-row align-baseline items-baseline gap-1 underline decoration-dashed decoration-1 underline-offset-2 transition-all hover:text-black dark:hover:text-gray-50 hover:bg-cyan-100/5 cursor-pointer",
-		className
-	));
+type AnchorProps = JSX.AnchorHTMLAttributes<HTMLAnchorElement>;
+export const anchorStyle = "text-gray-600 dark:text-gray-300 inline-flex flex-row align-baseline items-baseline gap-1 underline decoration-dashed decoration-1 underline-offset-2 transition-all hover:text-black dark:hover:text-gray-50 hover:bg-cyan-100/5 cursor-pointer";
 
+export const Anchor = forwardRef<HTMLAnchorElement, AnchorProps>((
+	{className,children,...props}: AnchorProps, ref
+) => {
+	const classN = twMerge(clsx(anchorStyle, className));
 	return <a ref={ref} className={classN} {...props} >{children}</a>;
 });
 
@@ -101,7 +100,7 @@ export const LinkButton = ({className, icon, ...props}:
 	JSX.AnchorHTMLAttributes<HTMLAnchorElement>&{icon?: ComponentChildren, className?: string}
 ) =>
 	<a className={twMerge(clsx("flex flex-row gap-2 px-3 py-1.5 items-center rounded-xl text-sm", interactiveContainerDefault, className))} rel="noopener noreferrer" {...props} >
-		{icon &&
+		{icon!=undefined &&
 			<span className="inline-block h-4 w-auto" >{icon}</span> }
 		{props.children}
 	</a>;
@@ -144,18 +143,18 @@ export const Alert = ({title, txt, bad, className}: {
 	title?: ComponentChildren, txt: ComponentChildren,
 	bad?: boolean, className?: string
 }) =>
-	<div className={twMerge(clsx("border", bad ? `${bgColor.red} ${borderColor.red}` : `${bgColor.default} ${borderColor.default}`, "p-2 px-4 rounded-sm flex flex-row gap-2", className))} >
-		<div className={clsx("flex-shrink-0", title && "mt-1")} >
-			{bad ? <IconInfoTriangleFilled /> : <IconInfoCircleFilled />}
+	<div className={twMerge(clsx("border", bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.default} ${borderColor.default}`, "p-2 px-4 rounded-sm flex flex-row gap-2", className))} >
+		<div className={clsx("flex-shrink-0", title!=undefined && "mt-1")} >
+			{bad??false ? <IconInfoTriangleFilled /> : <IconInfoCircleFilled />}
 		</div>
 		<div>
-			{title && <h2 className="font-bold font-display text-lg" >{title}</h2>}
+			{title!=undefined && <h2 className="font-bold font-display text-lg" >{title}</h2>}
 			<div>{txt}</div>
 		</div>
 	</div>;
 
 export const Divider = ({className, contrast}: {className?: string, contrast?: boolean}) =>
-	<span className={twMerge(clsx("w-full h-px shrink-0", contrast ? "dark:bg-zinc-400 bg-zinc-500" : "dark:bg-zinc-600 bg-zinc-300", "my-2", className))} />;
+	<span className={twMerge(clsx("w-full h-px shrink-0", contrast??false ? "dark:bg-zinc-400 bg-zinc-500" : "dark:bg-zinc-600 bg-zinc-300", "my-2", className))} />;
 
 export const Card = ({className, children, ...props}:
 	JSX.HTMLAttributes<HTMLDivElement>&{className?: string}
@@ -168,8 +167,8 @@ export function MoreButton({children, className, act: hide, down}: {
 	act: ()=>void, children?: ComponentChildren, className?: string, down?: boolean
 }) {
 	return <div className={twMerge(clsx("flex flex-col w-full items-center", className))} >
-		<button onClick={hide} className={clsx("flex flex-col items-center cursor-pointer transition", down ? "hover:translate-y-1" : "hover:-translate-y-1")} >
-			{down ? <>{children}<IconChevronDown /></>
+		<button onClick={hide} className={clsx("flex flex-col items-center cursor-pointer transition", down??false ? "hover:translate-y-1" : "hover:-translate-y-1")} >
+			{down??false ? <>{children}<IconChevronDown /></>
 				: <><IconChevronUp />{children}</>}
 		</button>
 	</div>
@@ -229,7 +228,7 @@ export const fadeGradient = {
 // 	</div>;
 // }
 
-type TextVariants = "big"|"lg"|"md"|"dim"|"bold"|"normal"|"err"|"sm"|"smbold";
+type TextVariants = "big"|"lg"|"md"|"dim"|"bold"|"normal"|"err"|"sm"|"smbold"|"code";
 export function Text({className, children, v, ...props}:
 	JSX.HTMLAttributes<HTMLSpanElement>&JSX.HTMLAttributes<HTMLHeadingElement>
 	&JSX.HTMLAttributes<HTMLParagraphElement>&{v?: TextVariants, className?: string}
@@ -242,6 +241,7 @@ export function Text({className, children, v, ...props}:
 		case "lg": return <h3 className={twMerge(clsx("text-xl font-display font-extrabold", textColor.contrast, className))} {...props} >{children}</h3>;
 		case "dim": return <span className={twMerge(clsx("text-sm text-gray-500 dark:text-gray-400", className))} {...props} >{children}</span>;
 		case "sm": return <p className={twMerge(clsx("text-sm text-gray-800 dark:text-gray-200", className))} {...props} >{children}</p>;
+		case "code": return <code className={twMerge(clsx("text-gray-800 dark:text-gray-200 font-semibold rounded-sm p-0.5", bgColor.md, className))} {...props} >{children}</code>;
 		case "err": return <span className={twMerge(clsx("text-red-500", className))} {...props} >{children}</span>;
 		default: return <p className={className} {...props} >{children}</p>;
 	}
@@ -260,7 +260,7 @@ export function Modal({bad, open, onClose, title, children, className, ...props}
 		else modalRef.current?.close();
 	}, [open]);
 
-	return <dialog className={twMerge(clsx(bad ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "opacity-0 transition-opacity duration-500 mx-auto md:mt-40 mt-10 text-inherit outline-none rounded-md z-50 p-5 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-4xl right-0", className))}
+	return <dialog className={twMerge(clsx(bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "opacity-0 transition-opacity duration-500 mx-auto md:mt-40 mt-10 text-inherit outline-none rounded-md z-50 p-5 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0", className))}
 		style={{opacity: open ? 1 : 0.001, pointerEvents: open ? undefined : "none"}}
 		ref={modalRef}
 		onClose={(ev)=>{
@@ -272,7 +272,7 @@ export function Modal({bad, open, onClose, title, children, className, ...props}
 			className={clsx("absolute top-3 right-2 z-30 [:not(:hover)]:theme:bg-transparent [:not(:hover)]:border-transparent")}
 			onClick={()=>onClose()} />}
 
-		{title && <>
+		{title!=undefined && <>
 			<Text v="big">{title}</Text>
 			<Divider contrast={bad} />
 		</>}
@@ -336,9 +336,9 @@ export const AppTooltip = forwardRef(({
 	useEffect(()=>{
 		const noCb = ()=>{};
 		const cbs = [
-			["pointerenter", noHover ? noCb : interact],
-			["pointerleave", noHover ? noCb : unInteract],
-			["click", noClick ? noCb : (ev: PointerEvent)=>{
+			["pointerenter", noHover??false ? noCb : interact],
+			["pointerleave", noHover??false ? noCb : unInteract],
+			["click", noClick??false ? noCb : (ev: PointerEvent)=>{
 				if (!isOpen) { setOpen(i=>i+1); setReallyOpen(incCount()); }
 				else { setOpen(0); setReallyOpen(null); }
 				ev.stopPropagation();
@@ -397,12 +397,12 @@ export function Dropdown({parts, trigger, onOpenChange, ...props}: {
 
 	//these components are fucked up w/ preact and props don't merge properly with container element
 	return <AppTooltip onOpenChange={onOpenChange}
-		className="rounded-sm dark:bg-zinc-900 bg-zinc-100 border-0 px-0 py-0 max-w-60 overflow-y-auto justify-start max-h-[min(90dvh,30rem)] z-50" 
+		className="dark:bg-zinc-900 bg-zinc-100 border-0 px-0 py-0 max-w-60 overflow-y-auto justify-start max-h-[min(90dvh,30rem)] z-50" 
 		noHover
 		content={parts.map((x,i) => {
 			if (x.type=="act") {
 				return <Button key={x.key ?? i} disabled={x.disabled}
-					className={clsx("m-0 dark:border-zinc-700 border-zinc-300 border-b-0.5 border-t-0.5 rounded-none first:rounded-t-md last:rounded-b-md dark:hover:bg-zinc-700 hover:bg-zinc-300 w-full", x.active && "dark:bg-zinc-950 bg-zinc-200")}
+					className={clsx("m-0 dark:border-zinc-700 border-zinc-300 border-b-0.5 border-t-0.5 rounded-none dark:hover:bg-zinc-700 hover:bg-zinc-300 w-full", x.active!=false && "dark:bg-zinc-950 bg-zinc-200")}
 					onClick={() => {
 						x.act();
 						incCount();
@@ -438,7 +438,7 @@ export function Select<T>({ options, value, setValue, placeholder, className, ..
 		};
 	})}
 	trigger={<div>
-		<Button className={twMerge("pr-3", className)} >
+		<Button className={twMerge("pr-1 pl-1 py-0.5", className)} >
 			{curOpt==undefined ? placeholder : curOpt.label}
 			<IconChevronDown />
 		</Button>
@@ -535,7 +535,7 @@ export function ErrorPage({error, retry}: {error?: Error, retry?: ()=>void}) {
 
 			{retry && <Button onClick={()=>retry()} >Retry</Button>}
 
-			{error?.message && <Text v="sm" >Details: {error.message}</Text>} 
+			{error?.message!=undefined && <Text v="sm" >Details: {error.message}</Text>} 
 		</div>
 	</div>
 }
@@ -667,7 +667,7 @@ for (const k of localStorageKeys) {
 		get() {
 			if (v!=undefined) return v;
 			const vStr = localStorage.getItem(k);
-			v = vStr ? JSON.parse(vStr) : undefined;
+			v = vStr!=null ? JSON.parse(vStr) : undefined;
 			return v;
 		},
 		set(newV) {
@@ -686,7 +686,7 @@ export function useDisposable(effect: ()=>Disposable|undefined, deps?: unknown[]
 }
 
 // awful time complexity lmfao
-export function mapWith<K,V>(map: Readonly<Map<K,V>>, k: K, v?: V) {
+export function mapWith<K,V>(map: ReadonlyMap<K,V>, k: K, v?: V) {
 	const newMap = new Map(map);
 	if (v!==undefined) newMap.set(k, v);
 	else newMap.delete(k);
@@ -694,3 +694,18 @@ export function mapWith<K,V>(map: Readonly<Map<K,V>>, k: K, v?: V) {
 }
 
 export type SetFn<T> = (cb: (old: T)=>T)=>void;
+
+type NoFunction<T> = T extends (...args: unknown[])=>unknown ? never : T;
+export function fill<T>(len: number, v: NoFunction<T>|((idx: number)=>T)): T[] {
+	if (typeof v=="function") {
+		return [...new Array(len) as unknown[]].map((_,i): T=>(v as ((idx: number)=>T))(i));
+	}
+	return [...new Array(len) as unknown[]].map(()=>v);
+}
+
+export function mapSetFn<T,R>(x: SetFn<T>, f: (x: R, old: T)=>T, get: (x: T)=>R): Dispatch<SetStateAction<R>> {
+	return (nv)=>{
+		if (typeof nv=="function") x(old=>(f((nv as (v: R)=>R)(get(old)), old)));
+		else x(old=>f(nv, old));
+	};
+}

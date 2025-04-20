@@ -200,7 +200,7 @@ export function StoryParagraph({ children, end }: {
 		{done && (end?.type!="choice" || choice!=null) && <div className="w-full py-2 flex flex-row justify-center gap-4 items-center" >
 			<Divider className="w-auto grow" />
 			{ctx.active && <>
-				<button onClick={()=>{
+					<Anchor onClick={()=>{
 					if (end?.type=="choice" && choice!=null) {
 						LocalStorage.storyState = {
 							...LocalStorage.storyState,
@@ -210,10 +210,8 @@ export function StoryParagraph({ children, end }: {
 
 					ctx.next();
 				}} >
-					<Anchor>
-						{ctx.last ? "Next chapter" : "Continue"}
-					</Anchor>
-				</button>
+					{ctx.last ? "Next chapter" : "Continue"}
+				</Anchor>
 				<Divider className="w-auto grow" />
 			</>}
 		</div>}

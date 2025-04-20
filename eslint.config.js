@@ -16,6 +16,7 @@ const compat = new FlatCompat({
 
 const commonRules = {
   "@typescript-eslint/ban-ts-comment": "off",
+  "@typescript-eslint/strict-boolean-expressions": "warn",
   "no-useless-constructor": "off",
   "@typescript-eslint/no-unused-vars": [
     "warn",

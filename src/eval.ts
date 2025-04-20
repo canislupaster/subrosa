@@ -1,3 +1,6 @@
+import { Puzzle } from "./puzzles";
+import { fill } from "./ui";
+
 export type Register = Readonly<({
 	type: "value", value: number|string // initial values, determined by program state at runtime
 } | {
@@ -9,13 +12,15 @@ export type Register = Readonly<({
 export type Procedure = Readonly<{
 	name: string,
 	// similarly, guaranteed to exist in node map
-	nodeList: number[],
+	nodeList: readonly number[],
+	maxNode: number,
 	// initial state of registers, which may be mapped to parameters
 	// guaranteed to exist in register map
-	registerList: number[]
+	registerList: readonly number[]
+	maxRegister: number,
 
-	registers: Readonly<Map<number,Register>>,
-	nodes: Readonly<Map<number,Node>>
+	registers: ReadonlyMap<number,Register>,
+	nodes: ReadonlyMap<number,Node>
 }>;
 
 export type Node = Readonly<{
@@ -32,56 +37,94 @@ export type Node = Readonly<{
 	op: "add"|"sub"|"set"|"access",
 	lhs: number, rhs: number // lhs +=,-=,= rhs, lhs = rhs[lhs]
 } | {
-	op: "setIdx",
+	op: "setIdx", // lhs[idx] = rhs
 	lhs: number, rhs: number, idx: number
 }>;
 
 export type RegisterRef = { current: number|string };
 
+
+export type ProgramState<T=RegisterRef> = Readonly<{
+	procs: ReadonlyMap<number, Procedure>, //ehhh
+	outputRegister: T,
+	stack: {
+		proc: number,
+		registers: ReadonlyMap<number,T>,
+		i: number,
+	}[];
+}>;
+
 export type EditorState = Readonly<{
-	userProc: Map<number, Procedure>,
+	procs: ReadonlyMap<number, Procedure>,
 	userProcList: number[],
+	maxProc: number,
 
 	entryProc: number,
 	active: number,
 	
-	
-}>;
+	input: string,
+	stepsPerS: number,
 
-export type ProgramState = Readonly<{
-	procs: EditorState,
-	stack: {
-		proc: Procedure,
-		toList: Map<number, number>,
-		i: number,
-		registers: Map<number,RegisterRef>
-	}[];
+	puzzle?: Puzzle
 }>;
 
 export class InterpreterError extends Error {
 	constructor(public value: {
 		type: "badParam", nParam: number, nProvided: number
-	} | { type: "noRegister"|"noNodeToGoto"|"noProcedure" }) {
+	} | { type: "noRegister"|"noNodeToGoto"|"noProcedure"|"stringTooLong"|"stackOverflow" }) {
 		super("Error interpreting program");
+	}
+	
+	txt() {
+		switch (this.value.type) {
+			case "badParam":
+				return `Expected ${this.value.nParam} parameters, but got ${this.value.nProvided}`;
+			case "noRegister":
+				return "Register not found";
+			case "noNodeToGoto":
+				return "No node to go to";
+			case "noProcedure":
+				return "Procedure not found";
+			case "stringTooLong":
+				return "String too long";
+			case "stackOverflow":
+				return "Stack overflow";
+			default:
+				return "Unknown interpreter error";
+		}
 	}
 }
 
-export function push(prog: ProgramState, proc: Procedure, params: RegisterRef[]) {
+// creates an non-runnable (register refs are broken) but accurate copy
+export type RegisterRefClone = RegisterRef&{ mutable: RegisterRef };
+export function clone(prog: ProgramState): ProgramState<RegisterRefClone> {
+	return {
+		...prog,
+		outputRegister: {...prog.outputRegister, mutable: prog.outputRegister},
+		stack: prog.stack.map(v=>({
+			...v, registers: new Map(v.registers.entries().map(([k,v])=>[
+				k, {...v, mutable: v}
+			]))
+		}))
+	};
+}
+
+export function push(prog: ProgramState, procI: number, params: RegisterRef[]) {
+	if (prog.stack.length>=stackLimit) throw new InterpreterError({type: "stackOverflow"});
+
+	const proc = prog.procs.get(procI);
+	if (!proc) throw new InterpreterError({ type: "noProcedure" });
+
 	const needed = proc.registers.values().reduce((a,b)=>a+(b.type=="param" ? 1 : 0), 0);
 	if (needed != params.length) {
 		throw new InterpreterError({
 			type: "badParam", nParam: needed, nProvided: params.length
 		});
 	}
-	
-	const toList = new Map<number,number>();
-	for (const [v,i] of proc.nodeList.map((v,i)=>[v,i])) {
-		toList.set(v, i);
-	}
 
 	let paramI=0;
 	prog.stack.push({
-		proc, toList, i: 0,
+		proc: procI, i: 0,
 		registers: new Map(proc.registerList.map((i): [number, RegisterRef]=>{
 			const x = proc.registers.get(i);
 			if (!x) throw new InterpreterError({ type: "noRegister"  });
@@ -90,16 +133,33 @@ export function push(prog: ProgramState, proc: Procedure, params: RegisterRef[])
 	});
 }
 
+const [charStart, charEnd] = ["a", "z"].map(x=>x.charCodeAt(0));
+const charMod = charEnd-charStart+2;
+const charMap = [
+	[" ", 0],
+	...fill(charEnd-charStart+1, i=>[String.fromCharCode(charStart+i), i+1])
+] as [string, number][];
+const charToNum = Object.fromEntries(charMap);
+const numToChar = charMap.map(x=>x[0]);
+
+export const stackLimit = 1024;
+export const strLenLimit = 1024;
+export const timeLimit = 64*stackLimit;
+
 export function step(prog: ProgramState) {
 	if (prog.stack.length==0) return false;
+
 	const last = prog.stack[prog.stack.length-1];
-	const nodeI = last.proc.nodeList[last.i];
+	const lastProc = prog.procs.get(last.proc);
+	if (!lastProc) throw new InterpreterError({ type: "noProcedure" });
+
+	const nodeI = lastProc.nodeList[last.i];
 	if (nodeI==undefined) {
 		prog.stack.pop();
-		return true;
+		return prog.stack.length>0;
 	}
 	
-	const x = last.proc.nodes.get(nodeI);
+	const x = lastProc.nodes.get(nodeI);
 	if (!x) throw new InterpreterError({ type: "noNodeToGoto" });
 
 	const get = (r: number) => {
@@ -110,13 +170,13 @@ export function step(prog: ProgramState) {
 	
 	const castToNum = (r: number)=>{
 		let v = get(r).current;
-		if (typeof v=="string") v=v.length>0 ? v.charCodeAt(0) : 0;
+		if (typeof v=="string") v=v.length>0 ? charToNum[v]??0 : 0;
 		return v;
 	};
 
 	const castToStr = (r: number)=>{
 		let v = get(r).current;
-		if (typeof v=="number") v=String.fromCharCode(v);
+		if (typeof v=="number") v=numToChar[v%charMod] ?? "";
 		return v;
 	};
 
@@ -134,12 +194,16 @@ export function step(prog: ProgramState) {
 		if (typeof l.current=="string" && typeof r.current=="number")	{
 			out="";
 			for (let i=0; i<l.current.length; i++) {
-				out+=String.fromCharCode(mod(l.current.charCodeAt(i), r.current));
+				out+=numToChar[
+					(charMod+mod(charToNum[l.current[i]]??0, r.current)%charMod)%charMod
+				];
 			}
 		} else if (typeof l.current=="string" && typeof r.current=="string") {
 			out="";
 			for (let i=0; i<Math.min(l.current.length, r.current.length); i++) {
-				out+=String.fromCharCode(mod(l.current.charCodeAt(i), r.current.charCodeAt(i)));
+				out+=numToChar[
+					(charMod+mod(charToNum[l.current[i]]??0, charToNum[r.current[i]]??0)%charMod)%charMod
+				];
 			}
 		} else if (typeof l.current=="number" && typeof r.current=="number") {
 			out=mod(l.current, r.current);
@@ -158,10 +222,18 @@ export function step(prog: ProgramState) {
 			get(lhs).current = typeof l=="string" ? (l.length>=i ? 0 : l[i]) : l;
 		} else {
 			const s = castToStr(rhs);
+			let outS: string|null=null;
 			if (typeof l=="string" && l.length>=i) {
-				get(lhs).current=[ ...l, [...new Array(i-l.length) as unknown[]].map(()=>0), s ].join("");
+				outS=[ ...l, fill(i-l.length, 0), s ].join("");
 			} else if (typeof l=="string") {
-				get(lhs).current = `${l.slice(0,i)}${s}${l.slice(i+1)}`;
+				outS=`${l.slice(0,i)}${s}${l.slice(i+1)}`;
+			} else {
+				get(lhs).current = get(rhs).current;
+			}
+			
+			if (outS!=null) {
+				if (outS.length>strLenLimit) throw new InterpreterError({type: "stringTooLong"});
+				get(lhs).current=outS;
 			}
 		}
 	};
@@ -172,23 +244,21 @@ export function step(prog: ProgramState) {
 	} else if (x.op=="inc" || x.op=="dec") {
 		compute(x.op=="inc" ? "add" : "sub", get(x.lhs), { current: 1 });
 	} else if (x.op=="access") {
+		arrOp(x.lhs, x.rhs);
 	} else if (x.op=="setIdx") {
+		arrOp(x.idx, x.lhs, x.rhs);
 	} else if (x.op=="call") {
-		const v = prog.procs.userProc.get(x.procRef);
-		if (!v) throw new InterpreterError({ type: "noProcedure" });
-		push(prog, v, x.params.map(v=>get(v)));
+		push(prog, x.procRef, x.params.map(v=>get(v)));
 	} else if (x.op=="goto") {
-		const to = last.toList.get(x.ref as number);
-		if (!to) throw new InterpreterError({ type: "noNodeToGoto" });
+		let to: number|undefined;
+		if (x.ref==undefined) to=lastProc.nodeList.length;
+		else to = lastProc.nodeList.indexOf(x.ref as number);
 
-		if (x.conditional) {
-			const c = get(x.conditional);
-			if (typeof c.current=="string" && c.current.length>0) {
-				const v = c.current.charCodeAt(0);
-				if (v!=0 && (v&32768) == 0) next=to;
-			} else if (typeof c.current=="number" && c.current>0) {
-				next=to;
-			}
+		if (to==-1 || to==undefined) throw new InterpreterError({ type: "noNodeToGoto" });
+
+		if (x.conditional!=undefined) {
+			const num = castToNum(x.conditional);
+			if (num>0) next=to;
 		} else {
 			next=to;
 		}
@@ -196,4 +266,26 @@ export function step(prog: ProgramState) {
 	
 	last.i = next;
 	return true;
+}
+
+export type Verdict = { type: "RE"|"WA"|"AC"|"TLE" };
+
+export function test({ input, output, proc, procs }: {
+	input: string, output: string,
+	proc: number, procs: ReadonlyMap<number,Procedure>
+}): Verdict {
+	const reg = {current: input};
+	try {
+		const pstate: ProgramState = { procs, outputRegister: reg, stack: [] };
+		push(pstate, proc, [reg]);
+		let count = timeLimit;
+		while (step(pstate)) {
+			if (--count<=0) return {type: "TLE"};
+		}
+		if (reg.current!=output) return {type: "WA"};
+		return {type: "AC"};
+	} catch (e) {
+		if (e instanceof InterpreterError) return {type: "RE"};
+		throw e;
+	}
 }
