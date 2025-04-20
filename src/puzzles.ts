@@ -119,9 +119,14 @@ export const puzzles = [
 		generator: defaultGen,
 		solve(inp) {
 			const key = "mikah"; // change
-			let cipherAlphabet = key;
+			let cipherAlphabet = "";
+			for (const char of key) {
+				if (!cipherAlphabet.includes(char)) {
+					cipherAlphabet += char;
+				}
+			}
 			for (const char of alpha) {
-				if (!key.includes(char)) {
+				if (!cipherAlphabet.includes(char)) {
 					cipherAlphabet += char;
 				}
 			}
