@@ -13,8 +13,11 @@ function randString(chars: string[], len: number) {
 }
 
 const alphaLen = 26;
-const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0)+i)); // I have no clue what this means
+// abcdefghijklmnopqrstuvwxyz
+const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i)); 
 const defaultGenLen: number = 10;
+// Uniform random int
+const randInt = (min: number, max: number)=>Math.floor(Math.random() * (max - min + 1)) + min;
 const defaultGen = ()=>randString(alpha, defaultGenLen);
 
 // Assumes we are working with lowercase alphabet forever!!
@@ -37,14 +40,77 @@ function charAdd(c: string, ct: number) {
 
 export const puzzles = [
 	{
-		name: "Caesar",
-		blurb: "",
+		name: "Reverse",
+		blurb: "Reverses string",
 		generator: defaultGen,
-        // n^2 idc
+		solve(inp) {
+			return inp.split("").reverse().join("");
+		}
+	},
+	{
+		name: "Caesar",
+		blurb: "Increments all letters by key",
+		generator: defaultGen,
 		solve(inp) {
 			const key: number = 2;
 			const len: number = inp.length;
 			return fill(len, i=>charAdd(inp.charAt(i), key)).join("");
+		}
+	},
+	{
+		name: "Incremental Caesar",
+		blurb: "Increments each letter by its index",
+		generator: defaultGen,
+		solve(inp) {
+			const len: number = inp.length;
+			return fill(len, i=>charAdd(inp.charAt(i), i)).join("");
+		}
+	},
+	{
+		name: "Xor",
+		blurb: "a->b, b->a",
+		generator: defaultGen,
+		solve(inp) {
+			const len: number = inp.length;
+			return fill(len, i=>(inp.charCodeAt(i) % 2 == 1 ? charAdd(inp.charAt(i), 1) : charAdd(inp.charAt(i), -1))).join("");
+		}
+	},
+	{
+		name: "Segment Reverse",
+		blurb: "Reverses each segment of plaintext, separated by 'x's",
+		generator() {
+			return fill(defaultGenLen, ()=>(Math.random() > 0.8 ? "x" : randString(alpha, 1))).join("");
+		},
+		solve(inp) {
+			let result = "";
+			let seg: string[] = [];
+			for (const char of inp) {
+				if (char == "x") {
+					result += seg.reverse().join("") + "x";
+					seg.length = 0;
+				} else {
+					seg.push(char);
+				}
+			}
+			result += seg.reverse().join("");
+			return result;
+		}
+	},
+	{
+		name: "Keyword Substitution",
+		blurb: `Substitution cipher. Given key of distinct letters, 
+				generate ciphertext alphabet by appending remaining letters 
+				in alphabet to keyword.`,
+		generator: defaultGen,
+		solve(inp) {
+			let key = "thomas"; // change
+			let cipherAlphabet = key;
+			for (const char of alpha) {
+				if (!key.includes(char)) {
+					cipherAlphabet += char;
+				}
+			}
+			return fill(inp.length, i=>cipherAlphabet.charAt(inp.charCodeAt(i)-alpha[0].charCodeAt(0))).join("");
 		}
 	}
 ] as const satisfies Puzzle[];
