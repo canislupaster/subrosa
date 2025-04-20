@@ -287,7 +287,7 @@ export const data: Stage[] = [
                 only to be met with a blank look as Derek asked, ‘Who’s Karen?”.
                 You stop short of proving her existence by pulling up your punctuation-less Slack chats.
             </StoryParagraph>,
-            <StoryParagraph>
+            <StoryParagraph noCursor={true}>
                 <pre>        
 :      .=-------------------------:+-                          <br />
 :       :........................  :=+.                        <br />
