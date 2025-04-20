@@ -1,7 +1,7 @@
-import { Anchor, anchorStyle, bgColor, borderColor, Button, Container, IconButton, LocalStorage, setWith, Text, textColor, Theme, ThemeContext, useGoto } from "./ui";
+import { Anchor, anchorStyle, bgColor, borderColor, Button, Container, fill, IconButton, LocalStorage, mapWith, parseExtra, setWith, stringifyExtra, Text, textColor, Theme, ThemeContext, throttle, useFnRef, useGoto } from "./ui";
 import { render } from "preact";
-import { useEffect, useErrorBoundary, useRef, useState } from "preact/hooks";
-import { Editor } from "./editor";
+import { useCallback, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
+import { Editor, makeProc } from "./editor";
 import { Stage, Story, StoryParagraph } from "./story";
 import { EditorState, Procedure, Register } from "./eval";
 import { IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconX } from "@tabler/icons-preact";
@@ -11,22 +11,35 @@ import { data } from "./data";
 import { twMerge } from "tailwind-merge";
 import { act } from "preact/test-utils";
 
+function Footer() {
+  return <div className={`mt-20 ${textColor.dim} mb-10`} >
+    <p>
+      A game by <Anchor href="https://thomasqm.com" >Thomas Marlowe</Anchor>,
+      {" "}<Anchor href="https://github.com/kartva" >Kartavya Vashishtha</Anchor>,
+      {" "}and <Anchor href="https://linkedin.com/in/peterjin25/" >Peter Jin</Anchor>
+      {" "}for <Anchor href="https://puhack.horse/kiln" >Kiln</Anchor>
+    </p>
+  </div>;
+}
+
 function Home() {
   const goto = useGoto();
-  return <div className="flex flex-col items-center pt-20 gap-2 max-w-lg" >
+  return <div className="flex flex-col items-center pt-10 gap-2 max-w-lg" >
     <img src="/big.svg" />
-    <Text v="md" >Leading the world in cryptography for centuries</Text>
+    <Text v="md" className="italic" >Leading the world in cryptography for centuries</Text>
       
     <Text className="mt-3" >
       <b>Ready to join our team?</b> Apply for a summer internship today! <i>Anyone</i> with strong problem solving skills will excel in our fast-paced growth-oriented environment.
     </Text>
     <Button onClick={()=>goto("/menu")} >Apply now</Button>
+  
+    <Footer />
   </div>;
 }
 
-function Logo() {
+export function Logo({className}: {className?: string}) {
   const goto = useGoto();
-  return <button onClick={()=>goto("/")} className="w-1/2 self-end hover:scale-105 transition-transform" ><img src="/logo.svg" /></button>;
+  return <button onClick={()=>goto("/")} className={twMerge("w-1/2 self-end hover:scale-105 transition-transform", className)} ><img src="/logo.svg" /></button>;
 }
 
 function ErrorPage({errName, err, reset}: {errName?: string, err?: unknown, reset?: ()=>void}) {
@@ -35,21 +48,21 @@ function ErrorPage({errName, err, reset}: {errName?: string, err?: unknown, rese
     <Text v="big" >{errName ?? "An error occurred"}</Text>
     {reset && <Text>Try refreshing, or click <Anchor onClick={()=>reset()} >here</Anchor> to retry.</Text>}
     {err!=undefined && <Text v="dim" >Details: {err instanceof Error ? err.message : err}</Text>}
+
+    <Footer />
   </div>;
 }
 
+const stageUrl = (x: Stage) => `${x.type}/${x.key}`;
+
 function Menu() {
-  const [completed, setCompleted] = useState({
-    story: new Set<string>(), puzzle: new Set<string>()
-  });
-  
-  useEffect(()=>{
-    setCompleted({
+  const completed = useMemo(()=>{
+    return {
       story: LocalStorage.readStory ?? new Set(),
       puzzle: LocalStorage.solvedPuzzles ?? new Set()
-    });
+    };
   }, []);
-
+  
   const withDone = data.map((stage,i)=>({
     ...stage, i,
     done: stage.type=="puzzle" ? completed.puzzle.has(stage.key) : completed.story.has(stage.key)
@@ -61,12 +74,12 @@ function Menu() {
   return <div className="flex flex-col gap-4 pt-20 max-w-xl" >
     <Logo />
     <Text v="big" >Table of contents ({activeStages}/{data.length})</Text>
-    {withDone.map(stage=>{
+    {withDone.flat().map(stage=>{
       const dimmed = stage.i>activeStages ? textColor.dim : "";
       return <div className={twMerge(stage.i<=activeStages && anchorStyle, "flex flex-col gap-0.5 p-2 pt-1 group items-stretch relative pr-10")}
-        key={[stage.type,stage.key].join("\n")}
+        key={stageUrl(stage)}
         onClick={stage.i<=activeStages ? ()=>{
-          goto(`/${stage.type}/${stage.key}`);          
+          goto(stageUrl(stage));          
         } : undefined} >
         <div className="flex flex-row gap-2 items-center" >
           {stage.done ? <IconCircleCheckFilled /> : stage.i<=activeStages && <IconCircleDashedCheck />}
@@ -76,18 +89,106 @@ function Menu() {
         <Text v="sm" className={dimmed} >{stage.blurb}</Text>
       </div>
     })}
+
+    <Footer />
   </div>;
 }
 
+const procStorage = {
+  savedProcs: new Map<number, Procedure>(),
+  changedProcs: new Map<number, Procedure>(),
+  throttleSave: throttle(5000),
+
+  getUserProc(i: number): Procedure|null {
+    const s = localStorage.getItem(`proc${i}`);
+    return s==null ? null : parseExtra(s) as Procedure;
+  },
+  
+  getProcs() {
+    return (LocalStorage.userProcs ?? [])
+      .map((i): [number,Procedure]=>[i, this.getUserProc(i)!]);
+  },
+
+  setUserProc(i: number, proc: Procedure) {
+    if (this.savedProcs.get(i)==proc) return;
+
+    this.savedProcs.set(i, proc);
+    this.changedProcs.set(i, proc);
+
+    this.throttleSave.call(()=>{
+      for (const [k,v] of this.changedProcs.entries()) {
+        localStorage.setItem(`proc${k}`, stringifyExtra(v));
+      }
+
+      this.changedProcs.clear();
+    });
+  },
+
+  setProcs(procs: [number, Procedure][]) {
+    for (const [i,x] of procs) this.setUserProc(i,x);
+    LocalStorage.userProcs = procs.map(([x])=>x);
+  }
+};
+
 function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
-  return "hi";
+  const throttleSave = useFnRef(()=>throttle(2000), []);
+
+  const [edit, setEdit] = useState<EditorState>(()=>{
+    const userProcs = procStorage.getProcs();
+    const entryProc = LocalStorage.puzzleProcs?.get(stage.key) ?? {
+      ...makeProc("Solution"),
+      registerList: [0], registers: new Map([
+        [0, {
+          name: "Input and output", type: "param"
+        } satisfies Register]
+      ]),
+      maxRegister: 1
+    };
+
+    const maxProc = Math.max(0, ...userProcs.map(([i])=>i+1));
+
+    return {
+      procs: new Map([...userProcs, [-1, entryProc]]),
+      userProcList: userProcs.map(([i])=>i),
+      maxProc, entryProc: -1, active: -1,
+      input: "", stepsPerS: LocalStorage.stepsPerS ?? 5, puzzle: stage,
+      solved: LocalStorage.solvedPuzzles?.has(stage.key) ?? false
+    };
+  });
+  
+  const setEdit2 = useCallback((cb: (old: EditorState)=>EditorState)=>setEdit(old=>{
+    const ns = cb(old);
+
+    throttleSave.current?.call(()=>{
+      LocalStorage.puzzleProcs = mapWith(
+        LocalStorage.puzzleProcs ?? null,
+        stage.key, ns.procs.get(ns.entryProc)
+      );
+
+      LocalStorage.stepsPerS = ns.stepsPerS;
+      procStorage.setProcs(
+        [...ns.procs.entries()]
+          .map(([k,v]): [number, Procedure]=>[k,v])
+          .filter(([k])=>k!=ns.entryProc)
+      );
+    });
+
+    return ns;
+  }), [stage.key, throttleSave]);
+
+  const goto = useGoto();
+  return <Editor edit={edit} setEdit={setEdit2} nextStage={()=>{
+    goto(stageUrl(data[i+1]));
+  }} />;
 }
 
 function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
-  return <div className="pt-10 md:w-2xl w-md" >
-    <Story stage={stage} next={()=>{
+  const goto = useGoto();
+  return <div className="md:w-2xl w-md flex flex-col" >
+    <Logo className="w-1/3" />
+    <Story stage={stage} next={i+1>=data.length ? undefined : ()=>{
       LocalStorage.readStory = setWith(LocalStorage.readStory??null, stage.key);
-      data
+      goto(stageUrl(data[i+1]));
     }} />
   </div>;
 }
@@ -102,7 +203,7 @@ function App({theme: initialTheme}: {theme: Theme}) {
     <Route path="/" component={Home} />
     <Route path="/menu" component={Menu} />
     { data.map((stage,i)=>{
-      const path = `${stage.type}/${stage.key}`;
+      const path = stageUrl(stage);
       return <Route key={path} path={path} component={
         ()=>stage.type=="story" ? <StoryStage i={i} stage={stage} />
           : <PuzzleStage i={i} stage={stage} />

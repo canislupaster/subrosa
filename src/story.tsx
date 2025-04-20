@@ -200,9 +200,10 @@ export function StoryParagraph({ children, end }: {
 			)}
 		</div>}
 		
-		{done && (end?.type!="choice" || choice!=null) && <div className="w-full py-2 flex flex-row justify-center gap-4 items-center" >
+		{done && (end?.type!="choice" || choice!=null) && <div className="w-full py-2 flex flex-row justify-center gap-4 items-center animate-fade-in" >
 			<Divider className="w-auto grow" />
 			{ctx.active && (ctx.last=="end" ? <>
+				<Text v="md" >The End</Text>
 			</> : <>
 				<Anchor onClick={()=>{
 					if (end?.type=="choice" && choice!=null) {
@@ -214,7 +215,7 @@ export function StoryParagraph({ children, end }: {
 
 					ctx.next();
 				}} >
-					{"" : ctx.last=="chapter" ? "Next chapter" : "Continue"}
+					{ ctx.last=="chapter" ? "Next chapter" : "Continue" }
 				</Anchor>
 				<Divider className="w-auto grow" />
 			</>)}
@@ -240,7 +241,9 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 		<Text v="big" className="my-8" >{stage.name}</Text>
 		{stage.para.slice(0, index+1).map((v,i)=><Fragment key={i} >
 			<StoryContext.Provider value={{
-				active: index==i, last: i==stage.para.length-1, next() { setIndex(i=>i+1); }
+				active: index==i, last: next==undefined ? "end"
+					: i==stage.para.length-1 ? "chapter" : "next",
+				next() { setIndex(i=>i+1); }
 			}} >
 				{v}
 			</StoryContext.Provider>

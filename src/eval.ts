@@ -6,7 +6,7 @@ export type Register = Readonly<({
 } | {
 	type: "param"
 })&{
-	name?: string
+	name: string|null
 }>;
 
 export type Procedure = Readonly<{
@@ -27,8 +27,8 @@ export type Node = Readonly<{
 	op: "inc"|"dec", lhs: number
 } | {
 	op: "goto",
-	conditional?: number, // if positive
-	ref?: number|"unset" // undefined is return
+	conditional: number|null, // if positive
+	ref: number|"unset"|null // undefined is return
 } | {	
 	op: "call",
 	procRef: number,

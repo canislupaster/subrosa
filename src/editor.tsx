@@ -1,20 +1,21 @@
 import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Procedure, Node, Register, RegisterRef, EditorState, push, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, Verdict, test } from "./eval";
-import { Alert, Anchor, anchorStyle, bgColor, borderColor, Button, containerDefault, Divider, Dropdown, DropdownPart, fill, HiddenInput, IconButton, Input, Loading, LocalStorage, mapSetFn, mapWith, Modal, parseExtra, Select, SetFn, setWith, stringifyExtra, Text, textColor, ThemeSpinner, throttle, useGoto } from "./ui";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, containerDefault, debounce, Divider, Dropdown, DropdownPart, fill, HiddenInput, IconButton, Input, Loading, LocalStorage, mapSetFn, mapWith, Modal, parseExtra, Select, SetFn, setWith, stringifyExtra, Text, textColor, ThemeSpinner, throttle, useDebounce, useFnRef, useGoto } from "./ui";
 import { twMerge } from "tailwind-merge";
 import { IconArrowRight, IconCaretRightFilled, IconChevronCompactDown, IconChevronLeft, IconChevronRight, IconCircleCheckFilled, IconCircleMinus, IconCirclePlus, IconCirclePlusFilled, IconInfoCircle, IconMenu2, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, Ref } from "preact";
 import { dragAndDrop, useDragAndDrop } from "@formkit/drag-and-drop/react";
 import { animations, parentValues, performSort, remapNodes, setParentValues } from "@formkit/drag-and-drop";
 import clsx from "clsx";
-import { SetStateAction } from "preact/compat";
+import { ChangeEvent, SetStateAction } from "preact/compat";
 import { Puzzle } from "./puzzles";
 import testWorker from "./testworker?worker";
+import { Logo } from "./main";
 
-const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-4 items-center pl-1 text-sm relative`);
+const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2 nodrag");
-const nameInputProps = { minLength: 5, maxLength: 20, pattern: "^[\\w ]+$" } as const;
-const validNameRe = /^[\\w ]{5,20}$/;
+const nameInputProps = { minLength: 1, maxLength: 20, pattern: "^[\\w ]+$" } as const;
+const validNameRe = /^[\\w ]{1,20}$/;
 const validTextRe = new RegExp(`^[a-z ]{0,${strLenLimit}}$`);
 
 const builtinNodes: Node[] = [
@@ -22,17 +23,33 @@ const builtinNodes: Node[] = [
 		{op, lhs: -1, rhs: -1}
 	)),
 	...(["inc", "dec"] as const).map(op=>({ op, lhs: -1 })),
-	{ op: "goto", ref: "unset" },
+	{ op: "goto", ref: "unset", conditional: null },
 	{ op: "setIdx", lhs: -1, rhs: -1, idx: -1 }
 ];
+
+function useValidity(callback: (v: string)=>void): {
+	onChange: (ev: ChangeEvent<HTMLInputElement>)=>void
+} {
+	const db = useFnRef(()=>debounce(200), []);
+	return {
+		onChange(ev) {
+			const elem = ev.currentTarget;
+			if (elem!=null) db.current?.call(()=>{
+				console.log(ev);
+				if (elem.reportValidity())
+					callback(elem.value);
+			});
+		}
+	};
+}
 
 type EditData = {
 	proc: Procedure,
 	procs: ReadonlyMap<number, Procedure>,
-	nodeRefs: MutableRef<Map<number|undefined, HTMLDivElement>>,
+	nodeRefs: MutableRef<Map<number|null, HTMLDivElement>>,
 	regMap: ReadonlyMap<number, number>,
 	regParam: ReadonlyMap<number, number>,
-	nodeMap: ReadonlyMap<number|undefined, number>,
+	nodeMap: ReadonlyMap<number|null, number>,
 	disableArrows: boolean,
 	runRegisters: ReadonlyMap<number, RegisterRefClone>|null
 };
@@ -52,6 +69,7 @@ function RegisterPicker({p, x, setX, desc}: {
 					};
 				})
 			]}
+			disabled={setX==undefined}
 			placeholder={"(unset)"}
 			value={x} setValue={setX} />
 	</div>;
@@ -96,7 +114,7 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 				top: `${a.y + a.height/2 - c.top + yo}px`,
 				bottom: `${c.bottom - (b.y + b.height/2) - yo}px`,
 				right: `${c.right - Math.max(a.left, b.left)}px`,//`${c.right - Math.min(a.right, b.right)}px`,
-				left: `calc(${Math.max(a.left, b.left) - c.left}px - ${2*depth+1}rem)`
+				left: `calc(${Math.max(a.left, b.left) - c.left}px - ${12.5*(2*depth+1)}px)`
 			} as const;
 			
 			type ObjKey = keyof typeof obj;
@@ -145,7 +163,7 @@ function GotoInner({p, node, setNode, nodeI}: {
 		return ()=>document.removeEventListener("click", cb);
 	}, [node, nodeI, p.nodeRefs, p.proc.nodes, selecting, setNode]);
 	
-	const to = p.nodeMap.get(node.ref as number|undefined);
+	const to = p.nodeMap.get(node.ref as number|null);
 
 	return <>
 		<Button onClick={()=>{
@@ -156,7 +174,7 @@ function GotoInner({p, node, setNode, nodeI}: {
 			{to==undefined ? "Jump to..." : `Jump: ${to+1}`}
 		</Button>
 		<RegisterPicker desc="cond" p={p} x={node.conditional ?? -1} setX={
-			setNode ? v=>setNode({...node, conditional: v<0 ? undefined : v}) : undefined
+			setNode ? v=>setNode({...node, conditional: v<0 ? null : v}) : undefined
 		} />
 	</>;
 }
@@ -195,6 +213,18 @@ function CallInner({
 		</>;
 }
 
+const nodeHint: Record<Node["op"], string> = {
+	add: "Add the second register to the first.",
+	sub: "Subtract the second register from the first.",
+	set: "Set the value of the first register to the second.",
+	access: "Take the element in the second register at the position indexed by the first register, and load it into the first register.",
+	inc: "Increment the value of a register.",
+	dec: "Decrement the value of a register.",
+	goto: "Jump to another node, optionally conditional on whether the cond register contains a strictly positive value.",
+	setIdx: "Set the element at idx in lhs to rhs.",
+	call: "Call another procedure with parameters."
+};
+
 function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active}: {
 	p: EditData, node: Node, nodeI?: number, idx?: number
 	setNode: (x: Node|null, i: number)=>void
@@ -221,12 +251,15 @@ function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active}: {
 		</>;
 	}
 	
-	return <div className={twMerge(nodeStyle, (active ?? false) && bgColor.highlight)} >
+	return <div className={twMerge(nodeStyle, "transition-colors", (active ?? false) && bgColor.highlight)} >
 		<img src={`/${iconURL(node)}`} className="w-10 cursor-move mb-4" />
 		{idx!=undefined && <Text v="dim" className="absolute left-1 bottom-1" >{idx}</Text>}
 		{inner}
-		{setNode && <IconButton icon={<IconX />} onClick={()=>{ setNode(null); }}
-			className="-mr-2 ml-auto float-end" />}
+		{setNode ? <button onClick={()=>{ setNode(null); }}
+			className="-mr-2 ml-auto float-end" ><IconX /></button>
+			: <AppTooltip content={nodeHint[node.op]} >
+				<button className="-mr-2 ml-auto float-end" ><IconInfoCircle /></button>
+			</AppTooltip>}
 	</div>;
 }
 
@@ -291,14 +324,10 @@ function RegisterEditor({p, reg, setReg}: {
 	return <div className={twMerge(nodeStyle, "flex flex-col pl-2 items-stretch gap-1 pr-1")} >
 		<div className="flex flex-row gap-2 mb-1 items-center" >
 			<Text v="bold" >{"#"}{regI+1}</Text>
-			<HiddenInput value={regV.name==undefined ? "" : regV.name}
+			<HiddenInput defaultValue={regV.name==null ? "" : regV.name}
 				placeholder={"(unnamed)"}
-				onChange={(ev)=>{
-					const v = ev.currentTarget.value;
-					if (v.length==0 || ev.currentTarget.reportValidity()) setReg({
-						...regV, name: v.length==0 ? undefined : v
-					}, reg);
-				}} {...nameInputProps} />
+				{...useValidity(v=>setReg({ ...regV, name: v.length==0 ? null : v }, reg))}
+				{...nameInputProps} />
 			<IconButton className="ml-auto" icon={<IconX />} onClick={()=>{
 				setReg(null, reg);
 			}} />
@@ -365,7 +394,7 @@ function ProcEditor({
 	proc: Procedure, setProc: SetFn<Procedure>,
 	runState: ProcRunState|null
 }&UserProcs) {
-	const nodeRefs = useRef(new Map<number|undefined,HTMLDivElement>());
+	const nodeRefs = useRef(new Map<number|null,HTMLDivElement>());
 	const [disableArrows, setDisableArrows] = useState(false);
 	const data: EditData = useMemo(()=>{
 		return {
@@ -375,8 +404,8 @@ function ProcEditor({
 			regParam: new Map(proc.registerList.filter(a=>proc.registers.get(a)?.type=="param")
 				.map((x,i)=>[x,i])),
 			nodeMap: new Map([
-				...proc.nodeList.map((v,i)=>[v,i] satisfies [number|undefined, number]),
-				[undefined, proc.nodeList.length]
+				...proc.nodeList.map((v,i)=>[v,i] satisfies [number|null, number]),
+				[null, proc.nodeList.length]
 			]),
 			disableArrows,
 			runRegisters: runState?.registers ?? null
@@ -452,7 +481,7 @@ function ProcEditor({
 		}) as unknown as [Ref<HTMLUListElement>, DragNode[]]; // preact compat
 	}, [setProcList, userProcList]);
 
-	const nodeRefSetter = (node: number|undefined) => (el: HTMLDivElement|null) => {
+	const nodeRefSetter = (node: number|null) => (el: HTMLDivElement|null) => {
 		if (el==null) return;
 		nodeRefs.current.set(node, el);
 		return ()=>nodeRefs.current.delete(node);
@@ -485,9 +514,11 @@ function ProcEditor({
 		});
 	}, [proc.registerList, registerList, setProc])
 
+	const procNameValidity = useValidity(v=>setProc(p=>({...p, name: v})))
+
 	return <>
 		<div className="flex flex-col items-stretch gap-2 editor-left min-h-0" >
-			<div className={clsx("mb-2 flex flex-row gap-3 items-end pl-1 h-9", !isUserProc && "pl-2")} >
+			<div className={clsx("mb-2 flex flex-row gap-3 items-end pl-1 h-11", !isUserProc && "pl-2")} >
 				{isUserProc && <Anchor className="items-center self-end mr-2" onClick={()=>openProc()} >
 					<IconChevronLeft size={32} />
 				</Anchor>}
@@ -495,16 +526,13 @@ function ProcEditor({
 				{!isUserProc ? <Text v="bold" >Procedure <Text v="code" >{proc.name}</Text></Text>
 				: <>
 					<Text v="bold" >Procedure</Text>
-					<HiddenInput value={proc.name} onChange={(ev)=>{
-						if (ev.currentTarget.reportValidity())
-							setProc(p=>({...p, name: ev.currentTarget.value}))
-					}} className="w-fit -mb-1" />
+					<HiddenInput defaultValue={proc.name} {...procNameValidity} className="w-fit -mb-1" />
 				</>}
 				
 				{isUserProc && <IconButton className="ml-auto" icon={<IconTrash />} onClick={()=>{delProc();}} />}
 			</div>
 			 
-			<ul ref={nodeRef} className="pl-[4rem] flex flex-col gap-1 items-stretch overflow-y-auto relative" >
+			<ul ref={nodeRef} className="pl-[50px] flex flex-col gap-1 items-stretch overflow-y-auto relative" >
 				{proc.nodeList.flatMap((v,i)=>{
 					const node = proc.nodes.get(v)!;
 					return [
@@ -519,7 +547,7 @@ function ProcEditor({
 					];
 				})}
 			
-				<div className={blankStyle} ref={nodeRefSetter(undefined)} >
+				<div className={blankStyle} ref={nodeRefSetter(null)} >
 					{proc.nodeList.length==0 ? <>
 						<IconInfoCircle />
 						<Text v="sm" >Use the library on the right to add nodes</Text>
@@ -566,7 +594,7 @@ function ProcEditor({
 				<Button className={blankStyle} onClick={()=>{
 					setProc(p=>({
 						...p, registerList: [...p.registerList, p.maxRegister],
-						registers: mapWith(p.registers, p.maxRegister, { type: "value", value: "" }),
+						registers: mapWith(p.registers, p.maxRegister, { name: null, type: "value", value: "" }),
 						maxRegister: p.maxRegister+1
 					}));
 				}} >
@@ -578,14 +606,15 @@ function ProcEditor({
 	</>;
 }
 
-const makeProc = (name: string): Procedure => ({
+export const makeProc = (name: string): Procedure => ({
 	name, registerList: [], registers: new Map(),
 	nodeList: [], nodes: new Map(), maxNode: 0, maxRegister: 0,
 });
 
-export function PuzzleInput({puzzle, edit, output, setInput, setSolved}: {
+export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStage}: {
 	puzzle: Puzzle, edit: EditorState, output: string|null,
-	setInput: (x: string)=>void, setSolved: ()=>void
+	setInput: (x: string)=>void, setSolved: ()=>void,
+	nextStage: ()=>void
 }) {
 	const input = edit.input;
 	const [input2, setInput2] = useState(input);
@@ -638,8 +667,6 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved}: {
 		}
 	}, [edit.active, edit.procs, input, puzzle, setSolved, solution, submission?.type, up])
 
-	const goto = useGoto();
-
 	return <div className="flex flex-col items-stretch gap-2" >
 		<Text className="mb-1" >{puzzle.blurb}</Text>
 		
@@ -666,8 +693,10 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved}: {
 				{output==input ? <Alert className={bgColor.green} title="Test passed"
 					txt="Your program output the same text." /> : output!=null && <>
 					<Alert bad title="Test failed" txt={<div className="flex flex-col gap-1" >
-						Your program output:
-						<Text v="code" >{output}</Text>
+						{output.length==0 ? "Your program didn't output anything!" : <>
+							Your program output:
+							<Text v="code" >{output}</Text>
+						</>}
 					</div>} />
 				</>}
 			</> : <>
@@ -691,7 +720,7 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved}: {
 		{submission?.type=="done" && (submission.verdict.type=="AC"
 			? <Alert className={bgColor.green} title="You passed" txt={<>
 				Congratulations -- onwards!
-				<Button onClick={()=>goto("/menu")} >Back to menu</Button>
+				<Button onClick={()=>nextStage()} >Continue</Button>
 			</>} />
 			: <Alert bad title="Test failed" txt={
 				`Verdict: ${({
@@ -704,16 +733,14 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved}: {
 	</div>;
 }
 
-export function Editor({edit, setEdit, openSidebar}: {
-	edit: EditorState, setEdit: SetFn<EditorState>, openSidebar: ()=>void
+export function Editor({edit, setEdit, nextStage}: {
+	edit: EditorState, setEdit: SetFn<EditorState>, nextStage: ()=>void
 }) {
 	const [runState, setRunState] = useState<ProgramState<RegisterRefClone>|null>();
 	const [runStatus, setRunStatus] = useState<{ type: "done"|"paused"|"stopped" }
 		|{ type: "running", step: boolean }>({type: "stopped"});
 	const [runError, setRunError] = useState<InterpreterError|null>(null);
 	const [output, setOutput] = useState<string|null>(null);
-
-	console.log(runState, runStatus, runError);
 
 	const activeProc = edit.procs.get(edit.active);
 	useEffect(()=>{
@@ -772,7 +799,6 @@ export function Editor({edit, setEdit, openSidebar}: {
 		};
 		
 		let v = runStateRef.current;
-		console.log(v, runStatus.step);
 		const doPush = v==null;
 		if (v==null) {
 			const newV ={
@@ -824,13 +850,12 @@ export function Editor({edit, setEdit, openSidebar}: {
 		};
 	}, [edit.entryProc, edit.input, edit.procs, edit.stepsPerS, runStatus]);
 	
-	const play = ({mod, step}: {mod?: number, step?: boolean}={})=>{
-		setEdit(v=>({
-			...v,
-			stepsPerS: mod!=undefined ? Math.max(0.1, Math.min(1000, v.stepsPerS*mod))
-				: v.stepsPerS
-		}));
+	const mod = (m: number) => setEdit(v=>({
+		...v,
+		stepsPerS: Math.max(0.1, Math.min(1000, v.stepsPerS*m))
+	}));
 
+	const play = (step?: boolean)=>{
 		setRunStatus({type: "running", step: step ?? false});
 	};
 	
@@ -839,31 +864,35 @@ export function Editor({edit, setEdit, openSidebar}: {
 	const setInput = useCallback((inp: string)=>setEdit(e=>({...e, input: inp})), [setEdit]);
 	const markSolved = useCallback(()=>setEdit(e=>({...e, solved: true})), [setEdit]);
 	useEffect(()=>setOutput(null), [edit.input, setOutput]);
+	const goto = useGoto();
 
-	return <div className={clsx("grid h-dvh gap-x-4 pl-3 px-5", runStatus.type=="stopped" ? "editor" : "editor-running")} >
+	return <div className={clsx("grid h-dvh gap-x-4 pl-3 px-5 w-full", runStatus.type=="stopped" ? "editor" : "editor-running")} >
 		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center pb-1" >
-			<div className="flex flex-row gap-2 items-center" >
-				<IconButton icon={<IconMenu2 />} onClick={()=>openSidebar()} />
-				
+			<div className="flex flex-row gap-2 items-center h-full" >
+				<button onClick={()=>goto("/menu")}
+					className={twMerge("flex flex-row hover:scale-105 transition-transform h-full")} >
+					<img src="/logo.svg" className="max-h-full" />
+				</button>
+
 				<span className="w-2" />
 				
 				<IconButton icon={<IconPlayerTrackPrevFilled />} disabled={edit.stepsPerS<0.2}
-					onClick={()=>play({mod: 0.5})} />
+					onClick={()=>mod(0.5)} />
 
 				<IconButton icon={runStatus.type!="running" ? <IconPlayerPlayFilled className="fill-green-400" /> : <IconPlayerPauseFilled />}
 					onClick={()=>play()} />
 
 				{runStatus.type!="running" && <IconButton icon={<IconPlayerSkipForwardFilled className="fill-green-400" />}
-					onClick={()=>play({step: true})} />}
+					onClick={()=>play(true)} />}
 					
 				{runStatus.type!="stopped" && <IconButton icon={<IconPlayerStopFilled className="fill-red-500" />}
 					onClick={()=>{ setRunStatus({type: "stopped"}) }} />}
 				<IconButton disabled={edit.stepsPerS>500} icon={<IconPlayerTrackNextFilled />}
-					onClick={()=>play({mod: 2})} />
+					onClick={()=>mod(2)} />
 
 				<span className="w-2" />
 
-				<Button className="py-1 h-fit" onClick={()=>setEdit(e=>({...e, stepsPerS: 1}))} >
+				<Button className="py-1 h-fit" onClick={()=>setEdit(e=>({...e, stepsPerS: 5}))} >
 					Speed: {edit.stepsPerS}
 				</Button>
 				
@@ -872,7 +901,7 @@ export function Editor({edit, setEdit, openSidebar}: {
 				<Text v="dim" >{runStatus.type}</Text>
 			</div>
 
-			{edit.puzzle ? <button className={twMerge(anchorStyle, "flex flex-row p-1 grow items-center justify-center gap-2")}
+			{edit.puzzle ? <button className={twMerge(anchorStyle, "flex flex-row p-1 grow items-center justify-center gap-4")}
 				onClick={()=>setOpen(true)} >
 				<div className="flex flex-col items-center" >
 					<Text v="md" >{edit.puzzle.name}</Text>
@@ -882,13 +911,11 @@ export function Editor({edit, setEdit, openSidebar}: {
 			</button> : <Text v="md" className={textColor.dim} >
 				No puzzle
 			</Text>}
-
-			<img src="/logo.svg" className="max-h-full" />
 		</div>
 		
 		{edit.puzzle && <Modal open={open} onClose={()=>setOpen(false)} title={edit.puzzle.name} >
 			<PuzzleInput puzzle={edit.puzzle} edit={edit} output={output}
-				setInput={setInput} setSolved={markSolved} />
+				setInput={setInput} setSolved={markSolved} nextStage={nextStage} />
 		</Modal>}
 		
 		{runState && <div className="flex flex-col editor-right-down gap-2 mt-2 min-h-0" >

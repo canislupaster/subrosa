@@ -262,7 +262,7 @@ export function Modal({bad, open, onClose, title, children, className, ...props}
 		else modalRef.current?.close();
 	}, [open]);
 
-	return <dialog className={twMerge(clsx(bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "opacity-0 transition-opacity duration-500 mx-auto md:mt-40 mt-10 text-inherit outline-none rounded-md z-50 p-5 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0", className))}
+	return <dialog className={twMerge(clsx(bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "opacity-0 transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0", className))}
 		style={{opacity: open ? 1 : 0.001, pointerEvents: open ? undefined : "none"}}
 		ref={modalRef}
 		onClose={(ev)=>{
@@ -420,11 +420,11 @@ export function Dropdown({parts, trigger, onOpenChange, ...props}: {
 	</AppTooltip>;
 }
 
-export function Select<T>({ options, value, setValue, placeholder, className, ...props }: {
+export function Select<T>({ options, value, setValue, placeholder, className, disabled, ...props }: {
 	options: { label: ComponentChildren, value?: T, key?: unknown, disabled?: boolean }[],
 	value?: T, setValue?: (x: T)=>void,
 	placeholder?: ComponentChildren,
-	className?: string
+	className?: string, disabled?: boolean
 }&Partial<ComponentProps<typeof Dropdown>>) {
 	const curOpt = value==undefined ? undefined : options.find(x=>x.value==value);
 
@@ -440,8 +440,10 @@ export function Select<T>({ options, value, setValue, placeholder, className, ..
 		};
 	})}
 	trigger={<div>
-		<Button className={twMerge("pr-1 pl-1 py-0.5", className)} >
-			{curOpt==undefined ? placeholder : curOpt.label}
+		<Button className={twMerge("pr-1 pl-1 py-0.5 min-w-0", className)} disabled={disabled} >
+			<div className="basis-16 grow whitespace-nowrap overflow-hidden max-w-24" >
+				{curOpt==undefined ? placeholder : curOpt.label}
+			</div>
 			<IconChevronDown />
 		</Button>
 	</div>}
@@ -659,14 +661,17 @@ export type LocalStorage = Partial<{
 	solvedPuzzles: Set<string>,
 	readStory: Set<string>,
 
-	// user procedures across levels
-	procedures: Map<number, Procedure>,
+	userProcs: number[],
 	// entry point is always id -1
-	puzzleProcs: Map<string, Procedure>
+	puzzleProcs: Map<string, Procedure>,
+	stepsPerS: number,
 }>;
 
 const localStorageKeys: (keyof LocalStorage)[] = [
-	"theme", "storyState"
+	"theme", "storyState",
+	"puzzleProcs", "readStory",
+	"solvedPuzzles", "stepsPerS",
+	"userProcs"
 ];
 export const LocalStorage = {} as unknown as LocalStorage;
 
@@ -682,8 +687,10 @@ export function parseExtra(str: string): unknown {
 	return JSON.parse(str, (_,v)=>{
 		const v2 = v as { __dtype: "set", value: [unknown][] }
 			|{ __dtype: "map", value: [unknown,unknown][] }|{ __dtype: undefined };
-		if (v2.__dtype=="map") return new Map(v2.value);
-		else if (v2.__dtype=="set") return new Set(v2.value);
+		if (v2!=null && typeof v2=="object") {
+			if (v2.__dtype=="map") return new Map(v2.value);
+			else if (v2.__dtype=="set") return new Set(v2.value);
+		}
 		return v2;
 	});
 }
@@ -747,4 +754,19 @@ export function mapSetFn<T,R>(x: SetFn<T>, f: (x: R, old: T)=>T, get: (x: T)=>R)
 export function useGoto() {
 	const loc = useLocation();
 	return (path: string)=>loc.route(path);
+}
+
+export function useFnRef<T extends Disposable>(f: ()=>T, deps?: unknown[]) {
+	const ret = useRef<T>(null);
+	useEffect(()=>{
+		const v = f();
+		ret.current=v;
+		return ()=>{
+			v[Symbol.dispose]();
+			ret.current=null;
+		}
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, deps);
+
+	return ret;
 }

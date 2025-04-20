@@ -1,12 +1,26 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&display=swap');
 @import "tailwindcss";
 
 @theme {
 	--font-big: Chivo;
 	--font-mono: "Source Code Pro";
 
-	--color-zinc-150: #f0f0f2;
-	--color-zinc-850: #1e1e21;
+	/* --color-zinc-150: #f0f0f2;
+	--color-zinc-850: #1e1e21; */
+	
+	--color-zinc-50:  #d0ebe3;
+  --color-zinc-100: #c0e8db;
+  --color-zinc-150: #b6e4d6;  /* between 100 and 200 */
+  --color-zinc-200: #ade1d1;
+  --color-zinc-300: #81ceb8;
+  --color-zinc-400: #54b69a;
+  --color-zinc-500: #3d927a;
+  --color-zinc-600: #2d7863;
+  --color-zinc-700: #244a40;
+  --color-zinc-800: #181f1d;
+  --color-zinc-850: #19302d;  /* between 800 and 900 */
+  --color-zinc-900: #131414;
+  --color-zinc-950: #0e0f0f;
 }
 
 @custom-variant dark (&:is(.dark, .dark *));
@@ -23,6 +37,21 @@ html {
 
 button {
 	cursor: pointer;
+}
+
+@theme {
+  --animate-fade-in: fade-in 1s ease-in-out forwards;
+  --animate-fade-out: fade-out 1s ease-in-out forwards;
+
+  @keyframes fade-in {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  @keyframes fade-out {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
 }
 
 .editor {
