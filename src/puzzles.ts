@@ -21,7 +21,7 @@ const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i));
 const defaultGenLen: number = 10;
 // Uniform random int
 const randInt = (min: number, max: number)=>Math.floor(Math.random() * (max - min + 1)) + min;
-export const defaultGen = ()=>randString(alpha.splice(alpha.indexOf(" "), 1), defaultGenLen); // Don't generate spaces
+export const defaultGen = ()=>randString(alpha, defaultGenLen); // Don't generate spaces
 
 // Adds ct to c[0], wrapping around both directions
 // Skips space
