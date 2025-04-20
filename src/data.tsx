@@ -63,6 +63,7 @@ export const data: Stage[] = [
             </StoryParagraph>
         ],
     },
+    puzzleTy[0],
 	puzzleTy[1],
 	puzzleTy[2],
 	puzzleTy[3],
