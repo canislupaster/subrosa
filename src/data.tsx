@@ -206,30 +206,6 @@ export const data: Stage[] = [
     puzzleTy[0],
     {
         type: "story",
-        name: "The Mysterious Kiln 2",
-        key: "end",
-        blurb: "what thing do what".repeat(10),
-        para: [
-            <StoryParagraph>
-                Welcome to the world of Kiln! You awaken in a dimly lit workshop, the scent of clay and smoke in the air. [pause] A mysterious kiln stands before you, its surface warm to the touch.
-            </StoryParagraph>,
-            <StoryParagraph>
-                An old note lies nearby: "To unlock the kiln's secret, solve the puzzle within." [pause] Will you accept the challenge?
-            </StoryParagraph>,
-            <StoryParagraph end={{
-                type: "choice",
-                key: "intro_choice",
-                choices: [
-                    { value: "accept", label: "Accept the challenge" },
-                    { value: "decline", label: "Walk away" }
-                ]
-            }}>
-                What will you do?
-            </StoryParagraph>
-        ],
-    },
-    {
-        type: "story",
         name: "Chapter 2",
         key: "first_payslip",
         blurb: "Karen, who?",
