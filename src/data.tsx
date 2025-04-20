@@ -331,7 +331,7 @@ export const data: Stage[] = [
                 Just before leaving for the day, you receive a locked PDF payslip.
                 Surely there’s been a mistake, why would your payslip be <i>password-protected</i>?
                 The email, surely flouting a dozen state laws about payslip documents, states "<b>Worthy are those who claim this prize.</b>"
-                </p>
+                </p>[pause]
                 <p>
                 After a nervous laugh and email to HR, you’ve realized they’re serious.
                 Your options are either fighting this in court or just solving the puzzle they want you to solve,
@@ -404,7 +404,7 @@ export const data: Stage[] = [
                 and every buzz of the entry gates drives your eyebrows further up
                 as you observe strangers sitting at the previously-empty desks around you,
                 like termites emerging from the woodwork after a fumigation.
-                Subrose, it appears, might actually be a publicly-traded company after all.
+                Subrose, it appears, [pause] might actually be a publicly-traded company after all.
                 </p><p>
                 "There's sushi, pizza, salad, and something the caterer calls
                 'international fusion tacos,'" announces the receptionist, whose name
@@ -453,7 +453,7 @@ export const data: Stage[] = [
                     "I have no idea and it's bugging me. But I'm finally getting assigned to a team today."
                 </p>
                 <p>
-                    Huh. You wish Mikah luck in his endeavor and make him promise to share his results of his quest with you.
+                    Huh. [pause] You wish Mikah luck in his endeavor and make him promise to share his results of his quest with you.
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
@@ -620,13 +620,13 @@ export const data: Stage[] = [
                     Dots dance briefly at the bottom of the Slack window, then pause. Finally, Karen responds.
                 </p>
                 <p>
-                    "mikahs been fired"
+                    "mikahs been fired" [pause]
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
                 <p>
                     Your heart plummets, optimism extinguished instantly. Fingers hovering hesitantly over the keyboard, 
-                    you manage a shaky reply: "Why?"
+                    you manage a shaky reply: "Why?" [pause]
                 </p>
                 <p>
                     "bad culture fit" Karen sends back quickly, no punctuation—her signature disregard now more irritating than quirky.
@@ -677,7 +677,8 @@ export const data: Stage[] = [
                     "Are mushrooms vegetables?" Derek asks earnestly. "They're both temporary fruiting bodies solely existing to propagate their species."
                 </p>
                 <p>
-                    "I'm a temporary fruiting body solely existing to propagate my species," you blurt. Silence descends. You stare forlornly at your fusion taco, suddenly aware of how little fruiting you've been doing lately.
+                    "I'm a temporary fruiting body solely existing to propagate my species," you blurt. [pause]
+                    Silence descends. You stare forlornly at your fusion taco, suddenly aware of how little fruiting you've been doing lately.
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
@@ -690,7 +691,7 @@ export const data: Stage[] = [
                 </p>
                 <p>
                     You stare blankly. Munir raises an expectant eyebrow.
-                </p>
+                </p>[pause]
                 <p>
                     "Two time travelers walk into a bar," he concludes with exaggerated patience.
                 </p>
@@ -714,7 +715,7 @@ export const data: Stage[] = [
                 </p>
                 <p>
                     "warcrimes as a service"
-                </p>
+                </p>[pause][pause]
                 <p>
                     Your pulse quickens. But before panic fully sets in, another message pops up instantly:
                 </p>
