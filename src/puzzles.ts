@@ -57,9 +57,9 @@ export const puzzles = [
 	},
 	{
 		// Reverse
-		name: "Tutorial part 2",
+		name: "Turn it around!",
 		key: "elzzup",
-		blurb: "You'll never figure out this one...",
+		blurb: "Sometimes there are hints in the url...",
 		generator: defaultGen,
 		solve(inp) {
 			return inp.split("").reverse().join("");
@@ -91,7 +91,7 @@ export const puzzles = [
 	{
 		// Segment Reverse
 		name: "This is actually the hardest one",
-		key: "pain",
+		key: "implementation-challenge",
 		blurb: "It's all downhill from here",
 		generator() {
 			return fill(defaultGenLen, ()=>(Math.random() > 0.8 ? "x" : randString(alpha, 1))).join("");
