@@ -346,7 +346,259 @@ export const data: Stage[] = [
         ]
     },
 	puzzleTy[1],
+    {
+        type: "story",
+        name: "Chapter 3",
+        key: "team_lunch",
+        blurb: "Like terminites emerging from the woodwork.",
+        para: [
+            <StoryParagraph noCursor={true}>
+                <pre>
+:.+@@@@%###**#%#*##*+----:.:::--:-*-:--....::-:---:-*=-:::::::::-=-::--++#@@         ....  <br />
+:-*%@@@@@%@@@@@%@@@@@@%####*#*%@%%@ .=#=***%%#+@*++%@%*+*%##%%%%%#%%%%%@@@*  .-====+%*==+  <br />
+:@%+@@@@@@@%%@@%@@@@@@@%##%%####%@@.+*%#@@@*#++#=%+@@**%@%#%%%%%@@@@@@@@:  :#%@%@@#%%#--=  <br />
+:+@%%@@@@@@%@@%@@@@@@@@@@%###%#%%@*:@%%+*@@%@@+*+%+@@##%%#%@@@@@@@.      =%@@@%*######+::  <br />
+:.*%@@@@@@@@@@%@@@@@@@@@@@@@@@@@@@#-#*@-.*::%#*@@@%@%#@@@@@@.     -=%@@@@@@@*===*++**++*-  <br />
+:.=*#@@@@@@@@%@@@%@%%@@@@@@  + .*@@@@@@@@@%+%***+=*@@@@:    %@@@@@%@@%%#%*+#%@@@@@@@@@@@@. <br />
+:.-+%@@@@@@@@@@@#%%@@@@@@@@  ..+   =-....*@@@@@@@@@@@. =#%%%.:@**%@##=*:*#%#**+++==+#%@@%. <br />
+::==+@@@@@@@%%@@%@@@@@@@@@@  =++-@@###=.:       *  @@% :=:.  -@@#+%#*+*#@@@@@%#%#*+=--==*. <br />
+:.+*+%@@@@@@@@@%@@@@@@@@@@- .+: *  :=..#=..:+####.%..**.*=-%@= ..:#%@@@@=   %@@%@@*@@@@@@. <br />
+::%%+%@@@@@@@@@@@@@@@@@@@@@ .-=-=    *-  @= ..:.*@@@@#@@@@@@#%@@@@@@:  = .%   +@#=+*=+%%%. <br />
+:.@%+%@@@@@@@@@@@@@@@@@@@@  .++ . .. +* .#@# :=       .   .@@@%%#=*#:@@@* .    .#%%%*:.:*  <br />
+:.%#*@@@@@@*   .+@@@@@@@@@ .*    .    .    *.. @##########    .:#*@:.:.:+*@@@@@@@@ . .@ :  <br />
+: *#%@@@@@%++%:.=@@@@@@@@-  ...@@@@%#@@-+@-#*.=@.::#%%.@@%#%.+: . :*%#*=-         %%%@%#=  <br />
+:.%##%%%%@#%#*.=@@@@@@@@@  ...##=%#:-##@%%    @:.. .##.....*@#  :.  =##+:#@#@%@%:  #+@*:-  <br />
+:=@%#*##@%#%@@@@@@@@@@@@@  .+ :   : .   . *+: @:#@@%%#..@@% +##%@=@-  -        -#+.. :%*#. <br />
+:.*++++%%%@@#-..=@@@@@@@    . ...-:.@@ .-+.  .%.@ .*####@.%@@%#%*=  *@..=:*%%-#-..::+#:.   <br />
+: %@@@%@@@@##*#*-*@@@@@@ %%=@@@#-::+   @@:*-:-@-@@-..:==%*:.@@%@.=-=-=@*====- .##=:.    +  <br />
+::@=-+*#@..:--=*+. .=@@:  .:. . :.. ..   .=#::.##*@*@@:@-=@%.%#% :::.    .%#%#: =..@@@%#+# <br />
+:   --..=-+%@#@@@@@*==@  ..     .++***+.  .=+#::%#%.+=-%%##@%@- ...=#=+-@.   % ...@%##*%@# <br />
+:    :..@@@@@@@@@@@@@@@  ...=+***:-+==+#@@%=  .:. #=@%@@@@@-.... ...-  *=+@.   @@@@#%%%%%+ <br />
+:**=-::%@@@@@@@@++%@@.   *: *.. @.  .....--#%%: .@@.:   ...:-. -......=%= =%:.%@@@@@@@@@%+ <br />
+:@@@@@@@@@@@@@@@@@@@@  *%.=...=-#@%.  :    .--#% #=.-##=-    --=-=%*=-:.:%=:.@@@@%%@@@@%%* <br />
+:@@@@@@@@@%=-:+==#%@:  + :   -     @@    @...-...  ...:: -=++:...#. .-=*+-...@@@%%%%@@@@@* <br />
+:#@@@@@@@@@@@%@@*@@@   *- @@#=-#+.   @+.. .:..** @=-+--..:.  .::...=@:- .   @@@@%%%@@%%%%+ <br />
+:@@@@@@@@@@@@@@@@@#  *#.. *-.-%*#++=. @:.. .. :..:%.:=:#--=*:@....@@+ . .. @@%@%%@%%%@@@%+ <br />
+:@@@@@@@@@@@@@@@@ . %@*%#   %#*:*: -..%:+=.##=-#:#=+.-: :--=.::. @@@ @= . #@@%@%@@@@@%@%#+ <br />
+:   .  ...-:-.. # #@@# +%%:-%%. . +#. .@-::..  *% .-@@    @#.@ *.@@@ @    @@%%@@@%%%%%@%%+ <br />
+:.=  .%%**@@%@@@@   @## #@%*   :+%@@#  %:..+%%* -##=..@@@    . .@%@ @@ . .@@@@@@%%#%@@%%@+ <br />
+:.-+%@%=.+#:  %@@ - *  .%%%#+.. +@#- #*%  .   :-..  @@@ @@. @  *@@@ @ .: @%***#%@%%@@%%%%+ <br />
+: #%+# ::       # @*:@%.=:%%#-=:*##.-.-@% ##+-:. @::%@#   @@@ .@@@.@   @ @@@@@@%%#%%%@@%@+ <br />
+: ..  .%@@@@@@@-:  @###-%:%%:: .. .   @*@=:-:..  @%@@@    @##  *:@ .  + .@     =@@@@@##%@* <br />
+:  .@%#-%..:-.##*#. %@ @#%.%#.=   +. %#  # .:@. @@ @@  :.@@@  :@@  +. + *@@@@@@@   :@@@@@* <br />
+:.-%:@%@%%@@@@%  -#*-##@%%:@%#%%%*: %#####-  .  @@ %  .:.@@@ %@@* .* %# +*    .@@@@@#---@@ <br />
+:  -#.+%@# #  @@. #.   .##+@@#=.   ##.:-%* .:. @@@.. -:.  : @@@@  =..:= .@@@@%:   :::-:..  <br />
+: .-  .%.*:  %%   #%% %.%%%@ :*+@@..    +  :.. *@ .--+-.-@    .  .*..:.. .%@@@@@@%.. +.++. <br />
+:..#%@# .###%% - . # +@@*%@.....:..@@@@@@ .-:..@@ -.:-. #= @@@ . -=#==:. @%@.@@  ##+@@@%.  <br />
+::@@  +%.:-#.   .=@@ .%@@%+.%@@%= @@@ @@ ::...  :.%:--..@ +@. :+.-. .....#@.  .-@%-=-:+.@  <br />
+:   --..:.%.  @@@#  #: .....=+.  .@::.@@ .-.@..:  .. . .  ..-.+-::.-:.%+   -@@#   :-%% :.  <br />
+                </pre>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                It’s your first team lunch!
+                People have shown up to the office in never-before-seen droves,
+                and every buzz of the entry gates drives your eyebrows further up
+                as you observe strangers sitting at the previously-empty desks around you,
+                like termites emerging from the woodwork after a fumigation.
+                Subrose, it appears, might actually be a publicly-traded company after all.
+                </p><p>
+                "There's sushi, pizza, salad, and something the caterer calls
+                'international fusion tacos,'" announces the receptionist, whose name
+                you swear to yourself to remember this time. You forget immediately again.
+                </p><p>
+                Lunch chatter fills the air, but your attention drifts as you're handed another
+                aesthetically hostile card.
+                You can tell by the aggressively minimalist font alone that this is another puzzle.
+                Subrose must have stock in a printing company—or perhaps a psychiatrist’s practice.
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    "Group puzzle time! Find your matching clue to decode the secret message and win a special prize!"
+                    reads the receptionist from another slip, sounding suspiciously rehearsed.
+                </p>
+                <p>
+                    You're paired off with people you've never met before.
+                    Your group includes someone who looks suspiciously like a startup founder from LinkedIn circa 2013,
+                    a fellow intern nervously clutching three different notebooks,
+                    and a woman whose glasses suggest she could crack Enigma codes before her morning coffee.
+                </p>
+                <p>
+                    As you trade clues, you hear excited whispers mentioning Mikah's name.
+                    You swivel around just as the elevator doors part dramatically—at least,
+                    they would if not for the guy from facilities awkwardly holding them open.
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    Mikah finally emerges, somehow looking both over and under-dressed in a cashmere hoodie and tailored trousers,
+                    hair arranged in deliberate disarray. Everyone acts as if they're seeing royalty,
+                    whispering and nodding reverently. Mikah strolls over, giving you an acknowledging nod.
+                    "We are a weird bunch. Glad to see you fit in."
+                </p>
+                <p>
+                    You converse with Mikah for a while, catching him up to the latest news of Purdue,
+                    his alma mater. You're reassured to finally see Mikah in person;
+                    you realize how much you've missed a familiar face in the last month.
+                    The conversation somehow turns towards "making impact" and "moving the needle" –
+                    maybe being employed has affected your conversational skills more than you thought.
+                    After small talk, you become comfortable enough to ask Mikah what it is that Subrose actually does.
+                    Mikah pauses.
+                </p>
+                <p>
+                    "I have no idea and it's bugging me. But I'm finally getting assigned to a team today."
+                </p>
+                <p>
+                    Huh. You wish Mikah luck in his endeavor and make him promise to share his results of his quest with you.
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    Your new teammates are already engrossed, arguing over letter substitutions and prime numbers.
+                    You rejoin the huddle, puzzle in hand, but your mind off-handedly chews on the idea: <i>What are we doing here exactly?</i>
+                    You shake it off as the puzzle in front of you needily demands more attention, like your first boyfriend but more interesting.
+                </p>
+                <p>
+                    An hour later, with no solution in sight, LinkedIn guy declares confidently, "<i>garble</i>" (your wrong-answer neurons engage and the rest of his answer disappears in TV static).
+                    The intern nervously suggests using <i>garble</i>.
+                    Glasses woman sighs audibly.
+                    Finally, you spot something others missed—the answer is:
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    As the lunch crowd disperses, you attempt to catch back up to Mikah.
+                    There's no telling when you're going to see him, or the rest of the lunch crowd again.
+                    Just before you can catch him, Mikah vanishes into a meeting room marked simply "PRIVATE."
+                </p>
+            </StoryParagraph>
+        ]
+    },
 	puzzleTy[2],
+    {
+        type: "story",
+        name: "Chapter 3",
+        key: "team_lunch",
+        blurb: "Like terminites emerging from the woodwork.",
+        para: [
+            <StoryParagraph noCursor={true}>
+                <pre>
+***********#@%#****#############*+*####*=--==============-::::::::....:::::-*####%@@@%%##+:.:...:.  <br />
+***********#@%#***#@@@@@@@@@@@@@%%%@@@%%%%%%%%%%%%%%%%%%%%#######%###############%@@@%%##+:::::::: <br />
+@@@@@@@@@@@@@@#***#@%%%#####*****+---------------------======++++++****#**%%#####%@@@%%##+=---=--: <br />
+%%%%%%%#######****#@%%%%%########*=------------------=======++++++*#######%%#####%@@@%%##+-==---:: <br />
+####**************#@%%%%%%#########*+-----------=====++++++++++++***######%######%@@@%%##+--=---:: <br />
+##*****************@%%%%%%%%%#########+=-----=======++++++++++++*****#####%%####%@@@@%%##=------:: <br />
+##*****************@%%%%%%%%%%%%%%%#####*-=========+++++++++++++*****#####%%####%@@@@%%#*=-------- <br />
+##*****************%%%%%%%%%%%%%%%%%%%%%%*========+++++++++++++******#####%#*###%@@@@%##*======--= <br />
+##*****************%@%%%%%%%%%%%%%%%%%%%%%#======++++++++++++++******#####@%####%@@@@%##*++======= <br />
+##*****************@@%%%%%%%%%%%%%%%%%%%%%%#=====+++++++++++++*******#####@%####%@@@@%##*==----==- <br />
+##*****************%@%%%%%%%%%%%%%%%%%%%%%%%#====++++++++++++++******#####@#####%@@@@%##+==----==- <br />
+##*****************%@%%%%%%%%%%%%%%%%%%%%%%%%#===++++++++++++++*****#####%@#*###%@@@@%##=--------- <br />
+###****************%@%%%%%%%%%%%%%%%%%%%%%%%%%#==+++++++++++++++****#####%@#***#%@@@%##*========== <br />
+####***************%@@@@@@@@%%%%%%%%%%%%%%%%%%%#++++++++++++++++***######%@#####%@@@%##*++======== <br />
+####***************#@@@@@@@@@@@@%%%%%%%%%%%%%%%%#******+++++++++***#####%%@#####@@@@%%##+++++++++* <br />
+#####**************#@@@@@@@@@@@@@@@%%%%%%%%%%%%%%##**************######%%%@#####@@@@%%#######%%%%% <br />
+######*************#@@@@@@@@@@@@@@@@@@%%%%%%%%%%%%###################%%%%%@%##%%@@@@%########%%%%% <br />
+#######************#@@@@@*=====+==-=======++++==========-=-+======++=*%%%%%#*##################### <br />
+#########**********#@@@@@@%%%@@@@@%@@%@%%@@@@@@@@@@@@%%%%%%%%%%%%%%%%@@@@@%++********+++========== <br />
+###########******###***+++++++***=======+*###**************#********+********###****************** <br />
+#############***######****++++++++++++*+**************#####%###################%%%%%%%%%%%%%%%%%%% <br />
+################%%%%%%%%%%%%%%%%%%%%###*##***********#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% <br />
+@@@@@@@@@@%%%#******#%%%%%%%%%%%%%%%###*++++++++++++++++++++++++++++++++++++++++++++++#%%######### <br />
+@@@@@@@@@%####****###%%%%%%%%%%%%%%%###+++**######**+======================================+*##### <br />
+@@@@@@@%#############%#%%#%%###########+++*******++=---=---------=========================----+*## <br />
+@@@@%################%%%%%%%%%%%%%%%##***######*#****+===-----------=======+++===============-:-=+ <br />
+@@%#################@@@@@%@%%@@%%%%%%%###%%%%##+##%**++=+=+==-==========+++****+===============-:- <br />
+%#################%@@@@@@@@@@%%@@%%%%%###%%%%%%===+=--++++++===+======+++++*****+================= <br />
+#################%@%%@%%@%@@@@@@@@@%%%#%%#%%%%%*%##*#*+***++++-=+++++++++********+================ <br />
+######################*******************+++++++++++++++++=======++++++++++++++++================= <br />
+                </pre>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    It's been a week or three since the eventful team lunch. You look at the office in a new light,
+                    having realized that all those empty desks do have people assigned to them.
+                    Mikah hasn't replied to your messages – he must be really busy with his team.
+                </p>
+                <p>
+                    It's near the end of the workday, and yet you aren't looking forward to going back to your furniture-less apartment.
+                    Maybe you should stay a bit longer. As if encouraging you, the dull glow of the Apple Studio Display® flares up.
+                    You stare blankly at Karen's latest Slack message:
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                <b>"ive put u up for a promo, u just have to finish this one thing"</b>
+                </p> [pause]
+                <p>
+                No punctuation, as usual. The message itself stirs a cocktail of excitement and vague dread in your soul.
+                A promotion for an intern? Did Karen somehow forget you're only here for a few months?
+                You don't question it; climbing the corporate ladder as a mere intern is exactly how you can compete
+                with your ambitiously unemployed classmates in San Francisco.
+                </p>
+                <p>
+                Karen sends you a cryptic link to an internal document ominously titled "Project Chrysalis."
+                The document loads slowly, as if reluctantly participating in your career advancement.
+                </p>
+                <p>
+                Project Chrysalis is generously seasoned with acronyms that the people who wear suits on Zoom whisper as they dream of better days.
+                You recognize words like "synergy," "leverage," and not much else.
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    You glance around—it's late. The office is nearly deserted again, its daytime vibrancy evaporated into eerie silence,
+                    illuminated solely by a sea of monitors left in various states of disarray.
+                    Determined, you crack your knuckles and plunge into the puzzle embedded within Project Chrysalis' layers of corporate doublespeak.
+                </p>
+                <p>
+                    Hours blur together, punctuated by occasional microwave beeps from the kitchen area.
+                    You're startled awake at one point by the sound of a vending machine angrily rejecting someone's dollar bills.
+                </p>
+                <p>
+                    Curiosity piqued, you peek around the corner.
+                    Under flickering fluorescents stands a lanky man in sweatpants,
+                    looking half-defeated and half-asleep near the snack dispenser that seems to deny him treasure.
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                    He senses your gaze and turns slowly, bags heavy beneath eyes that could tell stories of sleeplessness and late-night despair.
+                    "This stupid thing," he mutters, accent faintly coloring his weary words, "holds my only chance at dinner hostage."
+                </p>
+                <p>
+                    You offer him your spare change. Gratitude floods his exhausted expression as he retrieves a candy bar like he's just defused a bomb.
+                    "Munir," he introduces himself, shaking your hand, "the resident insomniac. You must be new? Nobody normal stays here past 8 pm."
+                </p>
+                <p>
+                    You laugh, introduce yourself, and in the quiet loneliness of the office, strike up an unexpectedly comfortable conversation.
+                    Munir reveals he's been at Subrose for almost a year—an eternity here, apparently.
+                    He jokes lightly, but a heaviness behind his eyes suggests otherwise.
+                </p>
+                <p>
+                    "So, Munir," you venture, having successfully navigated small talk, "do you actually know what Subrose does?"
+                </p>
+                <p>
+                    He sighs, glancing around reflexively, as though worried that even the walls might overhear.
+                    "I've tried figuring it out. The deeper I go, the less sense anything makes. People vanish here," he pauses meaningfully,
+                    "professionally, at least."
+                </p>
+            </StoryParagraph>,
+            <StoryParagraph>
+                <p>
+                You think of Mikah's team assignment and vague curiosity settles firmly in your chest.
+                Before you can ask him more, Munir glances at his watch and sighs dramatically.
+                "Well, back to pretending I'm productive." He offers a tired smile and wanders off toward his dimly lit desk.
+                </p>
+                <p>
+                You return to your screen, determined but wary.
+                As dawn filters softly through the blinds, you finally crack the puzzle within Project Chrysalis.
+                </p>
+            </StoryParagraph>,
+        ]
+    },
 	puzzleTy[3],
 	puzzleTy[4],
 	puzzleTy[5],
