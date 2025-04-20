@@ -1,5 +1,6 @@
 import { ComponentChildren } from "preact";
 import { fill } from "./ui";
+import { charMap, charMod, charToNum, numToChar } from "./eval";
 
 export type Puzzle = {
 	name: string, blurb: ComponentChildren,
@@ -12,9 +13,10 @@ function randString(chars: string[], len: number) {
 	return fill(len, ()=>chars[Math.floor(chars.length*Math.random())]).join("");
 }
 
-const alphaLen = 26;
+const alphaLen: number = charMod;
 // abcdefghijklmnopqrstuvwxyz
-const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i)); 
+// const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i)); 
+const alpha = charMap.map(x=>x[0]);
 const defaultGenLen: number = 10;
 // Uniform random int
 const randInt = (min: number, max: number)=>Math.floor(Math.random() * (max - min + 1)) + min;
@@ -23,20 +25,20 @@ const defaultGen = ()=>randString(alpha, defaultGenLen);
 // Assumes we are working with lowercase alphabet forever!!
 // Adds ct to c[0], wrapping around both directions
 function charAdd(c: string, ct: number) {
-	const cc = (c.charCodeAt(0) + ct % alphaLen + alphaLen) % alphaLen;
+	const cc = (charToNum[c.charAt(0)] + ct % alphaLen + alphaLen) % alphaLen;
 	if (cc < 0 || cc >= alphaLen) {
 		throw new Error("Invalid character in charAdd");
 	}
-	return String.fromCharCode(cc);
+	return numToChar[cc];
 }
 
-// function charInc(c: string) {
-// 	return charAdd(c, 1);
-// }
-
-// function charDec(c: string) {
-// 	return charAdd(c, -1);
-// }
+function shuffle<T>(s: T[]): T[] {
+	for (let i = s.length-1; i >= 0; --i) {
+		let ri = randInt(0, i);
+		[s[i], s[ri]] = [s[ri], s[i]];
+	}	
+	return s;
+}
 
 export const puzzles = [
 	{
@@ -66,15 +68,16 @@ export const puzzles = [
 			return fill(len, i=>charAdd(inp.charAt(i), i)).join("");
 		}
 	},
-	{
-		name: "Xor",
-		blurb: "a->b, b->a",
-		generator: defaultGen,
-		solve(inp) {
-			const len: number = inp.length;
-			return fill(len, i=>(inp.charCodeAt(i) % 2 == 1 ? charAdd(inp.charAt(i), 1) : charAdd(inp.charAt(i), -1))).join("");
-		}
-	},
+	// assumes alphabet has even length...
+	// {
+	// 	name: "Xor",
+	// 	blurb: "a->b, b->a",
+	// 	generator: defaultGen,
+	// 	solve(inp) {
+	// 		const len: number = inp.length;
+	// 		return fill(len, i=>(inp.charCodeAt(i) % 2 == 1 ? charAdd(inp.charAt(i), 1) : charAdd(inp.charAt(i), -1))).join("");
+	// 	}
+	// },
 	{
 		name: "Segment Reverse",
 		blurb: "Reverses each segment of plaintext, separated by 'x's",
@@ -110,7 +113,56 @@ export const puzzles = [
 					cipherAlphabet += char;
 				}
 			}
-			return fill(inp.length, i=>cipherAlphabet.charAt(inp.charCodeAt(i)-alpha[0].charCodeAt(0))).join("");
+			return fill(inp.length, i=>cipherAlphabet.charAt(charToNum[inp.charAt(i)])).join("");
+		}
+	},
+	{
+		name: "Atbash",
+		blurb: "Replace each character with the opposite side of the alphabet.",
+		generator: defaultGen,
+		solve(inp) {
+			return fill(inp.length, i=>numToChar[alphaLen-1-charToNum[inp.charAt(i)]]).join("");
+		}
+	},
+	// Probably boring with normal plaintext
+	// {
+	// 	name: "Run Length Encoding",
+	// 	blurb: ""
+	// }
+	{
+		name: "Half Interleave",
+		blurb: "Interleaves first and second half of the string",
+		generator: defaultGen,
+		solve(inp) {
+			return fill(inp.length, i=>inp.charAt(i % 2 == 0 ? Math.floor(i / 2) : 
+				Math.floor(i / 2) + Math.floor((inp.length + 1) / 2))).join(""); // Start from halfway, rounded up if odd
+		}
+	},
+	{
+		name: "Vigenere",
+		blurb: "Caesar but keyed on a string",
+		generator: defaultGen,
+		solve(inp) {
+			let key = "thomas"; // change
+			return fill(inp.length, i=>charAdd(inp.charAt(i), charToNum[key.charAt(i % key.length)])).join("");
+		}
+	},
+	{
+		name: "Alphabet Derangement",
+		blurb: "Split text into maximal segments of alphabetical order, shuffle each segment, separated by x",
+		generator: defaultGen,
+		solve(inp) {
+			let seg: string[] = [];
+			let res = "";
+			for (const char of inp) {
+				if (seg.length != 0 && charToNum[seg[seg.length-1]] > charToNum[char]) {
+					res += shuffle(seg).join("") + "x";
+					seg.length = 0;
+				} 
+				seg.push(char);
+			}
+			res += shuffle(seg).join("");
+			return res;
 		}
 	}
 ] as const satisfies Puzzle[];

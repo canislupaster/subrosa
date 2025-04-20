@@ -134,13 +134,13 @@ export function push(prog: ProgramState, procI: number, params: RegisterRef[]) {
 }
 
 const [charStart, charEnd] = ["a", "z"].map(x=>x.charCodeAt(0));
-const charMod = charEnd-charStart+2;
-const charMap = [
+export const charMod = charEnd-charStart+2;
+export const charMap = [
 	[" ", 0],
 	...fill(charEnd-charStart+1, i=>[String.fromCharCode(charStart+i), i+1])
 ] as [string, number][];
-const charToNum = Object.fromEntries(charMap);
-const numToChar = charMap.map(x=>x[0]);
+export const charToNum = Object.fromEntries(charMap);
+export const numToChar = charMap.map(x=>x[0]);
 
 export const stackLimit = 1024;
 export const strLenLimit = 1024;
