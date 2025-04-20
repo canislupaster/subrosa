@@ -325,7 +325,7 @@ function RegisterEditor({p, reg, setReg}: {
 	return <div className={twMerge(nodeStyle, "flex flex-col pl-2 items-stretch gap-1 pr-1")} >
 		<div className="flex flex-row gap-2 mb-1 items-center" >
 			<Text v="bold" >{"#"}{regI+1}</Text>
-			<HiddenInput key={p.i}
+			<HiddenInput
 				defaultValue={regV.name==null ? "" : regV.name}
 				placeholder={"(unnamed)"}
 				{...useValidity(v=>setReg({ ...regV, name: v.length==0 ? null : v }, reg))}
@@ -591,7 +591,7 @@ function ProcEditor({
 			<ul className={clsx("flex flex-col gap-2 overflow-y-auto", stack!=undefined && "max-h-1/3")}
 				ref={registerList} >
 				{proc.registerList.map(r=>
-					<RegisterEditor key={r} p={data} reg={r} setReg={setReg} />
+					<RegisterEditor key={`${procI}-${r}`} p={data} reg={r} setReg={setReg} />
 				)}
 
 				<Button className={blankStyle} onClick={()=>{
