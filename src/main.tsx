@@ -1,4 +1,4 @@
-import { Anchor, anchorStyle, bgColor, borderColor, Button, Container, fill, IconButton, LocalStorage, mapWith, parseExtra, setWith, stringifyExtra, Text, textColor, Theme, ThemeContext, throttle, useFnRef, useGoto } from "./ui";
+import { Anchor, anchorStyle, bgColor, borderColor, Button, clearLocalStorage, ConfirmModal, Container, fill, IconButton, LocalStorage, mapWith, parseExtra, setWith, stringifyExtra, Text, textColor, Theme, ThemeContext, throttle, useFnRef, useGoto } from "./ui";
 import { render } from "preact";
 import { useCallback, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
 import { Editor, makeProc } from "./editor";
@@ -10,6 +10,7 @@ import { LocationProvider, Route, Router } from "preact-iso";
 import { data } from "./data";
 import { twMerge } from "tailwind-merge";
 import { act } from "preact/test-utils";
+import clsx from "clsx";
 
 function Footer() {
   return <div className={`mt-20 ${textColor.dim} mb-10`} >
@@ -56,12 +57,12 @@ function ErrorPage({errName, err, reset}: {errName?: string, err?: unknown, rese
 const stageUrl = (x: Stage) => `${x.type}/${x.key}`;
 
 function Menu() {
-  const completed = useMemo(()=>{
+  const [completed, setCompleted] = useState(()=>{
     return {
       story: LocalStorage.readStory ?? new Set(),
       puzzle: LocalStorage.solvedPuzzles ?? new Set()
     };
-  }, []);
+  });
   
   const withDone = data.map((stage,i)=>({
     ...stage, i,
@@ -70,10 +71,18 @@ function Menu() {
 
   const activeStages = Math.max(-1, ...withDone.filter(x=>x.done).map(x=>x.i))+1;
   const goto = useGoto();
+  const [confirmReset, setConfirmReset] = useState(false);
 
   return <div className="flex flex-col gap-4 pt-20 max-w-xl" >
+    <ConfirmModal confirm={()=>{
+      clearLocalStorage();
+      setCompleted({ story: new Set(), puzzle: new Set() });
+    }} msg={"Are you sure you want to clear your progress?"}
+      open={confirmReset} onClose={()=>setConfirmReset(false)} />
+
     <Logo />
     <Text v="big" >Table of contents ({activeStages}/{data.length})</Text>
+
     {withDone.flat().map(stage=>{
       const dimmed = stage.i>activeStages ? textColor.dim : "";
       return <div className={twMerge(stage.i<=activeStages && anchorStyle, "flex flex-col gap-0.5 p-2 pt-1 group items-stretch relative pr-10")}
@@ -90,6 +99,8 @@ function Menu() {
       </div>
     })}
 
+    <Anchor className={clsx(textColor.red, "mt-2 -mb-5 self-start")}
+      onClick={()=>setConfirmReset(true)} >Reset progress</Anchor>
     <Footer />
   </div>;
 }
@@ -126,7 +137,6 @@ const procStorage = {
 
   setProcs(procs: [number, Procedure][]) {
     for (const [i,x] of procs) this.setUserProc(i,x);
-    LocalStorage.userProcs = procs.map(([x])=>x);
   }
 };
 

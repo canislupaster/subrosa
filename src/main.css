@@ -80,10 +80,10 @@ button:not(:disabled) {
   animation: blinker 0.7s cubic-bezier(0.98, -0.01, 0.09, 1.01) infinite alternate
 }
 
-.main-text > span {
-  @apply self-stretch flex flex-col;
+.main-text pre {
+  @apply text-[12px]
 }
 
-.main-text pre {
-  @apply text-[12px] self-center;
+.main-text-center span {
+  @apply flex w-full flex-col items-center
 }

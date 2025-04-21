@@ -695,17 +695,22 @@ export function parseExtra(str: string): unknown {
 	});
 }
 
+let localLocalStorage: LocalStorage = {};
+export function clearLocalStorage() {
+	localLocalStorage = {};
+	localStorage.clear();
+}
+
 for (const k of localStorageKeys) {
-	let v: unknown;
 	Object.defineProperty(LocalStorage, k, {
 		get() {
-			if (v!=undefined) return v;
+			if (localLocalStorage[k]!=undefined) return localLocalStorage[k];
 			const vStr = localStorage.getItem(k);
-			v = vStr!=null ? parseExtra(vStr) : undefined;
-			return v;
+			(localLocalStorage[k] as unknown) = vStr!=null ? parseExtra(vStr) : undefined;
+			return localLocalStorage[k];
 		},
 		set(newV) {
-			v=newV;
+			(localLocalStorage[k] as unknown) = newV;
 			localStorage.setItem(k, stringifyExtra(newV));
 		}
 	});
@@ -769,4 +774,19 @@ export function useFnRef<T extends Disposable>(f: ()=>T, deps?: unknown[]) {
 	}, deps);
 
 	return ret;
+}
+
+export function ConfirmModal({title, msg, open, onClose, confirm}: {
+	title?: string, msg: ComponentChildren, open: boolean, onClose: ()=>void, confirm: ()=>void
+}) {
+	return <Modal open={open} onClose={()=>onClose()} title={title ?? "Are you sure?"} className="flex flex-col gap-2" >
+		<Text>{msg}</Text>
+		<div className="flex flex-row gap-2" >
+			<Button className={bgColor.red} onClick={()=>{
+				onClose();
+				confirm();
+			}} >Delete</Button>
+			<Button onClick={()=>onClose()} >Cancel</Button>
+		</div>
+	</Modal>;
 }
