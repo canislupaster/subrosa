@@ -1,6 +1,6 @@
 import { ComponentChildren } from "preact";
 import { fill } from "./ui";
-import { charMap, charMod, charToNum, numToChar } from "./eval";
+import { charToNum, numToChar } from "./eval";
 
 export type Puzzle = {
 	name: string, blurb: ComponentChildren,

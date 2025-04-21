@@ -1,8 +1,8 @@
 import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { Procedure, Node, Register, RegisterRef, EditorState, push, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, Verdict, test } from "./eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, Dropdown, DropdownPart, fill, HiddenInput, IconButton, Input, Loading, LocalStorage, mapSetFn, mapWith, Modal, parseExtra, Select, SetFn, setWith, stringifyExtra, Text, textColor, ThemeSpinner, throttle, useDebounce, useFnRef, useGoto } from "./ui";
+import { Procedure, Node, Register, EditorState, push, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, Verdict, test } from "./eval";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, fill, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, parseExtra, Select, SetFn, setWith, stringifyExtra, Text, textColor, ThemeSpinner, throttle, useFnRef, useGoto } from "./ui";
 import { twMerge } from "tailwind-merge";
-import { IconArrowRight, IconCaretRightFilled, IconChevronCompactDown, IconChevronLeft, IconChevronRight, IconCircleCheckFilled, IconCircleMinus, IconCirclePlus, IconCirclePlusFilled, IconInfoCircle, IconMenu2, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconTrash, IconX } from "@tabler/icons-preact";
+import { IconArrowRight, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref } from "preact";
 import { dragAndDrop, useDragAndDrop } from "@formkit/drag-and-drop/react";
 import { animations, parentValues, performSort, remapNodes, setParentValues } from "@formkit/drag-and-drop";
@@ -10,12 +10,11 @@ import clsx from "clsx";
 import { ChangeEvent, SetStateAction } from "preact/compat";
 import { Puzzle } from "./puzzles";
 import testWorker from "./testworker?worker";
-import { Logo } from "./main";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2 nodrag");
 const nameInputProps = { minLength: 1, maxLength: 20, pattern: "^[\\w ]+$" } as const;
-const validNameRe = /^[\\w ]{1,20}$/;
+// const validNameRe = /^[\\w ]{1,20}$/;
 const validTextRe = new RegExp(`^[a-z ]{0,${strLenLimit}}$`);
 
 const builtinNodes: Node[] = [

@@ -1,8 +1,8 @@
 import { ComponentChild, ComponentChildren, createContext, Fragment } from "preact";
 import { useCallback, useContext, useEffect, useRef, useState } from "preact/hooks";
-import { Anchor, bgColor, Button, LocalStorage, useDisposable, Text, Divider, textColor, borderColor } from "./ui";
+import { Anchor, bgColor, Button, LocalStorage, useDisposable, Text, Divider, textColor } from "./ui";
 import clsx from "clsx";
-import { defaultGen, Puzzle } from "./puzzles";
+import { Puzzle } from "./puzzles";
 
 export function useStoryState<T=string>(key: string) {
 	const [x, setX] = useState<T>();
@@ -119,7 +119,7 @@ class TerminalEffect {
 							.map(x=>({ type: "text", content: x } as const))
 							.reduce((a,b): TerminalEvent[] =>
 								(a.length > 0 ? [...a, { type: "pause" }, b] : [b]),
-								[] satisfies TerminalEvent[]
+								[] as TerminalEvent[]
 							)
 					);
 				} else {

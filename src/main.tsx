@@ -1,15 +1,13 @@
-import { Anchor, anchorStyle, bgColor, borderColor, Button, clearLocalStorage, ConfirmModal, Container, fill, IconButton, LocalStorage, mapWith, parseExtra, setWith, stringifyExtra, Text, textColor, Theme, ThemeContext, throttle, useFnRef, useGoto } from "./ui";
+import { Anchor, anchorStyle, Button, clearLocalStorage, ConfirmModal, Container, LocalStorage, mapWith, parseExtra, setWith, stringifyExtra, Text, textColor, Theme, ThemeContext, throttle, useFnRef, useGoto } from "./ui";
 import { render } from "preact";
-import { useCallback, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useErrorBoundary, useState } from "preact/hooks";
 import { Editor, makeProc } from "./editor";
-import { Stage, Story, StoryParagraph } from "./story";
+import { Stage, Story } from "./story";
 import { EditorState, Procedure, Register } from "./eval";
-import { IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconX } from "@tabler/icons-preact";
-import { defaultGen } from "./puzzles";
+import { IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck } from "@tabler/icons-preact";
 import { LocationProvider, Route, Router } from "preact-iso";
 import { data } from "./data";
 import { twMerge } from "tailwind-merge";
-import { act } from "preact/test-utils";
 import clsx from "clsx";
 
 function Footer() {
