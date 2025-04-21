@@ -235,7 +235,7 @@ export const data: Stage[] = [
             </StoryParagraph>,
             <StoryParagraph>
                 Three days into the puzzle, you’ve figured it out.
-                As soon as the login screen resolves into a snazzy desktop, a Slack notification fouls the new-desktop smell.
+                As soon as the login screen resolves into a snazzy desktop, a Slack notification [pause] fouls the new-desktop smell.
                 You’re impressed – they’ve already ensnared you into the corporate hive-mind without action on your part.
                 It’s Karen, no last name (and no profile photo), who claims to be your mentor for the internship period.
             </StoryParagraph>,
@@ -407,7 +407,7 @@ export const data: Stage[] = [
                 People have shown up to the office in never-before-seen droves,
                 and every buzz of the entry gates drives your eyebrows further up
                 as you observe strangers sitting at the previously-empty desks around you,
-                like termites emerging from the woodwork after a fumigation.
+                like <b>termites [pause] emerging from the woodwork after a fumigation</b>.
                 Subrose, it appears, [pause] might actually be a publicly-traded company after all.
                 </p><p>
                 "There's sushi, pizza, salad, and something the caterer calls
@@ -415,9 +415,9 @@ export const data: Stage[] = [
                 you swear to yourself to remember this time. You forget immediately again.
                 </p><p>
                 Lunch chatter fills the air, but your attention drifts as you're handed another
-                aesthetically hostile card.
+                aesthetically <b>hostile</b> card.
                 You can tell by the aggressively minimalist font alone that this is another puzzle.
-                Subrose must have stock in a printing company—or perhaps a psychiatrist’s practice.
+                Subrose must have stock in a printing company — [pause]or perhaps a psychiatrist’s practice.
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
@@ -427,7 +427,7 @@ export const data: Stage[] = [
                 </p>
                 <p>
                     You're paired off with people you've never met before.
-                    Your group includes someone who looks suspiciously like a startup founder from LinkedIn circa 2013,
+                    Your group includes someone who looks suspiciously like a startup founder from <i>LinkedIn™</i> circa 2013,
                     a fellow intern nervously clutching three different notebooks,
                     and a woman whose glasses suggest she could crack Enigma codes before her morning coffee.
                 </p>
@@ -449,9 +449,9 @@ export const data: Stage[] = [
                     his alma mater. You're reassured to finally see Mikah in person;
                     you realize how much you've missed a familiar face in the last month.
                     The conversation somehow turns towards "making impact" and "moving the needle" –
-                    maybe being employed has affected your conversational skills more than you thought.
+                    being employed <i>has</i> affected your conversational skills more than you thought.
                     After small talk, you become comfortable enough to ask Mikah what it is that Subrose actually does.
-                    Mikah pauses.
+                    Mikah pauses. [pause]
                 </p>
                 <p>
                     "I have no idea and it's bugging me. But I'm finally getting assigned to a team today."
