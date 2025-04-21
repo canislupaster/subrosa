@@ -240,13 +240,17 @@ export const data: Stage[] = [
                 It’s Karen, no last name (and no profile photo), who claims to be your mentor for the internship period.
             </StoryParagraph>,
             <StoryParagraph>
-                Looking around at the sea of empty desks around you, you choose to believe this at face value. Karen introduces herself as a bouldering and hiking enthusiast who migrated from the Midwest to work on awesome and world-changing things at Subrose, giving her the unenviable distinction of having the exact same story as one in three female software engineers in the Bay Area.
+                Looking around at the sea of empty desks around you, you choose to believe this at face value.
+                Karen introduces herself as a bouldering and hiking enthusiast who migrated from the Midwest
+                to work on awesome and world-changing things at Subrose, giving her the unenviable distinction of
+                <i>having the exact same story as one in three female software engineers in the Bay Area.</i>
             </StoryParagraph>,
             <StoryParagraph>
                 <p>You’re worried that the previous thought makes you sound like an ass, and you’re probably right.
                 Keeping to the stereotype, she doesnt seem to know that punctuation exists</p>
-                Karen sends you some more cryptography exercises and you finish off your first week of work,
+                <p>Karen sends you some more cryptography exercises and you finish off your first week of work,
                 having only met the receptionist and not having mustered up the courage to talk to the indistinct figures on the far reaches of the office floor.
+                </p>
             </StoryParagraph>,
             <StoryParagraph>
                 <p>
@@ -263,8 +267,10 @@ export const data: Stage[] = [
                 In your most private childhood dreams, you wanted to grow up and <i>become a dinosaur</i>.
                 As a teenager, you imagined yourself <i>working on rockets that went boom</i>.
                 </p>
+                <p>
                 As a twenty year old, your lofty ambitions have been besieged by the endless buffet of free food and a paycheck
                 large enough to forgive the existential guilt of abandoning all idealism.
+                </p>
             </StoryParagraph>,
             <StoryParagraph>
                 Speaking of guilt, you haven’t thanked Mikah yet for the referral.
@@ -275,7 +281,8 @@ export const data: Stage[] = [
                 There’s sweaty Derek, who bikes to work despite your private hopes that he would give it up,
                 or at least discover deodorant. He has an office somewhere in the twisted maze of hallways at
                 the far end of the open plan area.</p>
-                <p>There's Egor Gagushin with a desk near the fire exits, who somehow has the vanity Slack username of <b>“eggag33”</b> – something you immediately envy him for.</p>
+                <p>There's Egor Gagushin with a desk near the fire exits, who somehow has the vanity Slack username of <b>“eggag33”</b> –
+                something you immediately envy him for.</p>
             </StoryParagraph>,
             <StoryParagraph>
                 There are a few other people who come in daily,
@@ -287,7 +294,7 @@ export const data: Stage[] = [
                 only to be met with a blank look as Derek asked, ‘Who’s Karen?”.
                 You stop short of proving her existence by pulling up your punctuation-less Slack chats.
             </StoryParagraph>,
-            <StoryParagraph>
+            <StoryParagraph noCursor={true}>
                 <pre>        
 :      .=-------------------------:+-                          <br />
 :       :........................  :=+.                        <br />
@@ -328,7 +335,7 @@ export const data: Stage[] = [
                 Just before leaving for the day, you receive a locked PDF payslip.
                 Surely there’s been a mistake, why would your payslip be <i>password-protected</i>?
                 The email, surely flouting a dozen state laws about payslip documents, states "<b>Worthy are those who claim this prize.</b>"
-                </p>
+                </p>[pause]
                 <p>
                 After a nervous laugh and email to HR, you’ve realized they’re serious.
                 Your options are either fighting this in court or just solving the puzzle they want you to solve,
@@ -401,7 +408,7 @@ export const data: Stage[] = [
                 and every buzz of the entry gates drives your eyebrows further up
                 as you observe strangers sitting at the previously-empty desks around you,
                 like termites emerging from the woodwork after a fumigation.
-                Subrose, it appears, might actually be a publicly-traded company after all.
+                Subrose, it appears, [pause] might actually be a publicly-traded company after all.
                 </p><p>
                 "There's sushi, pizza, salad, and something the caterer calls
                 'international fusion tacos,'" announces the receptionist, whose name
@@ -435,7 +442,7 @@ export const data: Stage[] = [
                     Mikah finally emerges, somehow looking both over and under-dressed in a cashmere hoodie and tailored trousers,
                     hair arranged in deliberate disarray. Everyone acts as if they're seeing royalty,
                     whispering and nodding reverently. Mikah strolls over, giving you an acknowledging nod.
-                    "We are a weird bunch. Glad to see you fit in."
+                    "We are a <i>weird</i> bunch. Glad to see you fit in."
                 </p>
                 <p>
                     You converse with Mikah for a while, catching him up to the latest news of Purdue,
@@ -450,7 +457,7 @@ export const data: Stage[] = [
                     "I have no idea and it's bugging me. But I'm finally getting assigned to a team today."
                 </p>
                 <p>
-                    Huh. You wish Mikah luck in his endeavor and make him promise to share his results of his quest with you.
+                    Huh. [pause] You wish Mikah luck in his endeavor and make him promise to share his results of his quest with you.
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
@@ -519,12 +526,13 @@ export const data: Stage[] = [
             <StoryParagraph>
                 <p>
                     It's been a week or three since the eventful team lunch. You look at the office in a new light,
-                    having realized that all those empty desks do have people assigned to them.
+                    having realized that all those empty desks <i>do</i> have people assigned to them.
                     Mikah hasn't replied to your messages – he must be really busy with his team.
                 </p>
                 <p>
-                    It's near the end of the workday, and yet you aren't looking forward to going back to your furniture-less apartment.
-                    Maybe you should stay a bit longer. As if encouraging you, the dull glow of the Apple Studio Display® flares up.
+                    It's near the end of the workday. Somehow, your furniture-less apartment is less appealling than staying longer.
+                    Perhaps it has to do with the fact your room is a mattress and nothing else.
+                    As if encouraging you, the dull glow of the Apple Studio Display® flares up.
                     You stare blankly at Karen's latest Slack message:
                 </p>
             </StoryParagraph>,
@@ -534,54 +542,57 @@ export const data: Stage[] = [
                 </p> [pause]
                 <p>
                 No punctuation, as usual. The message itself stirs a cocktail of excitement and vague dread in your soul.
-                A promotion for an intern? Did Karen somehow forget you're only here for a few months?
-                You don't question it; climbing the corporate ladder as a mere intern is exactly how you can compete
-                with your ambitiously unemployed classmates in San Francisco.
+                A promotion for <i>an intern?</i> Did Karen somehow forget you're only here for a few months?
+                You don't question it; <b>climbing the corporate ladder as a mere intern is exactly how you can compete
+                with your ambitiously unemployed classmates in San Francisco</b>.
                 </p>
                 <p>
-                Karen sends you a cryptic link to an internal document ominously titled "Project Chrysalis."
-                The document loads slowly, as if reluctantly participating in your career advancement.
+                Karen sends you a cryptic link to an internal document ominously titled "Project Chrysalis." [pause]
+                </p>
+                <p>"Chrysalis."</p>
+                <p>
+                Roll it around on your tongue, and <i>luxuriate</i> in the corporate.[pause]
+                The document loads [pause] slowly [pause], as if reluctantly [pause] participating [pause] in your career advancement.
                 </p>
                 <p>
-                Project Chrysalis is generously seasoned with acronyms that the people who wear suits on Zoom whisper as they dream of better days.
+                It's generously seasoned with acronyms that the people who wear suits on Zoom whisper in their wet dreams.
                 You recognize words like "synergy," "leverage," and not much else.
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
                 <p>
-                    You glance around—it's late. The office is nearly deserted again, its daytime vibrancy evaporated into eerie silence,
-                    illuminated solely by a sea of monitors left in various states of disarray.
+                    You glance around—it's late. The office is empty. The abyss that is your Apple Studio Display® blends with the dark all around. [pause]
                     Determined, you crack your knuckles and plunge into the puzzle embedded within Project Chrysalis' layers of corporate doublespeak.
                 </p>
                 <p>
-                    Hours blur together, punctuated by occasional microwave beeps from the kitchen area.
+                    Hours pass, punctuated by staccato microwave beeps from the kitchen area.
                     You're startled awake at one point by the sound of a vending machine angrily rejecting someone's dollar bills.
                 </p>
                 <p>
-                    Curiosity piqued, you peek around the corner.
-                    Under flickering fluorescents stands a lanky man in sweatpants,
-                    looking half-defeated and half-asleep near the snack dispenser that seems to deny him treasure.
+                    You peek around the corner. <br />
+                    Under flickering fluorescents stands a lanky man in sweatpants, <br />
+                    looking half-defeated and half-asleep near the snack dispenser that seems to deny him treasure. <br />
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
                 <p>
-                    He senses your gaze and turns slowly, bags heavy beneath eyes that could tell stories of sleeplessness and late-night despair.
+                    He senses your gaze and turns slowly, bags heavy beneath eyes. You're immediately worried that this man is <i>a mirror to your own sad visage.</i>
                     "This stupid thing," he mutters, accent faintly coloring his weary words, "holds my only chance at dinner hostage."
                 </p>
                 <p>
-                    You offer him your spare change. Gratitude floods his exhausted expression as he retrieves a candy bar like he's just defused a bomb.
-                    "Munir," he introduces himself, shaking your hand, "the resident insomniac. You must be new? Nobody normal stays here past 8 pm."
+                    A fellow <b><i>hungie</i></b> man. It is most natural to offer him your spare change.
+                    "Munir," he introduces himself, shaking your hand, "the resident insomniac. You must be new? Nobody <i>normal</i> stays here past 8 pm."
                 </p>
                 <p>
-                    You laugh, introduce yourself, and in the quiet loneliness of the office, strike up an unexpectedly comfortable conversation.
+                    Being called weird is a compliment in <i>these</i> circles. In the quiet loneliness of the office, you strike up an unexpectedly comfortable conversation. [pause]
                     Munir reveals he's been at Subrose for almost a year—an eternity here, apparently.
                     He jokes lightly, but a heaviness behind his eyes suggests otherwise.
                 </p>
                 <p>
-                    "So, Munir," you venture, having successfully navigated small talk, "do you actually know what Subrose does?"
+                    "So, Munir," you venture, having successfully navigated small talk, "do you actually know what Subrose does?" [pause]
                 </p>
                 <p>
-                    He sighs, glancing around reflexively, as though worried that even the walls might overhear.
+                    He sighs, glancing around; seemingly wishing that he could offshore the answer to someone else.
                     "I've tried figuring it out. The deeper I go, the less sense anything makes. People vanish here," he pauses meaningfully,
                     "professionally, at least."
                 </p>
@@ -590,11 +601,11 @@ export const data: Stage[] = [
                 <p>
                 You think of Mikah's team assignment and vague curiosity settles firmly in your chest.
                 Before you can ask him more, Munir glances at his watch and sighs dramatically.
-                "Well, back to pretending I'm productive." He offers a tired smile and wanders off toward his dimly lit desk.
+                "Well, back to pretending I'm productive." He offers a tired smile and wanders off toward his Apple Studio Display®-laden desk.
                 </p>
                 <p>
-                You return to your screen, determined but wary.
-                As dawn filters softly through the blinds, you finally crack the puzzle within Project Chrysalis.
+                You return to your screen, determined but wary. [pause]
+                As dawn filters softly through the blinds, you [pause] finally [pause] crack the puzzle within Project Chrysalis.
                 </p>
             </StoryParagraph>,
         ]
@@ -608,25 +619,29 @@ export const data: Stage[] = [
         para: [
             <StoryParagraph>
                 <p>
-                    The words "PROMOTION APPROVED 🎉" blink cheerfully across your screen. You lean back, basking momentarily in the triumph of deciphering Project Chrysalis. For a fleeting second, corporate absurdity feels almost bearable.
+                    The words "PROMOTION APPROVED 🎉" blink cheerfully across your screen. You lean back, basking in triumph.
+                    Corporate absurdity has no effect on you. [pause] For a second. [pause] It's gone now.
                 </p>
                 <p>
-                    You want to share this with a friend – the only friend you have here. You impulsively Slack Karen, optimism buoying your usually cautious approach. "Hey Karen, have you heard from Mikah lately?"
+                    You want to share this with a friend – the only friend you have here.
+                    You impulsively Slack Karen, optimism buoying your usually cautious approach. "Hey Karen, have you heard from Mikah lately?"
                 </p>
                 <p>
                     Dots dance briefly at the bottom of the Slack window, then pause. Finally, Karen responds.
                 </p>
                 <p>
-                    "mikahs been fired"
+                    "mikahs been fired" [pause]
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
                 <p>
-                    Your heart plummets, optimism extinguished instantly. Fingers hovering hesitantly over the keyboard, 
-                    you manage a shaky reply: "Why?"
+                     Fingers hovering hesitantly over the keyboard, you manage a shaky reply: "Why?" [pause]
                 </p>
                 <p>
                     "bad culture fit" Karen sends back quickly, no punctuation—her signature disregard now more irritating than quirky.
+                </p><p>
+                    Damn them to a thousand fiery hells. [pause] Nay, a million fiery hells. "They" is a nebulous concept,
+                    but you know that the list starts with the person who decided to fire Mikah. You are more alone than ever.
                 </p>
                 <p>
                     Days blur again into puzzles and cryptic meetings. You're spiraling. 
@@ -674,7 +689,8 @@ export const data: Stage[] = [
                     "Are mushrooms vegetables?" Derek asks earnestly. "They're both temporary fruiting bodies solely existing to propagate their species."
                 </p>
                 <p>
-                    "I'm a temporary fruiting body solely existing to propagate my species," you blurt. Silence descends. You stare forlornly at your fusion taco, suddenly aware of how little fruiting you've been doing lately.
+                    "I'm a temporary fruiting body solely existing to propagate my species," you blurt. [pause]
+                    Silence descends. You stare forlornly at your fusion taco, suddenly aware of how little fruiting you've been doing lately.
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
@@ -687,7 +703,7 @@ export const data: Stage[] = [
                 </p>
                 <p>
                     You stare blankly. Munir raises an expectant eyebrow.
-                </p>
+                </p>[pause]
                 <p>
                     "Two time travelers walk into a bar," he concludes with exaggerated patience.
                 </p>
@@ -711,7 +727,7 @@ export const data: Stage[] = [
                 </p>
                 <p>
                     "warcrimes as a service"
-                </p>
+                </p>[pause][pause]
                 <p>
                     Your pulse quickens. But before panic fully sets in, another message pops up instantly:
                 </p>
