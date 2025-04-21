@@ -50,7 +50,7 @@ class TerminalEffect {
 
 		this.cursorElem = document.createElement("span");
 		this.cursorElem.textContent = "█";
-		this.cursorElem.style.position="absolute";
+		this.cursorElem.style.width="0";
 		// this.cursorElem.classList.add("cursor");
 		this.cursorElem.classList.add("blink");
 
@@ -63,9 +63,6 @@ class TerminalEffect {
 		if (this.current >= this.msgs.length || --this.inPause > 0) {
 			return;
 		}
-
-		const scroll = document.scrollingElement!;
-		const byBottom = scroll.scrollTop > scroll.scrollHeight - scroll.clientHeight - 75;
 
 		if (this.current != -1 && this.msgs[this.current].ev.length > 0) {
 			let eaten = 0;
@@ -92,18 +89,18 @@ class TerminalEffect {
 			}
 
 			if (this.msgs[this.current].ev.length == 0) this.inPause = wait;
-			
-			if (byBottom) scroll.scrollIntoView({ behavior: "smooth", block: "end" });
 		}
 
-		if (this.inPause <= 0 && (this.current == -1 || this.msgs[this.current].ev.length == 0)) {
+		let skip=false;
+		while (this.current < this.msgs.length && this.inPause <= 0 && (this.current == -1 || this.msgs[this.current].ev.length == 0)) {
 			this.current++;
 
-			this.append("\n");
+			skip=true;
 			if (this.current < this.msgs.length) this.append(this.msgs[this.current].elem);
 			else this.onEnd?.();
 		}
 
+		if (skip) this.append("\n");
 		this.moveCursor();
 	}
 
@@ -175,25 +172,27 @@ export function StoryParagraph({ children, end, noCursor }: {
 }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const src = useRef<HTMLDivElement>(null);
-	const [done, setDone] = useState(false);
+	const [done, setDone] = useState(noCursor==true);
 	const [choice, setChoice] = useState<string|null>(null);
 	const ctx = useContext(StoryContext);
 
 	useDisposable(()=>{
-		if (!ref.current) return;
+		if (!ref.current || noCursor==true) return;
 
-		const fx = new TerminalEffect(ref.current, !ctx.active || noCursor==true);
+		const fx = new TerminalEffect(ref.current, !ctx.active);
 		if (ctx.active) setDone(false);
 		fx.onEnd = ()=>setDone(true);
 		fx.addMsg({ type: "server", content: [...src.current?.childNodes ?? []] });
-		if (!ctx.active || noCursor==true) fx.renderAll();
+		if (!ctx.active) fx.renderAll();
 
 		return fx;
 	}, [ctx, setDone]);
 
 	return <>
-		<div hidden ref={src} >{children}</div>
-		<div ref={ref} className={clsx(ctx.active ? "dark:text-green-300" : textColor.dim, "main-text flex flex-col w-full")} />
+		{noCursor!=true && <div hidden ref={src} >{children}</div>}
+		<div ref={ref} className={clsx(ctx.active ? "dark:text-green-300" : textColor.dim, "main-text w-full animate-fade-in", noCursor==true && "flex flex-col items-center main-text-center")} >
+			{noCursor==true && children}
+		</div>
 
 		{done && end?.choices && <div className="flex flex-row gap-2 flex-wrap" >
 			{end.choices.map(v=>
@@ -240,6 +239,26 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 		if (index>=stage.para.length) next?.();
 	}, [index, next, stage.para.length])
 	
+	useEffect(()=>{
+		const scroll = document.scrollingElement!;
+		const observer = new ResizeObserver(()=>{
+			if (byBottom) scroll.scrollIntoView({ behavior: "smooth", block: "end" });
+		});
+
+		let byBottom = false;
+		const cb = ()=>{
+			byBottom = scroll.scrollTop > scroll.scrollHeight - scroll.clientHeight - 75;
+		};
+
+		cb();
+		document.addEventListener("scroll", cb);
+		observer.observe(scroll);
+		return ()=>{
+			observer.disconnect();
+			document.removeEventListener("scroll", cb);
+		};
+	}, []);
+
 	return <div className="flex flex-col gap-2 justify-start items-start max-w-2xl grow" >
 		<Text v="big" className="my-4" >{stage.name}</Text>
 		{stage.para.slice(0, index+1).map((v,i)=><Fragment key={i} >

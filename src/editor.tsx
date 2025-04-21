@@ -1,6 +1,6 @@
 import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Procedure, Node, Register, RegisterRef, EditorState, push, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, Verdict, test } from "./eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, containerDefault, debounce, Divider, Dropdown, DropdownPart, fill, HiddenInput, IconButton, Input, Loading, LocalStorage, mapSetFn, mapWith, Modal, parseExtra, Select, SetFn, setWith, stringifyExtra, Text, textColor, ThemeSpinner, throttle, useDebounce, useFnRef, useGoto } from "./ui";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, Dropdown, DropdownPart, fill, HiddenInput, IconButton, Input, Loading, LocalStorage, mapSetFn, mapWith, Modal, parseExtra, Select, SetFn, setWith, stringifyExtra, Text, textColor, ThemeSpinner, throttle, useDebounce, useFnRef, useGoto } from "./ui";
 import { twMerge } from "tailwind-merge";
 import { IconArrowRight, IconCaretRightFilled, IconChevronCompactDown, IconChevronLeft, IconChevronRight, IconCircleCheckFilled, IconCircleMinus, IconCirclePlus, IconCirclePlusFilled, IconInfoCircle, IconMenu2, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref } from "preact";
@@ -357,9 +357,9 @@ function RegisterEditor({p, reg, setReg}: {
 			<Text v="smbold" className="self-center" >Parameter {"#"}{paramI+1}</Text>
 		</>}
 		
-		{runValue!=undefined && <>
+		{regRef!=undefined && runValue!=undefined && <>
 			<Divider className="my-1" />
-			<Text v="dim" >Current value ({typeof runValue=="string" ? "text" : "numeric"}):</Text>
+			<Text v="dim" >Current value ({typeof regRef.current=="string" ? "text" : "numeric"}):</Text>
 
 			<Input className={clsx(err2!=null && borderColor.red)} value={runValue}
 				onChange={ev=>setRunV(ev.currentTarget.value)} />
@@ -773,7 +773,10 @@ export function Editor({edit, setEdit, nextStage}: {
 		};
 	}, [activeProc, edit.active, runState?.stack]);
 	
-	const [confirmDelete, setConfirmDelete] = useState(false);
+	const [confirmDelete, setConfirmDelete] = useState<{proc: Procedure|null, open: boolean}>({
+		open: false, proc: null
+	});
+
 	const runStateRef = useRef<ProgramState|null>(null);
 	
 	useEffect(()=>{
@@ -903,15 +906,18 @@ export function Editor({edit, setEdit, nextStage}: {
 
 				<span className="w-2" />
 				
-				{runStatus.type!="stopped" && <IconButton icon={<IconPlayerStopFilled className="fill-red-500" />}
-					onClick={()=>{ setRunStatus({type: "stopped"}) }} />}
-
+				<IconButton icon={<IconPlayerStopFilled className="fill-red-500" />}
+					disabled={runStatus.type=="stopped"}
+					onClick={()=>{ setRunStatus({type: "stopped"}) }} />
 				
 				<IconButton icon={runStatus.type!="running" ? <IconPlayerPlayFilled className="fill-green-400" /> : <IconPlayerPauseFilled />}
-					disabled={runStatus.type=="done"} onClick={()=>play()} />
+					disabled={runStatus.type=="done"} onClick={()=>{
+						if (runStatus.type=="running") setRunStatus({type: "paused"});
+						else play();
+					}} />
 
-				{runStatus.type!="running" && <IconButton icon={<IconPlayerSkipForwardFilled className="fill-green-400" />}
-					disabled={runStatus.type=="done"} onClick={()=>play(true)} />}
+				<IconButton icon={<IconPlayerSkipForwardFilled className="fill-green-400" />}
+					disabled={runStatus.type=="running" || runStatus.type=="done"} onClick={()=>play(true)} />
 					
 				<span className="w-2" />
 
@@ -919,7 +925,7 @@ export function Editor({edit, setEdit, nextStage}: {
 					onClick={()=>mod(0.5)} />
 
 				<Button className="py-1 h-fit" onClick={()=>setEdit(e=>({...e, stepsPerS: 5}))} >
-					Speed: {edit.stepsPerS}
+					Speed: {edit.stepsPerS.toFixed(2)}
 				</Button>
 				
 				<IconButton disabled={edit.stepsPerS>500} icon={<IconPlayerTrackNextFilled />}
@@ -946,19 +952,16 @@ export function Editor({edit, setEdit, nextStage}: {
 				setInput={setInput} setSolved={markSolved} nextStage={nextStage} />
 		</Modal>}
 		
-		<Modal open={confirmDelete} onClose={()=>setConfirmDelete(false)} title="Delete procedure?" className="flex flex-col gap-2" >
-			<Text>Are you sure you want to delete {activeProc?.name}?</Text>
-			<div className="flex flex-row gap-2" >
-				<Button className={bgColor.red} onClick={()=>{
-					setEdit(v=>({
-						...v, procs: mapWith(v.procs, edit.active, undefined),
-						userProcList: v.userProcList.filter(x=>x!=edit.active)
-					}));
-					setConfirmDelete(false);
-				}} >Delete</Button>
-				<Button onClick={()=>setConfirmDelete(false)} >Cancel</Button>
-			</div>
-		</Modal>
+		<ConfirmModal open={confirmDelete.open}
+			onClose={()=>setConfirmDelete(v=>({...v, open: false}))}
+			title="Delete procedure?"
+			msg={`Are you sure you want to delete ${confirmDelete.proc?.name}?`}
+			confirm={()=>{
+			setEdit(v=>({
+				...v, procs: mapWith(v.procs, edit.active, undefined),
+				userProcList: v.userProcList.filter(x=>x!=edit.active)
+			}));
+		}} />
 
 		<Modal open={newProc.open} onClose={()=>setNewProc({...newProc, open: false})} title="Create procedure" >
 			<form onSubmit={(ev)=>{
@@ -989,7 +992,7 @@ export function Editor({edit, setEdit, nextStage}: {
 			userProcList={edit.userProcList}
 			setProcList={setProcList} isUserProc={edit.entryProc!=edit.active}
 			addProc={()=>setNewProc({...newProc, open: true})}
-			delProc={()=>setConfirmDelete(true)}
+			delProc={()=>setConfirmDelete({proc: activeProc, open: true})}
 			openProc={(i)=>setEdit(v=>({...v, active: i ?? v.entryProc}))}
 			runState={activeProcRunState}
 			stack={stack} />}
