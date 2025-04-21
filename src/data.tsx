@@ -240,7 +240,10 @@ export const data: Stage[] = [
                 It’s Karen, no last name (and no profile photo), who claims to be your mentor for the internship period.
             </StoryParagraph>,
             <StoryParagraph>
-                Looking around at the sea of empty desks around you, you choose to believe this at face value. Karen introduces herself as a bouldering and hiking enthusiast who migrated from the Midwest to work on awesome and world-changing things at Subrose, giving her the unenviable distinction of having the exact same story as one in three female software engineers in the Bay Area.
+                Looking around at the sea of empty desks around you, you choose to believe this at face value.
+                Karen introduces herself as a bouldering and hiking enthusiast who migrated from the Midwest
+                to work on awesome and world-changing things at Subrose, giving her the unenviable distinction of
+                <i>having the exact same story as one in three female software engineers in the Bay Area.</i>
             </StoryParagraph>,
             <StoryParagraph>
                 <p>You’re worried that the previous thought makes you sound like an ass, and you’re probably right.
@@ -278,7 +281,8 @@ export const data: Stage[] = [
                 There’s sweaty Derek, who bikes to work despite your private hopes that he would give it up,
                 or at least discover deodorant. He has an office somewhere in the twisted maze of hallways at
                 the far end of the open plan area.</p>
-                <p>There's Egor Gagushin with a desk near the fire exits, who somehow has the vanity Slack username of <b>“eggag33”</b> – something you immediately envy him for.</p>
+                <p>There's Egor Gagushin with a desk near the fire exits, who somehow has the vanity Slack username of <b>“eggag33”</b> –
+                something you immediately envy him for.</p>
             </StoryParagraph>,
             <StoryParagraph>
                 There are a few other people who come in daily,
@@ -438,7 +442,7 @@ export const data: Stage[] = [
                     Mikah finally emerges, somehow looking both over and under-dressed in a cashmere hoodie and tailored trousers,
                     hair arranged in deliberate disarray. Everyone acts as if they're seeing royalty,
                     whispering and nodding reverently. Mikah strolls over, giving you an acknowledging nod.
-                    "We are a weird bunch. Glad to see you fit in."
+                    "We are a <i>weird</i> bunch. Glad to see you fit in."
                 </p>
                 <p>
                     You converse with Mikah for a while, catching him up to the latest news of Purdue,
@@ -526,7 +530,8 @@ export const data: Stage[] = [
                     Mikah hasn't replied to your messages – he must be really busy with his team.
                 </p>
                 <p>
-                    It's near the end of the workday. Somehow, your furniture-less apartment is less-appealling than staying longer.
+                    It's near the end of the workday. Somehow, your furniture-less apartment is less appealling than staying longer.
+                    Perhaps it has to do with the fact your room is a mattress and nothing else.
                     As if encouraging you, the dull glow of the Apple Studio Display® flares up.
                     You stare blankly at Karen's latest Slack message:
                 </p>
@@ -542,12 +547,15 @@ export const data: Stage[] = [
                 with your ambitiously unemployed classmates in San Francisco</b>.
                 </p>
                 <p>
-                Karen sends you a cryptic link to an internal document ominously titled "Project Chrysalis." "Chrysalis."
+                Karen sends you a cryptic link to an internal document ominously titled "Project Chrysalis." [pause]
+                </p>
+                <p>"Chrysalis."</p>
+                <p>
                 Roll it around on your tongue, and <i>luxuriate</i> in the corporate.[pause]
                 The document loads [pause] slowly [pause], as if reluctantly [pause] participating [pause] in your career advancement.
                 </p>
                 <p>
-                Project Chrysalis is generously seasoned with acronyms that the people who wear suits on Zoom whisper as they dream of better days.
+                It's generously seasoned with acronyms that the people who wear suits on Zoom whisper in their wet dreams.
                 You recognize words like "synergy," "leverage," and not much else.
                 </p>
             </StoryParagraph>,
@@ -557,13 +565,13 @@ export const data: Stage[] = [
                     Determined, you crack your knuckles and plunge into the puzzle embedded within Project Chrysalis' layers of corporate doublespeak.
                 </p>
                 <p>
-                    Hours blur together, punctuated by occasional microwave beeps from the kitchen area.
+                    Hours pass, punctuated by staccato microwave beeps from the kitchen area.
                     You're startled awake at one point by the sound of a vending machine angrily rejecting someone's dollar bills.
                 </p>
                 <p>
-                    You peek around the corner.
-                    Under flickering fluorescents stands a lanky man in sweatpants,
-                    looking half-defeated and half-asleep near the snack dispenser that seems to deny him treasure.
+                    You peek around the corner. <br />
+                    Under flickering fluorescents stands a lanky man in sweatpants, <br />
+                    looking half-defeated and half-asleep near the snack dispenser that seems to deny him treasure. <br />
                 </p>
             </StoryParagraph>,
             <StoryParagraph>
@@ -611,10 +619,12 @@ export const data: Stage[] = [
         para: [
             <StoryParagraph>
                 <p>
-                    The words "PROMOTION APPROVED 🎉" blink cheerfully across your screen. You lean back, basking momentarily in the triumph of deciphering Project Chrysalis. For a fleeting second, corporate absurdity feels almost bearable.
+                    The words "PROMOTION APPROVED 🎉" blink cheerfully across your screen. You lean back, basking in triumph.
+                    Corporate absurdity has no effect on you. [pause] For a second. [pause] It's gone now.
                 </p>
                 <p>
-                    You want to share this with a friend – the only friend you have here. You impulsively Slack Karen, optimism buoying your usually cautious approach. "Hey Karen, have you heard from Mikah lately?"
+                    You want to share this with a friend – the only friend you have here.
+                    You impulsively Slack Karen, optimism buoying your usually cautious approach. "Hey Karen, have you heard from Mikah lately?"
                 </p>
                 <p>
                     Dots dance briefly at the bottom of the Slack window, then pause. Finally, Karen responds.
@@ -625,11 +635,13 @@ export const data: Stage[] = [
             </StoryParagraph>,
             <StoryParagraph>
                 <p>
-                    Your heart plummets, optimism extinguished instantly. Fingers hovering hesitantly over the keyboard, 
-                    you manage a shaky reply: "Why?" [pause]
+                     Fingers hovering hesitantly over the keyboard, you manage a shaky reply: "Why?" [pause]
                 </p>
                 <p>
                     "bad culture fit" Karen sends back quickly, no punctuation—her signature disregard now more irritating than quirky.
+                </p><p>
+                    Damn them to a thousand fiery hells. [pause] Nay, a million fiery hells. "They" is a nebulous concept,
+                    but you know that the list starts with the person who decided to fire Mikah. You are more alone than ever.
                 </p>
                 <p>
                     Days blur again into puzzles and cryptic meetings. You're spiraling. 
