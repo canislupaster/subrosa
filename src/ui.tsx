@@ -1,12 +1,13 @@
 import { ComponentChildren, JSX, ComponentProps, createContext, ComponentChild, Ref, RefObject } from "preact";
-import { Dispatch, useCallback, useContext, useEffect, useRef, useState } from "preact/hooks";
+import { Dispatch, useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { IconChevronDown, IconChevronUp, IconInfoCircleFilled, IconInfoTriangleFilled, IconLoader2, IconX } from "@tabler/icons-preact";
 import { twMerge } from "tailwind-merge";
 import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
 import { forwardRef, SetStateAction } from "preact/compat";
 import clsx from "clsx";
 import { useLocation } from "preact-iso";
-import { Procedure } from "./eval";
+import { Procedure } from "../shared/eval";
+import { parseExtra, stringifyExtra } from "../shared/util";
 
 // dump of a bunch of UI & utility stuff ive written...
 
@@ -39,26 +40,42 @@ export const bgColor = {
 }
 
 export const borderColor = {
-	default: "border-zinc-300 dark:border-zinc-600 disabled:bg-zinc-300 aria-expanded:border-blue-500 data-[selected=true]:border-blue-500 outline-none",
+	default: "border-zinc-300 dark:border-zinc-600 disabled:bg-zinc-300 aria-expanded:border-blue-500 data-[selected=true]:border-blue-500",
 	red: "border-red-400 dark:border-red-600",
-	defaultInteractive: "focus:outline-none border-zinc-300 hover:border-zinc-400 dark:border-zinc-600 dark:hover:border-zinc-500 disabled:bg-zinc-300 aria-expanded:border-blue-500 active:border-blue-500 dark:active:border-blue-500 data-[selected=true]:border-blue-500 outline-none",
+	defaultInteractive: "border-zinc-300 hover:border-zinc-400 dark:border-zinc-600 dark:hover:border-zinc-500 disabled:bg-zinc-300 aria-expanded:border-blue-500 active:border-blue-500 dark:active:border-blue-500 data-[selected=true]:border-blue-500",
 	blue: `hover:border-blue-500 dark:hover:border-blue-500 border-blue-500 dark:border-blue-500`,
 	focus: `focus:border-blue-500 dark:focus:border-blue-500`
 };
 
+export const outlineColor = {
+	default: "active:outline focus:outline focus:theme:outline-blue-500 active:theme:outline-blue-500 outline-offset-[-1px]"
+};
+
 export const containerDefault = `${textColor.default} ${bgColor.default} ${borderColor.default} border-1`;
 export const invalidInputStyle = `dark:invalid:bg-rose-900 invalid:bg-rose-400 dark:invalid:border-red-500 invalid:border-red-700`;
-export const interactiveContainerDefault = `${textColor.default} ${bgColor.default} ${borderColor.defaultInteractive} ${invalidInputStyle} border-1`;
+export const interactiveContainerDefault = `${textColor.default} ${bgColor.default} ${borderColor.defaultInteractive} ${outlineColor.default} ${invalidInputStyle} border-1`;
 
-export type InputProps = {icon?: ComponentChildren, className?: string}&JSX.InputHTMLAttributes<HTMLInputElement>;
-export function Input({className, icon, ...props}: InputProps) {
-	return <div className={twMerge("relative", className)} >
-		<input type="text" className={clsx("w-full p-2 border-2 transition duration-300 rounded-none", icon!=undefined && "pl-11", interactiveContainerDefault, borderColor.focus)} {...props} />
-		{icon!=undefined && <div className="absolute left-0 my-auto pl-3 top-0 bottom-0 flex flex-row items-center" >
-			{icon}
-		</div>}
-	</div>;
-}
+export type InputProps = {icon?: ComponentChildren, className?: string, valueChange?: (x: string)=>void}&JSX.InputHTMLAttributes<HTMLInputElement>;
+export const Input = forwardRef<HTMLInputElement, InputProps>((
+	{className, icon, onInput, valueChange, ...props}, ref
+)=>{
+	const input = <input type="text" className={clsx("w-full p-2 border-2 transition duration-300 rounded-none", icon!=undefined && "pl-11", interactiveContainerDefault, borderColor.focus, className)} onInput={
+		onInput ?? (valueChange!=undefined ? (ev: InputEvent)=>{
+			valueChange((ev.currentTarget as HTMLInputElement).value);
+		} : undefined)
+	} ref={ref} {...props} />
+
+	if (icon!=undefined) {
+		return <div className="relative" >
+			{input}
+			{icon!=undefined && <div className="absolute left-0 my-auto pl-3 top-0 bottom-0 flex flex-row items-center" >
+				{icon}
+			</div>}
+		</div>;
+	}
+
+	return input;
+});
 
 export function HiddenInput({className, ...props}: JSX.InputHTMLAttributes<HTMLInputElement>&{className?: string}) {
 	return <input className={twMerge(clsx("bg-transparent border-0 outline-none border-b-2 focus:outline-none focus:theme:border-blue-500 transition duration-300 px-1 py-px pb-0.5 h-fit", borderColor.default, className))}
@@ -72,7 +89,7 @@ export function Textarea({className, children, ...props}: JSX.IntrinsicElements[
 	</textarea>
 }
 
-export type ButtonProps = JSX.HTMLAttributes<HTMLButtonElement>&{
+export type ButtonProps = JSX.IntrinsicElements["button"]&{
 	icon?: ComponentChildren, disabled?: boolean, className?: string
 };
 
@@ -182,53 +199,107 @@ export const fadeGradient = {
 	secondary: "from-transparent dark:to-zinc-900 to-zinc-150"
 };
 
-// export function ShowMore({children, className, maxh, forceShowMore, inContainer}: {
-// 	children: ComponentChildren, className?: string, maxh?: string,
-// 	forceShowMore?: boolean, inContainer?: "primary"|"secondary"
-// }) {
-// 	const [showMore, setShowMore] = useState<boolean|null>(false);
-// 	const inner = useRef<HTMLDivElement>(null), ref=useRef<HTMLDivElement>(null);
+export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&{
+	open?: boolean
+}>((
+	{children, open, className, style, ...props}, ref
+)=>{
+	const myRef = useRef<HTMLDivElement>(null);
+	const innerRef = useRef<HTMLDivElement>(null);
+	const [showInner, setShowInner] = useState(false);
 
-// 	useEffect(()=>{
-// 		const a=inner.current!, b=ref.current!;
-// 		const check = () => {
-// 			const disableShowMore = !forceShowMore && a.scrollHeight<=b.clientHeight+100;
-// 			setShowMore(showMore=>disableShowMore ? null : (showMore ?? false));
-// 		};
+	useEffect(()=>{
+		const main=myRef.current, inner = innerRef.current
+		if (!main || !inner) return;
 
-// 		const observer = new ResizeObserver(check);
-// 		observer.observe(a); observer.observe(b);
-// 		return ()=>observer.disconnect();
-// 	}, [forceShowMore]);
+		let frame: number|null;
+		setShowInner(main.clientHeight>0 || open!=false);
+		let lt = performance.now();
+		const cb = ()=>requestAnimationFrame((t)=>{
+			const dt = t-lt;
+			const style = getComputedStyle(main);
+			const mainInnerHeight = main.clientHeight - parseFloat(style.paddingBottom) - parseFloat(style.paddingTop);
+			const d = (open==false ? 0 : inner.clientHeight) - mainInnerHeight;
+			const done = Math.abs(d) < 5;
+			let newH = (done ? d : d*dt*10/1000) + parseFloat(style.height);
+			if (d<0) newH=Math.floor(newH); else newH=Math.ceil(newH);
+			
+			if (mainInnerHeight<1 && newH>0) setShowInner(true);
+			else if (mainInnerHeight>0 && newH<1) setShowInner(false);
+			main.style.height = `${newH}px`;
 
-// 	const expanded = showMore==null || showMore==true || forceShowMore;
+			lt=t;
+			if (done) frame=null; else frame = cb();
+		});
+		
+		const observer = new ResizeObserver(()=>{
+			if (frame==null) frame=cb();
+		});
 
-// 	return <div className={className} >
-// 		<Collapse isOpened >
-// 			<div ref={ref} className={`relative ${expanded ? "" : "max-h-52 overflow-y-hidden"}`} style={{maxHeight: expanded ? undefined : maxh}}>
-// 				<div ref={inner} className={expanded ? "overflow-y-auto max-h-dvh" : ""} >
-// 					{children}
-// 				</div>
+		observer.observe(inner);
 
-// 				{!expanded && <div className="absolute bottom-0 left-0 right-0 z-40" >
-// 					<MoreButton act={()=>setShowMore(true)} down >
-// 						Show more
-// 					</MoreButton>
-// 				</div>}
+		frame = cb();
+		return ()=>{
+			observer.disconnect();
+			if (frame!=null) cancelAnimationFrame(frame);
+		};
+	}, [open]);
 
-// 				{!expanded &&
-// 					<div className={`absolute bottom-0 h-14 max-h-full bg-gradient-to-b z-20 left-0 right-0 ${fadeGradient[inContainer ?? "default"]}`} />}
-// 			</div>
+	return <div ref={cloneRef(ref, myRef)} className={twMerge("overflow-hidden", className as string)}
+		style={{height: 0, ...style as JSX.CSSProperties}} {...props} >
+		<div ref={innerRef} >
+			{showInner && children}
+		</div>
+	</div>;
+});
 
-// 			{showMore && <MoreButton act={()=>{
-// 				ref.current?.scrollIntoView({block: "start", behavior: "smooth"});
-// 				setShowMore(false)
-// 			}} className="pt-2" >
-// 				Show less
-// 			</MoreButton>}
-// 		</Collapse>
-// 	</div>;
-// }
+export function ShowMore({children, className, maxh, forceShowMore, inContainer}: {
+	children: ComponentChildren, className?: string, maxh?: string,
+	forceShowMore?: boolean, inContainer?: "primary"|"secondary"
+}) {
+	const [showMore, setShowMore] = useState<boolean|null>(false);
+	const inner = useRef<HTMLDivElement>(null), ref=useRef<HTMLDivElement>(null);
+
+	useEffect(()=>{
+		const a=inner.current!, b=ref.current!;
+		const check = () => {
+			const disableShowMore = forceShowMore!=true && a.scrollHeight<=b.clientHeight+100;
+			setShowMore(showMore=>disableShowMore ? null : (showMore ?? false));
+		};
+
+		const observer = new ResizeObserver(check);
+		observer.observe(a); observer.observe(b);
+		return ()=>observer.disconnect();
+	}, [forceShowMore]);
+
+	const expanded = showMore==null || showMore==true || forceShowMore==true;
+
+	return <div className={className} >
+		<Collapse>
+			<div ref={ref} className={`relative ${expanded ? "" : "max-h-52 overflow-y-hidden"}`} style={{maxHeight: expanded ? undefined : maxh}}>
+				<div ref={inner} className={expanded ? "overflow-y-auto max-h-dvh" : ""} >
+					{children}
+				</div>
+
+				{!expanded && <div className="absolute bottom-0 left-0 right-0 z-40" >
+					<MoreButton act={()=>setShowMore(true)} down >
+						Show more
+					</MoreButton>
+				</div>}
+
+				{!expanded &&
+					<div className={`absolute bottom-0 h-14 max-h-full bg-gradient-to-b z-20 left-0 right-0 ${fadeGradient[inContainer ?? "default"]}`} />}
+			</div>
+
+			{showMore==true && <MoreButton act={()=>{
+				ref.current?.scrollIntoView({block: "start", behavior: "smooth"});
+				setShowMore(false)
+			}} className="pt-2" >
+				Show less
+			</MoreButton>}
+		</Collapse>
+	</div>;
+}
 
 type TextVariants = "big"|"lg"|"md"|"dim"|"bold"|"normal"|"err"|"sm"|"smbold"|"code";
 export function Text({className, children, v, ...props}:
@@ -262,7 +333,7 @@ export function Modal({bad, open, onClose, title, children, className, ...props}
 		else modalRef.current?.close();
 	}, [open]);
 
-	return <dialog className={twMerge(clsx(bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "opacity-0 transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0", className))}
+	return <dialog className={twMerge(clsx(bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "opacity-0 transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 pt-4 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0 gap-2", className))}
 		style={{opacity: open ? 1 : 0.001, pointerEvents: open ? undefined : "none"}}
 		ref={modalRef}
 		onClose={(ev)=>{
@@ -276,7 +347,9 @@ export function Modal({bad, open, onClose, title, children, className, ...props}
 
 		{title!=undefined && <>
 			<Text v="big">{title}</Text>
-			<Divider contrast={bad} />
+			<div className="my-0" >
+				<Divider className="absolute left-0 right-0 my-auto" contrast={bad} />
+			</div>
 		</>}
 
 		{children}
@@ -331,7 +404,8 @@ export const AppTooltip = forwardRef(({
 
 	useEffect(()=>{
 		onOpenChange?.(isOpen);
-	}, [isOpen, onOpenChange, setOpen])
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isOpen, setOpen])
 
 	const targetRef = useRef<HTMLDivElement>(null);
 	
@@ -356,7 +430,7 @@ export const AppTooltip = forwardRef(({
 
 	return <Popover
 		ref={cloneRef(targetRef, ref)}
-		onClickOutside={()=>setOpen(0)}
+		onClickOutside={()=>incCount()}
 		positions={placement ?? ['top', 'right', 'left', 'bottom']}
 		containerStyle={{ zIndex: "100000" }}
 		padding={5}
@@ -376,10 +450,10 @@ export const AppTooltip = forwardRef(({
 				popoverRect={popoverRect}
 				arrowClassName={borderClass}
 				arrowSize={7} arrowColor="" >
-				<div className={twMerge(clsx(containerDefault, "p-2 py-1", className))}
-					onPointerEnter={interact} onPointerLeave={unInteract} {...props} >
+				<Collapse className={twMerge(clsx(containerDefault, "p-2 py-1", className))}
+					onPointerEnter={interact} onPointerLeave={unInteract} open={isOpen} {...props} >
 					{content}
-				</div>
+				</Collapse>
 			</ArrowContainer>;
 		}}
 		containerClassName="max-w-96"
@@ -389,65 +463,136 @@ export const AppTooltip = forwardRef(({
 });
 
 export type DropdownPart = ({type: "txt", txt?: ComponentChildren}
+	| {type: "big", txt?: ComponentChildren}
 	| { type: "act", name?: ComponentChildren, act: ()=>void,
-			disabled?: boolean, active?: boolean })&{key?: unknown};
+			disabled?: boolean, active?: boolean })&{key?: string|number};
 
-export function Dropdown({parts, trigger, onOpenChange, ...props}: {
-	trigger?: ComponentChildren, parts: DropdownPart[], onOpenChange?: (x:boolean)=>void
+export function Dropdown({parts, trigger, ...props}: {
+	trigger?: ComponentChildren, parts: DropdownPart[],
 }&Partial<ComponentProps<typeof AppTooltip>>) {
-	const { incCount } = useContext(PopupCountCtx);
+	const [keySel, setKeySel] = useState<string|number|null>(null);
+	const [focusSel, setFocusSel] = useState<boolean>(false);
 
-	//these components are fucked up w/ preact and props don't merge properly with container element
-	return <AppTooltip onOpenChange={onOpenChange}
-		className="dark:bg-zinc-900 bg-zinc-100 border-0 px-0 py-0 max-w-60 overflow-y-auto justify-start max-h-[min(90dvh,30rem)] z-50" 
-		noHover
+	const acts = parts.map((v,i)=>({key: v.key ?? i, type: v.type})).filter(v=>v.type=="act");
+	const idx = keySel!=null ? acts.findIndex(p=>p.key==keySel) : -1;
+
+	const [open, setOpen] = useState(false);
+	const ctx = useContext(PopupCountCtx);
+	return <AppTooltip placement="bottom"
+		onOpenChange={setOpen}
+		className="px-0 py-0 max-w-60 overflow-y-auto justify-start max-h-[min(90dvh,30rem)]"
 		content={parts.map((x,i) => {
-			if (x.type=="act") {
+			if (x.type=="act")
 				return <Button key={x.key ?? i} disabled={x.disabled}
-					className={clsx("m-0 dark:border-zinc-700 border-zinc-300 border-b-0.5 border-t-0.5 rounded-none dark:hover:bg-zinc-700 hover:bg-zinc-300 w-full", x.active!=false && "dark:bg-zinc-950 bg-zinc-200")}
+					className={`m-0 dark:border-zinc-700 border-zinc-300 border-t-0 first:border-t dark:hover:bg-zinc-700 hover:bg-zinc-300 w-full hover:outline hover:theme:border-b-transparent [&:not(:focus)]:hover:dark:outline-zinc-600 [&:not(:focus)]:hover:outline-zinc-400 ${
+						x.active==true ? "dark:bg-zinc-950 bg-zinc-200" : ""
+					} ${outlineColor.default}`}
+					onBlur={(x.key??i)==keySel ? ()=>setFocusSel(false) : undefined}
+					ref={(el)=>{
+						if ((x.key??i)==keySel && el!=null && focusSel) {
+							el.focus();
+						}
+					}}
 					onClick={() => {
-						x.act();
-						incCount();
+						x.act(); ctx.incCount();
 					}} >{x.name}</Button>;
-			}
-
-			return <div key={x.key ?? i}
-				className="flex flex-row justify-start gap-4 p-2 dark:bg-zinc-900 bg-zinc-100 items-center border m-0 dark:border-zinc-700 border-zinc-300 border-t-0 first:border-t rounded-none first:rounded-t-md last:rounded-b-md w-full" >
+			else if (x.type=="txt") return <div key={x.key ?? i}
+				className="flex flex-row justify-center gap-4 dark:bg-zinc-900 bg-zinc-100 items-center border m-0 dark:border-zinc-700 border-zinc-300 border-t-0 first:border-t rounded-none w-full" >
 				{x.txt}
-			</div>;
-		})} {...props} >
-		{trigger}
+			</div>
+			
+			return <div key={x.key ?? i}
+				className="flex flex-row justify-start gap-4 p-2 dark:bg-zinc-900 bg-zinc-100 items-center border m-0 dark:border-zinc-700 border-zinc-300 border-t-0 first:border-t rounded-none w-full" >
+				{x.txt}
+			</div>
+		})} 
+		onKeyDown={(ev)=>{
+			if (acts.length==0 || !open) return;
+
+			if (ev.key=="ArrowDown") {
+				const nidx = idx==-1 ? 0 : (idx+1)%acts.length;
+				setKeySel(acts[nidx].key);
+				setFocusSel(true);
+				ev.preventDefault();
+			} else if (ev.key=="ArrowUp") {
+				const pidx = idx==-1 ? acts.length-1 : (idx+acts.length-1)%acts.length;
+				setKeySel(acts[pidx].key);
+				setFocusSel(true);
+				ev.preventDefault();
+			}
+		}} {...props} >
+		<div>{trigger}</div>
 	</AppTooltip>;
 }
 
-export function Select<T>({ options, value, setValue, placeholder, className, disabled, ...props }: {
-	options: { label: ComponentChildren, value?: T, key?: unknown, disabled?: boolean }[],
+//mounted in popover
+//if it focuses too soon, then popover has not measured itself yet and we scroll to a random ass place
+//what the fuck.
+function LazyAutoFocusSearch({search,setSearch,onSubmit}:{
+	search: string, setSearch: (x:string)=>void, onSubmit?: ()=>void
+}) {
+	const ref = useRef<HTMLInputElement>(null);
+
+	useEffect(()=>{
+		const t = setTimeout(()=>ref.current?.focus(), 50);
+		return ()=>clearTimeout(t);
+	}, []);
+
+	return <form onSubmit={(ev)=>{
+		onSubmit?.(); ev.preventDefault();
+	}} className="contents"  >
+		<Input placeholder="Search..." ref={ref}
+			className="theme:border-1 py-1"
+			value={search} valueChange={setSearch} />
+	</form>;
+}
+
+export function Select<T>({ options, value, setValue, placeholder, className, disabled, searchable, ...props }: {
+	options: { label: ComponentChildren, value?: T, key?: string|number, disabled?: boolean }[],
 	value?: T, setValue?: (x: T)=>void,
-	placeholder?: ComponentChildren,
+	placeholder?: ComponentChildren, searchable?: boolean,
 	className?: string, disabled?: boolean
 }&Partial<ComponentProps<typeof Dropdown>>) {
+	const [search, setSearch] = useState("");
 	const curOpt = value==undefined ? undefined : options.find(x=>x.value==value);
+	const parts: DropdownPart[] = useMemo(()=>{
+		const s = toSearchString(search);
+		return options.filter(v=>{
+			if (typeof v.label=="string") return toSearchString(v.label).includes(s);
+			return true;
+		}).map(opt=>{
+			const v=opt.value;
+			return v==undefined ? {
+				type: "txt", txt: opt.label, key: opt.key
+			} : {
+				type: "act", name: opt.label,
+				active: opt.value==value,
+				disabled: opt.disabled,
+				act() { setValue?.(v); }, key: opt.key
+			};
+		})
+	}, [options, search, setValue, value]);
 
-	return <Dropdown parts={options.map(opt=>{
-		const v=opt.value;
-		return v==undefined ? {
-			type: "txt", txt: opt.label, key: opt.key
-		} : {
-			type: "act", name: opt.label,
-			active: opt.value==value,
-			disabled: opt.disabled,
-			act() { setValue?.(v); }, key: opt.key
-		};
-	})}
-	trigger={<div>
+	const ctx = useContext(PopupCountCtx);
+	return <Dropdown noHover trigger={<div>
 		<Button className={twMerge("pr-1 pl-1 py-0.5 min-w-0", className)} disabled={disabled} >
 			<div className="basis-16 grow whitespace-nowrap overflow-hidden max-w-24" >
 				{curOpt==undefined ? placeholder : curOpt.label}
 			</div>
 			<IconChevronDown />
 		</Button>
-	</div>}
-	{...props} />
+	</div>} parts={[
+		...searchable!=true ? [] : [{
+			type: "txt",
+			txt: <LazyAutoFocusSearch search={search} setSearch={setSearch} onSubmit={()=>{
+				if (parts.length==1 && parts[0].type=="act") {
+					parts[0].act(); ctx.incCount();
+				}
+			}} />,
+			key: "search"
+		} as const],
+		...parts
+	]} onOpenChange={()=>setSearch("")} {...props} />
 }
 
 export type Theme = "light"|"dark";
@@ -460,11 +605,6 @@ export function Container({children, className, ...props}: {
 	children?: ComponentChildren, className?: string
 }&JSX.HTMLAttributes<HTMLDivElement>) {
 	const {theme} = useContext(ThemeContext);
-	useEffect(() => {
-		const html = document.getElementsByTagName("html")[0];
-		html.classList.add(theme);
-		return () => html.classList.remove(theme);
-	}, [theme]);
 
 	const [count, setCount] = useState(0);
 	const incCount = useCallback(()=>{
@@ -472,6 +612,12 @@ export function Container({children, className, ...props}: {
 		setCount(x=>{return r=x+1;}); // look away child
 		return r!;
 	}, [setCount]);
+
+	useEffect(() => {
+		const html = document.getElementsByTagName("html")[0];
+		html.classList.add(theme);
+		return ()=>html.classList.remove(theme);
+	}, [theme, incCount]);
 
 	return <PopupCountCtx.Provider value={{count, incCount}} >
 		<div className={twMerge("font-body dark:text-gray-100 dark:bg-neutral-950 text-gray-950 bg-neutral-100 min-h-dvh", className)}
@@ -550,6 +696,9 @@ export function withTimeout<T extends unknown[], R>(f: (...args: T)=>Promise<R>,
 		f(...args)
 	]);
 }
+
+export const abbr = (s: string, len: number=300) =>
+	s.length > len ? `${s.substring(0, len-3)}...` : s;
 
 export function useAsync<T extends unknown[], R>(f: (...args: T)=>Promise<R>, opts?: {
 	propagateError?: boolean,
@@ -658,44 +807,33 @@ export function throttle(ms: number) {
 export type LocalStorage = Partial<{
 	theme: Theme,
 	storyState: Record<string, unknown>,
+	storyParagraph: Record<string, number>,
 	solvedPuzzles: Set<string>,
 	readStory: Set<string>,
 
 	userProcs: number[],
 	// entry point is always id -1
 	puzzleProcs: Map<string, Procedure>,
-	stepsPerS: number,
-}>;
+	stepsPerS: number
+}>&{
+	toJSON(): unknown
+};
 
-const localStorageKeys: (keyof LocalStorage)[] = [
+const localStorageKeys: (Exclude<keyof LocalStorage,"toJSON">)[] = [
 	"theme", "storyState",
 	"puzzleProcs", "readStory",
 	"solvedPuzzles", "stepsPerS",
-	"userProcs"
+	"userProcs", "storyParagraph"
 ];
-export const LocalStorage = {} as unknown as LocalStorage;
 
-export function stringifyExtra(value: unknown) {
-	return JSON.stringify(value, (_,v: unknown)=>{
-		if (v instanceof Map) return { __dtype: "map", value: [...v.entries()] };
-		else if (v instanceof Set) return { __dtype: "set", value: [...v.values()] };
-		return v;
-	});
-}
+export const LocalStorage = {
+	toJSON() {
+		return Object.fromEntries(localStorageKeys.map(k=>[k, parseExtra(localStorage.getItem(k))]));
+	}
+} as unknown as LocalStorage;
 
-export function parseExtra(str: string): unknown {
-	return JSON.parse(str, (_,v)=>{
-		const v2 = v as { __dtype: "set", value: [unknown][] }
-			|{ __dtype: "map", value: [unknown,unknown][] }|{ __dtype: undefined };
-		if (v2!=null && typeof v2=="object") {
-			if (v2.__dtype=="map") return new Map(v2.value);
-			else if (v2.__dtype=="set") return new Set(v2.value);
-		}
-		return v2;
-	});
-}
+let localLocalStorage: Omit<LocalStorage, "toJSON"> = {};
 
-let localLocalStorage: LocalStorage = {};
 export function clearLocalStorage() {
 	localLocalStorage = {};
 	localStorage.clear();
@@ -740,14 +878,6 @@ export function setWith<K>(set: ReadonlySet<K>|null, k: K) {
 
 export type SetFn<T> = (cb: (old: T)=>T)=>void;
 
-type NoFunction<T> = T extends (...args: unknown[])=>unknown ? never : T;
-export function fill<T>(len: number, v: NoFunction<T>|((idx: number)=>T)): T[] {
-	if (typeof v=="function") {
-		return [...new Array(len) as unknown[]].map((_,i): T=>(v as ((idx: number)=>T))(i));
-	}
-	return [...new Array(len) as unknown[]].map(()=>v);
-}
-
 export function mapSetFn<T,R>(x: SetFn<T>, f: (x: R, old: T)=>T, get: (x: T)=>R): Dispatch<SetStateAction<R>> {
 	return (nv)=>{
 		if (typeof nv=="function") x(old=>(f((nv as (v: R)=>R)(get(old)), old)));
@@ -776,17 +906,24 @@ export function useFnRef<T extends Disposable>(f: ()=>T, deps?: unknown[]) {
 	return ret;
 }
 
-export function ConfirmModal({title, msg, open, onClose, confirm}: {
-	title?: string, msg: ComponentChildren, open: boolean, onClose: ()=>void, confirm: ()=>void
+export function ConfirmModal({title, actionName, msg, open, onClose, confirm, defaultYes}: {
+	title?: string, msg: ComponentChildren, open: boolean, onClose: ()=>void,
+	confirm: ()=>void, defaultYes?: boolean, actionName?: string
 }) {
 	return <Modal open={open} onClose={()=>onClose()} title={title ?? "Are you sure?"} className="flex flex-col gap-2" >
-		<Text>{msg}</Text>
-		<div className="flex flex-row gap-2" >
-			<Button className={bgColor.red} onClick={()=>{
-				onClose();
-				confirm();
-			}} >Delete</Button>
-			<Button onClick={()=>onClose()} >Cancel</Button>
-		</div>
+		<form onSubmit={(ev)=>{
+			ev.preventDefault();
+			if (defaultYes==true) confirm();
+			onClose();
+		}} >
+			<Text>{msg}</Text>
+			<div className="flex flex-row gap-2" >
+				<Button className={bgColor.red} onClick={()=>{
+					onClose();
+					confirm();
+				}} autofocus={defaultYes} >{actionName ?? title ?? "Confirm"}</Button>
+				<Button autofocus={defaultYes!=true} type="button" onClick={()=>onClose()} >Cancel</Button>
+			</div>
+		</form>
 	</Modal>;
 }

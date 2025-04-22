@@ -1,5 +1,4 @@
-import { Puzzle } from "./puzzles";
-import { fill } from "./ui";
+import { fill } from "./util.ts";
 
 export type Register = Readonly<({
 	type: "value", value: number|string // initial values, determined by program state at runtime
@@ -43,16 +42,39 @@ export type Node = Readonly<{
 
 export type RegisterRef = { current: number|string };
 
+export type ProgramStats = {
+	time: number,
+	nodes: number,
+	registers: number
+};
 
-export type ProgramState<T=RegisterRef> = Readonly<{
+export type ProgramState = {
 	procs: ReadonlyMap<number, Procedure>, //ehhh
-	outputRegister: T,
+	outputRegister: RegisterRef,
+	visitedNodes: Map<number,Set<number>>,
+	activeRegisters: Set<RegisterRef>,
+	stats: ProgramStats,
 	stack: {
 		proc: number,
-		registers: ReadonlyMap<number,T>,
+		registers: ReadonlyMap<number,RegisterRef>,
 		i: number
 	}[];
-}>;
+};
+
+export function makeState({input, procs, entry}: {
+	input: string,
+	procs: ReadonlyMap<number, Procedure>,
+	entry: number
+}): ProgramState {
+	const pstate: ProgramState = {
+		procs, outputRegister: {current: input}, stack: [],
+		visitedNodes: new Map(), activeRegisters: new Set(),
+		stats: { nodes: 0, time: 0, registers: 0 }
+	};
+
+	push(pstate, entry, [pstate.outputRegister]);
+	return pstate;
+}
 
 export type EditorState = Readonly<{
 	procs: ReadonlyMap<number, Procedure>,
@@ -65,7 +87,6 @@ export type EditorState = Readonly<{
 	input: string,
 	stepsPerS: number,
 
-	puzzle?: Puzzle,
 	solved: boolean
 }>;
 
@@ -98,16 +119,18 @@ export class InterpreterError extends Error {
 
 // creates an non-runnable (register refs are broken) but accurate copy
 export type RegisterRefClone = RegisterRef&{ mutable: RegisterRef };
-export function clone(prog: ProgramState): ProgramState<RegisterRefClone> {
+export function clone(prog: ProgramState) {
 	return {
 		...prog,
+		procs: undefined, visitedNodes: undefined, activeRegisters: undefined,
+		stats: { ...prog.stats },
 		outputRegister: {...prog.outputRegister, mutable: prog.outputRegister},
 		stack: prog.stack.map(v=>({
 			...v, registers: new Map(v.registers.entries().map(([k,v])=>[
 				k, {...v, mutable: v}
 			]))
 		}))
-	};
+	} as const;
 }
 
 export function push(prog: ProgramState, procI: number, params: RegisterRef[]) {
@@ -149,6 +172,7 @@ export const timeLimit = 64*stackLimit;
 
 export function step(prog: ProgramState) {
 	if (prog.stack.length==0) return false;
+	prog.stats.time++;
 
 	const last = prog.stack[prog.stack.length-1];
 	const lastProc = prog.procs.get(last.proc);
@@ -157,6 +181,15 @@ export function step(prog: ProgramState) {
 	const nodeI = lastProc.nodeList[last.i];
 	if (nodeI==undefined) {
 		if (prog.stack.length<=1) return false;
+
+		for (const i of lastProc.registerList) {
+			const r = lastProc.registers.get(i);
+			const r2 = last.registers.get(i);
+			if (r && r2 && r.type!="param") {
+				prog.activeRegisters.delete(r2);
+			}
+		}
+
 		prog.stack.pop();
 		// increment to next node after call in previous frame
 		// `i` should always track active node (either going to be evaluated
@@ -165,12 +198,33 @@ export function step(prog: ProgramState) {
 		return true;
 	}
 	
+	// ik this is inflated but its kind of more economical structure
+	// i dont know why i did that
+	const oldVis = prog.visitedNodes.get(last.proc);
+	if (oldVis) {
+		if (!oldVis.has(nodeI)) {
+			oldVis.add(nodeI);
+			prog.stats.nodes++; 
+		}
+	} else {
+		prog.visitedNodes.set(last.proc, new Set([nodeI]));
+		prog.stats.nodes++;
+	}
+
 	const x = lastProc.nodes.get(nodeI);
 	if (!x) throw new InterpreterError({ type: "noNodeToGoto" });
 
 	const get = (r: number) => {
 		const v = last.registers.get(r);
 		if (!v) throw new InterpreterError({ type: "noRegister" })
+
+		if (!prog.activeRegisters.has(v)) {
+			prog.activeRegisters.add(v);
+			if (prog.activeRegisters.size>prog.stats.registers) {
+				prog.stats.registers = prog.activeRegisters.size;
+			}
+		}
+
 		return v;
 	};
 	
@@ -185,7 +239,7 @@ export function step(prog: ProgramState) {
 		if (typeof v=="number") v=numToChar[v%charMod] ?? "";
 		return v;
 	};
-
+	
 	const compute = (op: "add"|"sub"|"set", l: RegisterRef, r: RegisterRef) => {
 		const swap = typeof l=="number" && typeof r=="string";
 		if (swap) [r,l]=[l,r];
@@ -217,6 +271,7 @@ export function step(prog: ProgramState) {
 			throw new Error("unreachable");
 		}
 
+		if (typeof out=="string") out=out.trimEnd();
 		if (swap) r.current=out;
 		else l.current=out;
 	};
@@ -241,7 +296,7 @@ export function step(prog: ProgramState) {
 			
 			if (outS!=null) {
 				if (outS.length>strLenLimit) throw new InterpreterError({type: "stringTooLong"});
-				get(lhs).current=outS;
+				get(lhs).current=outS.trimEnd();
 			}
 		}
 	};
@@ -261,7 +316,7 @@ export function step(prog: ProgramState) {
 	} else if (x.op=="goto") {
 		let to: number|undefined;
 		if (x.ref==undefined) to=lastProc.nodeList.length;
-		else to = lastProc.nodeList.indexOf(x.ref as number);
+		else to = lastProc.nodeList.indexOf(x.ref as number); // 🤡 do i optimize? everything is so slow
 
 		if (to==-1 || to==undefined) throw new InterpreterError({ type: "noNodeToGoto" });
 
@@ -277,7 +332,9 @@ export function step(prog: ProgramState) {
 	return true;
 }
 
-export type Verdict = { type: "RE"|"WA"|"AC"|"TLE" };
+export type Verdict = {
+	type: "RE"|"WA"|"AC"|"TLE",
+}&ProgramStats;
 
 export function test({ input, output, proc, procs }: {
 	input: string,
@@ -286,17 +343,21 @@ export function test({ input, output, proc, procs }: {
 	procs: ReadonlyMap<number,Procedure>
 }): Verdict {
 	const reg = {current: input};
+
+	let pstateStats: ProgramStats = {nodes: 0, time: 0, registers: 0};
+
 	try {
-		const pstate: ProgramState = { procs, outputRegister: reg, stack: [] };
-		push(pstate, proc, [reg]);
-		let count = timeLimit;
+		const pstate = makeState({ input, procs, entry: proc });
+		pstateStats = pstate.stats;
+
 		while (step(pstate)) {
-			if (--count<=0) return {type: "TLE"};
+			if (pstate.stats.time >= timeLimit) return {type: "TLE", ...pstateStats};
 		}
-		if (reg.current!=output) return {type: "WA"};
-		return {type: "AC"};
+
+		if (reg.current!=output) return {type: "WA", ...pstateStats};
+		return {type: "AC", ...pstate.stats};
 	} catch (e) {
-		if (e instanceof InterpreterError) return {type: "RE"};
+		if (e instanceof InterpreterError) return {type: "RE", ...pstateStats};
 		throw e;
 	}
 }

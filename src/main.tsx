@@ -1,14 +1,15 @@
-import { Anchor, anchorStyle, Button, clearLocalStorage, ConfirmModal, Container, LocalStorage, mapWith, parseExtra, setWith, stringifyExtra, Text, textColor, Theme, ThemeContext, throttle, useFnRef, useGoto } from "./ui";
-import { render } from "preact";
+import { Anchor, anchorStyle, bgColor, Button, clearLocalStorage, ConfirmModal, Container, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useFnRef, useGoto, useMd } from "./ui";
+import { ComponentChildren, render } from "preact";
 import { useCallback, useErrorBoundary, useState } from "preact/hooks";
 import { Editor, makeProc } from "./editor";
-import { Stage, Story } from "./story";
-import { EditorState, Procedure, Register } from "./eval";
-import { IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck } from "@tabler/icons-preact";
-import { LocationProvider, Route, Router } from "preact-iso";
-import { data } from "./data";
+import { Stage, stages, Story } from "./story";
+import { EditorState, Procedure, Register } from "../shared/eval";
+import { IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled } from "@tabler/icons-preact";
+import { LocationProvider, Route, Router, useLocation, useRoute } from "preact-iso";
 import { twMerge } from "tailwind-merge";
 import clsx from "clsx";
+import { parseExtra, stringifyExtra } from "../shared/util";
+import { stageUrl } from "../shared/data";
 
 function Footer() {
   return <div className={`mt-20 ${textColor.dim} mb-10`} >
@@ -41,45 +42,90 @@ export function Logo({className}: {className?: string}) {
   return <button onClick={()=>goto("/")} className={twMerge("w-1/2 self-end hover:scale-105 transition-transform", className)} ><img src="/logo.svg" /></button>;
 }
 
-function ErrorPage({errName, err, reset}: {errName?: string, err?: unknown, reset?: ()=>void}) {
+function ErrorPage({errName, err, reset, children}: {
+  errName?: string, err?: unknown, reset?: ()=>void, children?: ComponentChildren
+}) {
   return <div className="max-w-md flex flex-col w-full pt-20 gap-2" >
     <Logo />
     <Text v="big" >{errName ?? "An error occurred"}</Text>
     {reset && <Text>Try refreshing, or click <Anchor onClick={()=>reset()} >here</Anchor> to retry.</Text>}
     {err!=undefined && <Text v="dim" >Details: {err instanceof Error ? err.message : err}</Text>}
-
+    <div>
+      {children}
+    </div>
     <Footer />
   </div>;
 }
 
-const stageUrl = (x: Stage) => `${x.type}/${x.key}`;
+type Save = {
+  localStorage: LocalStorage,
+  procs: [number, Procedure][]
+};
+
+function getCompleted() {
+  const story =  LocalStorage.readStory ?? new Set();
+  const puzzle =  LocalStorage.solvedPuzzles ?? new Set();
+  const withDone = stages.map((stage,i)=>({
+    ...stage, i,
+    done: stage.type=="puzzle" ? puzzle.has(stage.key) : story.has(stage.key)
+  }));
+  const activeStages = Math.max(-1, ...withDone.filter(x=>x.done).map(x=>x.i))+1;
+
+  return { story, puzzle, withDone, activeStages } as const;
+}
 
 function Menu() {
-  const [completed, setCompleted] = useState(()=>{
-    return {
-      story: LocalStorage.readStory ?? new Set(),
-      puzzle: LocalStorage.solvedPuzzles ?? new Set()
-    };
-  });
+  const [{withDone, activeStages}, setCompleted] = useState(getCompleted);
   
-  const withDone = data.map((stage,i)=>({
-    ...stage, i,
-    done: stage.type=="puzzle" ? completed.puzzle.has(stage.key) : completed.story.has(stage.key)
-  }));
-
-  const activeStages = Math.max(-1, ...withDone.filter(x=>x.done).map(x=>x.i))+1;
   const goto = useGoto();
   const [confirmReset, setConfirmReset] = useState(false);
+
+  const [importing, setImporting] = useState(false);
+  const [importData, setImportData] = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  const percentProgress = `${Math.round((activeStages-1)/stages.length * 100)}%`;
 
   return <div className="flex flex-col gap-4 pt-20 max-w-xl" >
     <ConfirmModal confirm={()=>{
       clearLocalStorage();
-      setCompleted({ story: new Set(), puzzle: new Set() });
+      setCompleted(getCompleted());
     }} msg={"Are you sure you want to clear your progress?"}
       open={confirmReset} onClose={()=>setConfirmReset(false)} />
 
+    <Modal open={importing} onClose={()=>setImporting(false)} title="Import data" >
+      <Text v="err" >This will overwrite all existing data.</Text>
+
+      <form onSubmit={(ev)=>{
+        ev.preventDefault();
+
+        const save = parseExtra(importData) as Save;
+        for (const k in save.localStorage) {
+          // casting hell
+          (LocalStorage[k as keyof LocalStorage] as unknown) = save.localStorage[k as keyof LocalStorage] as unknown;
+        }
+        
+        procStorage.setProcs(save.procs);
+        setCompleted(getCompleted());
+        setImporting(false);
+      }} className="flex flex-col gap-2" >
+        <Text>Paste an export below:</Text>
+        <Input value={importData} valueChange={setImportData} />
+        <Button>Import data</Button>
+      </form>
+    </Modal>
+
+    <Modal open={exporting} onClose={()=>setExporting(false)} title="Exported data" >
+      <Text>Your export has been copied to your clipboard. It might be big.</Text>
+    </Modal>
+
     <Logo />
-    <Text v="big" >Table of contents ({activeStages}/{data.length})</Text>
+    <Text v="big" >Table of contents</Text>
+
+    <div className={clsx(bgColor.default, "w-full py-2 px-2 relative -my-2 overflow-hidden")} >
+      <Text v="md" className="relative z-20" >{activeStages-1}/{stages.length} ({percentProgress})</Text>
+      <div className={clsx(bgColor.green, "absolute rounded-r-md top-0 bottom-0 left-0 z-10")} style={{width: percentProgress}} />
+    </div>
 
     {withDone.flat().map(stage=>{
       const dimmed = stage.i>activeStages ? textColor.dim : "";
@@ -91,14 +137,28 @@ function Menu() {
         <div className="flex flex-row gap-2 items-center" >
           {stage.done ? <IconCircleCheckFilled /> : stage.i<=activeStages && <IconCircleDashedCheck />}
           <Text v="bold" className={dimmed} >{stage.name}</Text>
+          {stage.type=="puzzle" && <IconPuzzleFilled />}
         </div>
         {stage.i<=activeStages && <IconChevronRight size={36} className="transition-transform group-hover:translate-x-4 absolute top-2 right-4" />}
         <Text v="sm" className={dimmed} >{stage.blurb}</Text>
       </div>
     })}
 
-    <Anchor className={clsx(textColor.red, "mt-2 -mb-5 self-start")}
-      onClick={()=>setConfirmReset(true)} >Reset progress</Anchor>
+    <div className="flex flex-row w-full justify-between mt-2 -mb-5 self-start" >
+      <Anchor className={textColor.red}
+        onClick={()=>setConfirmReset(true)} >Reset progress</Anchor>
+      <Anchor onClick={()=>setImporting(true)} >Import data</Anchor>
+      <Anchor onClick={()=>{
+        const txt = stringifyExtra({
+          localStorage: LocalStorage,
+          procs: procStorage.getProcs()
+        } satisfies Save);
+
+        void window.navigator.clipboard.writeText(txt);
+
+        setExporting(true);
+      }} >Export data</Anchor>
+    </div>
     <Footer />
   </div>;
 }
@@ -109,8 +169,7 @@ const procStorage = {
   throttleSave: throttle(5000),
 
   getUserProc(i: number): Procedure|null {
-    const s = localStorage.getItem(`proc${i}`);
-    return s==null ? null : parseExtra(s) as Procedure;
+    return parseExtra(localStorage.getItem(`proc${i}`)) as Procedure|null;
   },
   
   getProcs() {
@@ -135,6 +194,7 @@ const procStorage = {
 
   setProcs(procs: [number, Procedure][]) {
     for (const [i,x] of procs) this.setUserProc(i,x);
+    LocalStorage.userProcs = procs.map(([x])=>x);
   }
 };
 
@@ -159,7 +219,7 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
       procs: new Map([...userProcs, [-1, entryProc]]),
       userProcList: userProcs.map(([i])=>i),
       maxProc, entryProc: -1, active: -1,
-      input: "", stepsPerS: LocalStorage.stepsPerS ?? 5, puzzle: stage,
+      input: "", stepsPerS: LocalStorage.stepsPerS ?? 5,
       solved: LocalStorage.solvedPuzzles?.has(stage.key) ?? false
     };
   });
@@ -185,49 +245,74 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
   }), [stage.key, throttleSave]);
 
   const goto = useGoto();
-  return <Editor edit={edit} setEdit={setEdit2} nextStage={()=>{
-    goto(stageUrl(data[i+1]));
+  return <Editor edit={edit} setEdit={setEdit2} puzzle={stage} nextStage={()=>{
+    goto(stageUrl(stages[i+1]));
   }} />;
 }
 
 function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
   const goto = useGoto();
-  return <div className="md:w-2xl w-md flex flex-col pb-[50dvh] pt-10" >
+  return <div className="md:w-2xl w-md flex flex-col pb-[30dvh] pt-10" >
     <Logo className="w-1/3" />
-    <Story stage={stage} next={i+1>=data.length ? undefined : ()=>{
+    <Story stage={stage} next={i+1>=stages.length ? undefined : ()=>{
       LocalStorage.readStory = setWith(LocalStorage.readStory??null, stage.key);
-      goto(stageUrl(data[i+1]));
+      goto(stageUrl(stages[i+1]));
     }} />
   </div>;
 }
 
-function App({theme: initialTheme}: {theme: Theme}) {
-  const [theme, setTheme] = useState(initialTheme);
+function LockedStage() {
+  return <ErrorPage errName="You can't access that yet." >
+    Go back to <Anchor href="/menu" >the menu</Anchor>.
+  </ErrorPage>;
+}
+
+function InnerApp() {
   const [err, resetErr] = useErrorBoundary((err)=>{
     console.error("app error boundary", err);
   }) as [unknown, ()=>void];
+  const route = useLocation();
+  const md = useMd();
 
-  let inner = <Router>
+  if (err!=undefined) return <ErrorPage err={err} reset={resetErr} />;
+
+  console.log(route.path);
+  if (!md && route.path!="/") {
+    return <div className="flex flex-col items-center justify-center gap-2 p-4 h-dvh" >
+      <IconDeviceDesktopFilled size={128} />
+      <Text v="bold" >This experience functions best on a desktop-size display.</Text>
+      <Text>Please switch to a larger display or rotate your screen.</Text>
+      
+      <Logo className="mt-8" />
+    </div>;    
+  }
+
+  const { withDone, activeStages } = getCompleted();
+
+  return <Router>
     <Route path="/" component={Home} />
     <Route path="/menu" component={Menu} />
-    { data.map((stage,i)=>{
+    { withDone.map((stage)=>{
       const path = stageUrl(stage);
       return <Route key={path} path={path} component={
-        ()=>stage.type=="story" ? <StoryStage i={i} stage={stage} />
-          : <PuzzleStage i={i} stage={stage} />
+        ()=>stage.i>activeStages ? <LockedStage />
+          : stage.type=="story" ? <StoryStage i={stage.i} stage={stage} />
+          : <PuzzleStage i={stage.i} stage={stage} />
       } />;
     }) }
-    <Route default component={()=><ErrorPage errName="Page not found" err={<>
+    <Route default component={()=><ErrorPage errName="Page not found" >
       Go back <Anchor href="/" >home</Anchor>.
-    </>} />} />
+    </ErrorPage>} />
   </Router>;
-  
-  if (err!=undefined) inner=<ErrorPage err={err} reset={resetErr} />;
+}
+
+function App({theme: initialTheme}: {theme: Theme}) {
+  const [theme, setTheme] = useState(initialTheme);
 
   return <LocationProvider>
     <ThemeContext.Provider value={{theme, setTheme}} >
       <Container className="flex flex-col items-center" >
-        {inner}
+        <InnerApp />
       </Container>
     </ThemeContext.Provider>
   </LocationProvider>;

@@ -1,9 +1,8 @@
-import { ComponentChildren } from "preact";
-import { fill } from "./ui";
-import { charToNum, numToChar } from "./eval";
+import { charToNum, numToChar } from "./eval.ts";
+import { fill } from "./util.ts";
 
 export type Puzzle = {
-	name: string, blurb: ComponentChildren,
+	name: string,
 	key: string,
 	generator: ()=>string, // generate an input
 	solve: (inp: string)=>string, // encrypt an input
@@ -47,7 +46,6 @@ export const puzzles = [
 		// Caesar
 		name: "Decrypting your password.",
 		key: "salad",
-		blurb: "Company cultures are weird.",
 		generator: defaultGen,
 		solve(inp) {
 			const key: number = 2;
@@ -59,7 +57,6 @@ export const puzzles = [
 		// Reverse
 		name: "How much do they pay me, exactly?",
 		key: "elzzup",
-		blurb: "Money is important.",
 		generator: defaultGen,
 		solve(inp) {
 			return inp.split("").reverse().join("");
@@ -69,7 +66,6 @@ export const puzzles = [
 		// Incremental Caesar
 		name: "Team Puzzles are Just the Thing You Need.",
 		key: "olive-oil",
-		blurb: `Three employees walk into a bar. They don't get drunk.`,
 		generator: defaultGen,
 		solve(inp) {
 			const len: number = inp.length;
@@ -90,7 +86,6 @@ export const puzzles = [
 		// Segment Reverse
 		name: "You gotta work for your promotions.",
 		key: "implementation-challenge",
-		blurb: "There's no free lunch, even in sunny California.",
 		generator() {
 			return fill(defaultGenLen, ()=>(Math.random() > 0.8 ? "x" : randString(alpha, 1))).join("");
 		},
@@ -113,7 +108,6 @@ export const puzzles = [
 		// Keyword Substitution
 		name: "Can you handle the truth?",
 		key: "keyword",
-		blurb: `The first real puzzle you're solving.`,
 		generator: defaultGen,
 		solve(inp) {
 			const key = "mikah"; // change
@@ -135,7 +129,6 @@ export const puzzles = [
 		// Atbash
 		name: "bash",
 		key: "shell",
-		blurb: "Originally used to encrypt Hebrew...",
 		generator: defaultGen,
 		solve(inp) {
 			return fill(inp.length, i=>numToChar[alphaLen-1-charToNum[inp.charAt(i)]]).join("");
@@ -145,7 +138,6 @@ export const puzzles = [
 		// Base 13
 		name: "Rot 13",
 		key: "rot-13",
-		blurb: "Definitely not rot-13. Don't even try!",
 		generator: defaultGen,
 		solve(inp) {
 			let sum = 0;
@@ -172,7 +164,6 @@ export const puzzles = [
 		// Half interleave
 		name: "Tricky transposition",
 		key: "leaf",
-		blurb: "Puzzle invented by ChatGPT. Can you solve it!?",
 		generator: defaultGen,
 		solve(inp) {
 			return fill(inp.length, i=>inp.charAt(i % 2 == 0 ? Math.floor(i / 2) : 
@@ -183,7 +174,6 @@ export const puzzles = [
 		// Vigenere
 		name: "Secret 2",
 		key: "vinegar",
-		blurb: "Since you love secret keywords so much, here's another...",
 		generator: defaultGen,
 		solve(inp) {
 			const key = "waas"; // change
@@ -194,7 +184,6 @@ export const puzzles = [
 		// Alphabet Derangement
 		name: "ABCs",
 		key: "abcdfghijklmnopqrstuvwxyz",
-		blurb: "aeHv fnu!",
 		generator: defaultGen,
 		solve(inp) {
 			const seg: string[] = [];

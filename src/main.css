@@ -21,6 +21,9 @@
   --color-zinc-850: #19302d;  /* between 800 and 900 */
   --color-zinc-900: #131414;
   --color-zinc-950: #0e0f0f;
+  
+  --color-neutral-950: #0e1211;
+  --color-gray-100: #ebedec;
 }
 
 @custom-variant dark (&:is(.dark, .dark *));
@@ -76,14 +79,17 @@ button:not(:disabled) {
 }
 
 @keyframes blinker { to { opacity: 0; } }
-.blink {
+.cursor {
+  display: inline-block;
+  vertical-align: text-top;
+  width: 10px;
+  height: 1.2rem;
+  margin-left: -2px;
+  background: linear-gradient(to right, #d1ffde4d, #5efd8b);
   animation: blinker 0.7s cubic-bezier(0.98, -0.01, 0.09, 1.01) infinite alternate
 }
 
-.main-text pre {
-  @apply text-[12px]
+.main-text .text-bit {
+  animation: fade-in 0.1s linear forwards;
 }
 
-.main-text-center span {
-  @apply flex w-full flex-col items-center
-}

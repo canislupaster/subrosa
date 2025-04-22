@@ -1,5 +1,5 @@
-import { test } from "./eval";
-import { parseExtra, stringifyExtra } from "./ui";
+import { test } from "./eval.ts";
+import { parseExtra, stringifyExtra } from "./util.ts";
 
 onmessage = (ev)=>{
 	const opt = parseExtra(ev.data as string) as Parameters<typeof test>[0];

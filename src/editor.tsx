@@ -1,18 +1,20 @@
 import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { Procedure, Node, Register, EditorState, push, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, Verdict, test } from "./eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, fill, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, parseExtra, Select, SetFn, setWith, stringifyExtra, Text, textColor, ThemeSpinner, throttle, useFnRef, useGoto } from "./ui";
+import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, Verdict, test, makeState } from "../shared/eval";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, textColor, ThemeSpinner, throttle, toSearchString, useFnRef, useGoto } from "./ui";
 import { twMerge } from "tailwind-merge";
-import { IconArrowRight, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconTrash, IconX } from "@tabler/icons-preact";
+import { IconArrowRight, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref } from "preact";
 import { dragAndDrop, useDragAndDrop } from "@formkit/drag-and-drop/react";
-import { animations, parentValues, performSort, remapNodes, setParentValues } from "@formkit/drag-and-drop";
+import { animations, parentValues, remapNodes, setParentValues } from "@formkit/drag-and-drop";
 import clsx from "clsx";
 import { ChangeEvent, SetStateAction } from "preact/compat";
-import { Puzzle } from "./puzzles";
-import testWorker from "./testworker?worker";
+import Tester from "../shared/worker?worker";
+import { fill, parseExtra, stringifyExtra } from "../shared/util";
+import { Stage } from "./story";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2 nodrag");
+const dropStyle = "[.drop,.drop_*]:theme:bg-amber-800";
 const nameInputProps = { minLength: 1, maxLength: 20, pattern: "^[\\w ]+$" } as const;
 // const validNameRe = /^[\\w ]{1,20}$/;
 const validTextRe = new RegExp(`^[a-z ]{0,${strLenLimit}}$`);
@@ -69,6 +71,7 @@ function RegisterPicker({p, x, setX, desc}: {
 					};
 				})
 			]}
+			searchable
 			disabled={setX==undefined}
 			placeholder={"(unset)"}
 			value={x} setValue={setX} />
@@ -251,7 +254,7 @@ function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active}: {
 		</>;
 	}
 	
-	return <div className={twMerge(nodeStyle, "transition-colors", (active ?? false) && bgColor.highlight)} >
+	return <div className={twMerge(nodeStyle, "transition-colors", (active ?? false) && bgColor.highlight, dropStyle, "mb-2")} >
 		<img src={`/${iconURL(node)}`} className="w-10 cursor-move mb-4" />
 		{idx!=undefined && <Text v="dim" className="absolute left-1 bottom-1" >{idx}</Text>}
 		{inner}
@@ -321,9 +324,9 @@ function RegisterEditor({p, reg, setReg}: {
 		setRunValue(x);
 	};
 
-	return <div className={twMerge(nodeStyle, "flex flex-col pl-2 items-stretch gap-1 pr-1")} >
+	return <div className={twMerge(nodeStyle, dropStyle, "flex flex-col pl-2 items-stretch gap-1 pr-1")} >
 		<div className="flex flex-row gap-2 mb-1 items-center" >
-			<Text v="bold" >{"#"}{regI+1}</Text>
+			<Text v="bold" className="cursor-move" >{"#"}{regI+1}</Text>
 			<HiddenInput
 				defaultValue={regV.name==null ? "" : regV.name}
 				placeholder={"(unnamed)"}
@@ -337,7 +340,7 @@ function RegisterEditor({p, reg, setReg}: {
 		<Text v="dim" >Register type:</Text>
 		<SelectRegisterType className="w-full" options={[
 			{ label: "Parameter", value: "param" },
-			{ label: "String", value: "string" },
+			{ label: "Text", value: "string" },
 			{ label: "Number", value: "number" }
 		] as const} value={regV.type=="param" ? "param"
 			: typeof regV.value=="string" ? "string" : "number"}
@@ -348,7 +351,7 @@ function RegisterEditor({p, reg, setReg}: {
 			}} />
 
 		{regV.type=="value" && <>
-			<Input className={clsx(err!=null && borderColor.red)} value={value} onChange={ev=>setValue(ev.currentTarget.value)} />
+			<Input className={clsx(err!=null && borderColor.red)} value={value} valueChange={setValue} />
 			{err!=null && <Alert bad txt={err} />}
 		</>}
 		
@@ -360,8 +363,7 @@ function RegisterEditor({p, reg, setReg}: {
 			<Divider className="my-1" />
 			<Text v="dim" >Current value ({typeof regRef.current=="string" ? "text" : "numeric"}):</Text>
 
-			<Input className={clsx(err2!=null && borderColor.red)} value={runValue}
-				onChange={ev=>setRunV(ev.currentTarget.value)} />
+			<Input className={clsx(err2!=null && borderColor.red)} value={runValue} valueChange={setRunV} />
 			{err2 && <Alert bad txt="Invalid register value" />}
 		</>}
 	</div>;
@@ -385,6 +387,7 @@ type UserProcs = {
 
 const dragOpts = {
 	draggable(child: HTMLElement) { return !child.classList.contains("nodrag"); },
+	dropZoneClass: "drop",
 	plugins: [animations()]
 };
 
@@ -422,45 +425,55 @@ function ProcEditor({
 		};
 	}, [procs]);
 
-	const updateFromDrag = useCallback((xs: DragNode[]) => setProc(p=>{
-		const newNodes = new Map(p.nodes);
-		let maxNode = p.maxNode;
-		const nodeList = xs.map(v=>{
-			if (v.type=="proc") return v.i;
-			newNodes.set(maxNode, v.type=="user" ? nodeForUserProc(v.i) : builtinNodes[v.i]);
-			return maxNode++;
+	// cursed !!!
+	const updateFromDrag = useCallback((xs: DragNode[])=>{
+		let out: number[]=[];
+
+		setProc(p=>{
+			const newNodes = new Map(p.nodes);
+			let maxNode = p.maxNode;
+
+			out=xs.map(v=>{
+				if (v.type=="proc") return v.i;
+				newNodes.set(maxNode, v.type=="user" ? nodeForUserProc(v.i) : builtinNodes[v.i]);
+				return maxNode++;
+			});
+
+			return { ...p, nodes: newNodes, maxNode };
 		});
 
-		return { ...p, nodeList, nodes: newNodes, maxNode };
-	}), [nodeForUserProc, setProc]);
+		return out;
+	}, [nodeForUserProc, setProc]);
 
 	// shitty stuff to accept builtin / procs
 	const nodeRef = useRef<HTMLUListElement>(null);
 	useEffect(()=>{
-		const initDragNodes = proc.nodeList.map(i=>({i, type: "proc"} satisfies DragNode));
-
-		dragAndDrop<HTMLUListElement, DragNode>({
+		dragAndDrop<HTMLUListElement, number>({
 			parent: nodeRef.current, group: "proc",
-			state: [ initDragNodes, updateFromDrag as Dispatch<SetStateAction<DragNode[]>> ],
+			state: [
+				proc.nodeList as number[],
+				((xs: number[])=>setProc(p=>({...p, nodeList: xs }))) as Dispatch<SetStateAction<number[]>>
+			],
 			performTransfer({ initialParent, targetParent, draggedNodes, targetNodes }) {
 				remapNodes(initialParent.el);
 				remapNodes(targetParent.el);
+
+				const newData = updateFromDrag(draggedNodes.map(v=>v.data.value as unknown as DragNode));
+				draggedNodes.forEach((v,i)=>{ v.data.value=newData[i]; });
 
 				const idx = targetNodes.length ? targetNodes[0].data.index : targetParent.data.enabledNodes.length;
 				const vs = parentValues(targetParent.el, targetParent.data);
 				const up = vs.toSpliced(idx, 0, ...draggedNodes.map(v=>v.data.value));
 				setParentValues(targetParent.el, targetParent.data, up);
 			},
-			performSort(obj) {
-				// can only sort nodes in proc (i dare u to remove this)
-				if (obj.draggedNodes.some(v=>v.data.value.type!="proc")) return;
-					performSort(obj);
+			handleEnd(state) {
+				[...state.currentParent.el.children].forEach(x=>x.classList.remove("drop"));
 			},
 			onDragstart() { setDisableArrows(true); },
 			onDragend() { setDisableArrows(false); },
 			...dragOpts
 		});
-	}, [proc.nodeList, updateFromDrag]);
+	}, [proc.nodeList, setProc, updateFromDrag]);
 
 	const builtinDragNodes = fill(builtinNodes.length, i=>({ type: "builtin", i } as const));
 
@@ -479,7 +492,7 @@ function ProcEditor({
 			group: "proc", 
 			performTransfer() {},
 			...dragOpts
-		}) as unknown as [Ref<HTMLUListElement>, DragNode[]]; // preact compat
+		});
 	}, [setProcList, userProcList]);
 
 	const nodeRefSetter = (node: number|null) => (el: HTMLDivElement|null) => {
@@ -516,6 +529,13 @@ function ProcEditor({
 	}, [proc.registerList, registerList, setProc])
 
 	const procNameValidity = useValidity(v=>setProc(p=>({...p, name: v})))
+	const [procFilter, setProcFilter] = useState("");
+	const showProcs = useMemo(()=>{
+		const s = toSearchString(procFilter);
+		return new Set([...data.procs.entries()].flatMap(([i,v])=>{
+			return toSearchString(v.name).includes(s) ? [i] : [];
+		}));
+	}, [data.procs, procFilter])
 
 	return <>
 		<div className="flex flex-col items-stretch gap-2 editor-left min-h-0" >
@@ -544,7 +564,7 @@ function ProcEditor({
 						...node.op=="goto" ? [
 							<GotoArrow key={`arrow${v}`} p={data} node={node} nodeI={v} />
 						] : [],
-						<IconChevronCompactDown className="self-center nodrag" key={`sep${v}`} />
+						<IconChevronCompactDown className="self-center nodrag -mt-2 shrink-0" key={`sep${v}`} />
 					];
 				})}
 			
@@ -571,10 +591,14 @@ function ProcEditor({
 		</div>
 
 		<div className="flex flex-col gap-2 editor-mid-down min-h-0" >
-			<Text v="bold" className="mb-2" >My procedures</Text>
-			<ul className="flex flex-col gap-2 overflow-y-auto" ref={userProcListRef} >
+			<div className="flex flex-row gap-8 justify-between items-center" >
+				<Text v="bold" className="mb-2" >My procedures</Text>
+				<Input value={procFilter} valueChange={setProcFilter} className="py-1 basis-1/2" placeholder={"Search"} />
+			</div>
+
+			<ul className="flex flex-col overflow-y-auto" ref={userProcListRef} >
 				{userProcList.map(i=>{
-					if (!procs.has(i)) return <div key={i} />;
+					if (!procs.has(i) || !showProcs.has(i)) return <div key={i} />;
 					return <ProcNode key={i} p={data} node={nodeForUserProc(i)} setNode={setNode} openProc={openProc} />;
 				})}
 
@@ -616,7 +640,8 @@ export const makeProc = (name: string): Procedure => ({
 });
 
 export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStage}: {
-	puzzle: Puzzle, edit: EditorState, output: string|null,
+	puzzle: Stage&{type: "puzzle"},
+	edit: EditorState, output: string|null,
 	setInput: (x: string)=>void, setSolved: ()=>void,
 	nextStage: ()=>void
 }) {
@@ -640,7 +665,7 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStag
 
 	useEffect(()=>{
 		if (submission?.type=="judging") {
-			const worker = new testWorker();
+			const worker = new Tester();
 
 			const tc = puzzle.generator();
 			worker.postMessage(stringifyExtra({
@@ -681,12 +706,12 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStag
 			</Text>
 		</div>
 
-		<Input value={input2} onChange={(ev)=>up(ev.currentTarget.value)} />
+		<Input value={input2} valueChange={up} />
 		
 		{err && <Alert bad title="Invalid input"
 			txt="Your input should only contain lowercase alphabetical characters and spaces" />}
 		
-		<div className={blankStyle} >
+		<div className={clsx(blankStyle, "items-stretch px-8")} >
 			{input.length>0 ? <>
 				<div className="flex flex-row flex-wrap gap-4 items-center justify-center" >
 					<Text v="code" >{input}</Text>
@@ -694,17 +719,18 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStag
 					<Text v="code" >{solution}</Text>
 				</div>
 				
-				{output==input ? <Alert className={bgColor.green} title="Test passed"
-					txt="Your program output the same text." /> : output!=null && <>
-					<Alert bad title="Test failed" txt={<div className="flex flex-col gap-1" >
-						{output.length==0 ? "Your program didn't output anything!" : <>
-							Your program output:
-							<Text v="code" >{output}</Text>
-						</>}
-					</div>} />
-				</>}
+				{output==solution ? <Alert className={bgColor.green} title="Test passed"
+						txt="Your program output the same text." />
+					: output!=null && <Alert bad title="Test failed" txt={
+						<div className="flex flex-col gap-1" >
+							{output.length==0 ? "Your program didn't output anything!" : <>
+								Your program output:
+								<Text v="code" >{output}</Text>
+							</>}
+						</div>
+					} />}
 			</> : <>
-				<IconInfoCircle />
+				<IconInfoCircle className="self-center" />
 				After generating or entering an input above, you will see the target output here.
 			</>}
 		</div>
@@ -737,12 +763,13 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStag
 	</div>;
 }
 
-export function Editor({edit, setEdit, nextStage}: {
-	edit: EditorState, setEdit: SetFn<EditorState>, nextStage: ()=>void
+export function Editor({edit, setEdit, nextStage, puzzle}: {
+	edit: EditorState, setEdit: SetFn<EditorState>,
+	puzzle: Stage&{type: "puzzle"}|null, nextStage: ()=>void
 }) {
-	const [runState, setRunState] = useState<ProgramState<RegisterRefClone>|null>();
+	const [runState, setRunState] = useState<ReturnType<typeof clone>|null>();
 	const [runStatus, setRunStatus] = useState<{ type: "done"|"paused"|"stopped" }
-		|{ type: "running", step: boolean }>({type: "stopped"});
+		|{ type: "running", step: boolean, restart: boolean }>({type: "stopped"});
 	const [runError, setRunError] = useState<InterpreterError|null>(null);
 	const [output, setOutput] = useState<string|null>(null);
 
@@ -805,17 +832,20 @@ export function Editor({edit, setEdit, nextStage}: {
 			return ret;
 		};
 		
-		let v = runStateRef.current;
-		const doPush = v==null;
-		if (v==null) {
-			const newV ={
-				stack: [], procs: edit.procs,
-				outputRegister: {current: edit.input}
-			};
-
-			runStateRef.current=v=newV;
-			if (!handle(()=>push(newV, edit.entryProc, [newV.outputRegister]))) return;
+		let initV = runStateRef.current;
+		const doPush = initV==null || runStatus.restart;
+		if (doPush) {
+			if (!handle(()=>{
+				runStateRef.current=initV=makeState({
+					input: edit.input, entry: edit.entryProc, procs: edit.procs
+				});
+			})) return;
 		}
+		
+		// should be init by handle above, otherwise return
+		if (initV==null) throw new Error("unreachable");
+		const v = initV;
+		v.procs = edit.procs;
 
 		let cont=true;
 		const doStep = ()=>{
@@ -827,6 +857,7 @@ export function Editor({edit, setEdit, nextStage}: {
 					setRunStatus({type: "done"});
 				}
 			});
+
 			cont&&=xd;
 		};
 		
@@ -863,8 +894,8 @@ export function Editor({edit, setEdit, nextStage}: {
 		stepsPerS: Math.max(0.1, Math.min(1000, v.stepsPerS*m))
 	}));
 
-	const play = (step?: boolean)=>{
-		setRunStatus({type: "running", step: step ?? false});
+	const play = (opt: {step?: boolean, restart?: boolean})=>{
+		setRunStatus({type: "running", step: opt.step ?? false, restart: opt.restart ?? false});
 	};
 	
 	const [open, setOpen] = useState(true);
@@ -874,13 +905,13 @@ export function Editor({edit, setEdit, nextStage}: {
 	useEffect(()=>setOutput(null), [edit.input, setOutput]);
 	const goto = useGoto();
 
-	const stack = runState && <div className="flex flex-col editor-right-down gap-2 min-h-0" >
+	const stack = runStatus.type!="stopped" && <div className="flex flex-col editor-right-down gap-2 min-h-0" >
 		<Divider className="mb-0" />
 		<Text v="bold" >Stack</Text>
 
 		{runError && <Alert bad title="Runtime error" txt={runError.txt()} />}
 
-		{runState.stack.length==0 ? <div className={blankStyle} >
+		{!runState || runState.stack.length==0 ? <div className={blankStyle} >
 			The stack is empty.
 		</div> : <div className={`flex flex-col ${borderColor.default} border-1 overflow-y-auto`} >
 			{runState.stack.flat().map((v,i)=>{
@@ -896,7 +927,7 @@ export function Editor({edit, setEdit, nextStage}: {
 	</div>;
 
 	return <div className="grid h-dvh gap-x-4 pl-3 px-5 w-full editor" >
-		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center pb-1" >
+		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center" >
 			<div className="flex flex-row gap-2 items-center h-full" >
 				<button onClick={()=>goto("/menu")}
 					className={twMerge("flex flex-row hover:scale-105 transition-transform h-full")} >
@@ -909,14 +940,20 @@ export function Editor({edit, setEdit, nextStage}: {
 					disabled={runStatus.type=="stopped"}
 					onClick={()=>{ setRunStatus({type: "stopped"}) }} />
 				
-				<IconButton icon={runStatus.type!="running" ? <IconPlayerPlayFilled className="fill-green-400" /> : <IconPlayerPauseFilled />}
-					disabled={runStatus.type=="done"} onClick={()=>{
+				<IconButton icon={
+					runStatus.type=="done" ? <IconRotate className={"stroke-green-400"} />
+						: runStatus.type!="running" ? <IconPlayerPlayFilled className={"fill-green-400"} />
+						: <IconPlayerPauseFilled />
+					}
+					onClick={()=>{
 						if (runStatus.type=="running") setRunStatus({type: "paused"});
-						else play();
+						else play({ restart: runStatus.type=="done" });
 					}} />
 
-				<IconButton icon={<IconPlayerSkipForwardFilled className="fill-green-400" />}
-					disabled={runStatus.type=="running" || runStatus.type=="done"} onClick={()=>play(true)} />
+				<IconButton icon={<IconPlayerSkipForwardFilled className="fill-green-400 group-disabled:fill-gray-400" />}
+					className="group"
+					disabled={runStatus.type=="running"}
+					onClick={()=>play({ restart: runStatus.type=="done", step: true })} />
 					
 				<span className="w-2" />
 
@@ -934,10 +971,10 @@ export function Editor({edit, setEdit, nextStage}: {
 				<Text v="dim" >{runStatus.type}</Text>
 			</div>
 
-			{edit.puzzle ? <button className={twMerge(anchorStyle, "flex flex-row p-1 grow items-center justify-center gap-4")}
+			{puzzle ? <button className={twMerge(anchorStyle, "flex flex-row p-1 grow items-center justify-center gap-4")}
 				onClick={()=>setOpen(true)} >
 				<div className="flex flex-col items-center" >
-					<Text v="md" >{edit.puzzle.name}</Text>
+					<Text v="md" >{puzzle.name}</Text>
 					<Text v="dim" >Puzzle info and input</Text>
 				</div>
 				{edit.solved && <IconCircleCheckFilled className="fill-green-400" size={32} />}
@@ -946,8 +983,8 @@ export function Editor({edit, setEdit, nextStage}: {
 			</Text>}
 		</div>
 		
-		{edit.puzzle && <Modal open={open} onClose={()=>setOpen(false)} title={edit.puzzle.name} >
-			<PuzzleInput puzzle={edit.puzzle} edit={edit} output={output}
+		{puzzle && <Modal open={open} onClose={()=>setOpen(false)} title={puzzle.name} >
+			<PuzzleInput puzzle={puzzle} edit={edit} output={output}
 				setInput={setInput} setSolved={markSolved} nextStage={nextStage} />
 		</Modal>}
 		
@@ -976,8 +1013,8 @@ export function Editor({edit, setEdit, nextStage}: {
 				}
 			}} className="flex flex-col gap-2" >
 				<Text>Name</Text>
-				<Input {...nameInputProps} value={newProc.name} onChange={(ev)=>{
-					setNewProc({...newProc, name: ev.currentTarget.value});
+				<Input {...nameInputProps} value={newProc.name} valueChange={(v)=>{
+					setNewProc({...newProc, name: v});
 				}} />
 				<Button>Create</Button>
 			</form>

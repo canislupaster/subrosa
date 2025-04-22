@@ -32,7 +32,7 @@ const common = {rules: commonRules};
 
 export default [
   ...tseslint.config({
-    files: ["src/**/*.{ts,tsx,js,jsx,d.ts}"],
+    files: ["src/**/*.{ts,tsx,js,jsx,d.ts}", "shared/**/*.ts"],
     extends: [
       pluginJs.configs.recommended,
       ...compat.extends("preact"),

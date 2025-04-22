@@ -18,8 +18,7 @@
     "preact-iso": "^2.9.1",
     "react-tiny-popover": "^8",
     "tailwind-merge": "^3",
-    "tailwindcss": "^4",
-    "use-scramble": "^2.2.15"
+    "tailwindcss": "^4"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2",
