@@ -36,7 +36,6 @@ function useValidity(callback: (v: string)=>void): {
 		onChange(ev) {
 			const elem = ev.currentTarget;
 			if (elem!=null) db.current?.call(()=>{
-				console.log(ev);
 				if (elem.reportValidity())
 					callback(elem.value);
 			});

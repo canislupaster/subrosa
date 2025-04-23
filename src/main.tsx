@@ -268,7 +268,6 @@ function InnerApp() {
 
   if (err!=undefined) return <ErrorPage err={err} reset={resetErr} />;
 
-  console.log(route.path);
   if (!md && route.path!="/") {
     return <div className="flex flex-col items-center justify-center gap-2 p-4 h-dvh" >
       <IconDeviceDesktopFilled size={128} />
