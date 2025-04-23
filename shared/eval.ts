@@ -332,18 +332,18 @@ export function step(prog: ProgramState) {
 	return true;
 }
 
-export type Verdict = {
+export type Verdict = Readonly<{
 	type: "RE"|"WA"|"AC"|"TLE",
-}&ProgramStats;
+}&ProgramStats>;
 
-export function test({ input, output, proc, procs }: {
+export type TestParams = {
 	input: string,
 	output: string,
 	proc: number,
 	procs: ReadonlyMap<number,Procedure>
-}): Verdict {
-	const reg = {current: input};
+};
 
+export function test({ input, output, proc, procs }: TestParams): Verdict {
 	let pstateStats: ProgramStats = {nodes: 0, time: 0, registers: 0};
 
 	try {
@@ -354,7 +354,7 @@ export function test({ input, output, proc, procs }: {
 			if (pstate.stats.time >= timeLimit) return {type: "TLE", ...pstateStats};
 		}
 
-		if (reg.current!=output) return {type: "WA", ...pstateStats};
+		if (pstate.outputRegister.current!=output) return {type: "WA", ...pstateStats};
 		return {type: "AC", ...pstate.stats};
 	} catch (e) {
 		if (e instanceof InterpreterError) return {type: "RE", ...pstateStats};

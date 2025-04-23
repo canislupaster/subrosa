@@ -5,7 +5,7 @@ import { serveStatic } from "hono/deno";
 import { Buffer } from "node:buffer";
 import process from "node:process";
 import { data, StageData, stageUrl } from "../shared/data.ts";
-import { AddSolve, AddSolveResponse, CountStage, parseExtra, SetUsername, StageStats, StageStatsResponse, stringifyExtra, validUsernameRe } from "../shared/util.ts";
+import { AddSolve, API, CountStage, parseExtra, ServerResponse, stringifyExtra, validUsernameRe } from "../shared/util.ts";
 import { addSolve, countPlay, getStats, setUsername } from "./db.ts";
 import { getConnInfo } from 'hono/deno';
 import { ProgramStats, Verdict } from "../shared/eval.ts";
@@ -54,6 +54,8 @@ const addSolveReq = z.object({
 	stage: z.string(),
 	procs: z.map(z.number(), procedure),
 	entry: z.number(),
+	token: z.string().nullable(),
+	username: z.string().nullable()
 }) satisfies z.ZodType<AddSolve>;
 
 async function parse<R>(t: z.ZodType<R>, c: Context): Promise<R> {
@@ -71,75 +73,104 @@ async function parse<R>(t: z.ZodType<R>, c: Context): Promise<R> {
 	return res.data;
 }
 
-app.post("/count", async c=>{
-	const { stage } = await parse<CountStage>(stageReq, c);
-	const ip = [...c.req.raw.headers].find(x=>x[0]=="X-Forwarded-For")?.[1]?.split(",")?.[0]?.trim()
-		?? getConnInfo(c).remote.address ?? null;
+type APIRoute = {
+	[K in keyof API]: {
+		route: K,
+		validator: z.ZodType<API[K]["request"]>,
+		handler: (req: API[K]["request"], c: Context) => Promise<API[K] extends {response: unknown} ? API[K]["response"] : void>
+	}
+};
 
-	if (!data.some(x=>stageUrl(x)==stage)) throw new AppError("stage not found", 404);
+function makeRoute<K extends keyof API>(route: APIRoute[K]) {
+	app.post(`/${route.route}`, async c=>{
+		const req = await parse(route.validator, c);
+		const resp = await route.handler(req, c);
+		return c.json({
+			type: "ok", data: (resp ?? null) as unknown as (ServerResponse<K>&{type: "ok"})["data"]
+		} satisfies ServerResponse<K>);
+	});
+}
 
-	await countPlay(ip, stage);
+makeRoute<"count">({
+	route: "count",
+	validator: stageReq,
+	async handler({stage}, c) {
+		const ip = [...c.req.raw.headers].find(x=>x[0]=="X-Forwarded-For")?.[1]?.split(",")?.[0]?.trim()
+			?? getConnInfo(c).remote.address ?? null;
+
+		if (!data.some(x=>stageUrl(x)==stage)) throw new AppError("stage not found", 404);
+
+		await countPlay(ip, stage);
+	}
 });
 
-function getStage(stage: string) {
-	const ret = data.find(x=>x.type=="puzzle" && x.key==stage) as StageData&{type: "puzzle"}|undefined;
+function getPuzzle(puzzleKey: string) {
+	const ret = data.find(x=>x.type=="puzzle" && x.key==puzzleKey) as StageData&{type: "puzzle"}|undefined;
 	if (!ret) throw new AppError("stage not found", 404);
 	return ret;
 }
 
-app.post("/solve", async c=>{
-	const solve = await parse<AddSolve>(addSolveReq, c);
-	const stage = getStage(solve.stage);
-	const accumStats: ProgramStats = { nodes: 0, time: 0, registers: 0 };
+makeRoute<"solve">({
+	route: "solve",
+	validator: addSolveReq,
+	async handler(solve) {
+		const stage = getPuzzle(solve.stage);
+		const accumStats: ProgramStats = { nodes: 0, time: 0, registers: 0 };
 
-	for (let testI=0; testI<10; testI++) {
-		const input = stage.generator();
-		const output = stage.solve(input);
+		for (let testI=0; testI<10; testI++) {
+			const input = stage.generator();
+			const output = stage.solve(input);
 
-		const worker = new Worker(
-			new URL("../shared/worker.ts", import.meta.url).href,
-			{ type: "module" }
-		);
-			
-		try {
-			const delay = new Promise<null>((res)=>setTimeout(()=>res(null), 10_000));
-			const recv = new Promise<Verdict|"error">((res)=>{
-				worker.onmessageerror = worker.onerror = ()=>res("error");
-				worker.onmessage = (e)=>res(parseExtra(e.data as string) as Verdict);
-			});
+			const worker = new Worker(
+				new URL("../shared/worker.ts", import.meta.url).href,
+				{ type: "module" }
+			);
+				
+			try {
+				const delay = new Promise<null>((res)=>setTimeout(()=>res(null), 10_000));
+				const recv = new Promise<Verdict|"error">((res)=>{
+					worker.onmessageerror = worker.onerror = ()=>res("error");
+					worker.onmessage = (e)=>res(parseExtra(e.data as string) as Verdict);
+				});
 
-			worker.postMessage(stringifyExtra({
-				input, output, proc: solve.entry, procs: solve.procs
-			}));
-			
-			const res = await Promise.race([delay, recv]);
-			if (res==null) throw new AppError("execution timed out");
-			if (res=="error") throw new AppError("execution error");
-			if (res.type!="AC") throw new AppError(`received verdict ${res.type} != AC (tc ${testI+1})`);
-			
-			for (const k of ["nodes", "time", "registers"] as const)
-				accumStats[k]=Math.max(accumStats[k], res[k]);
-		} finally {
-			worker.terminate();
+				worker.postMessage(stringifyExtra({
+					input, output, proc: solve.entry, procs: solve.procs
+				}));
+				
+				const res = await Promise.race([delay, recv]);
+				if (res==null) throw new AppError("execution timed out");
+				if (res=="error") throw new AppError("execution error");
+				if (res.type!="AC") throw new AppError(`received verdict ${res.type} != AC (tc ${testI+1})`);
+				
+				for (const k of ["nodes", "time", "registers"] as const)
+					accumStats[k]=Math.max(accumStats[k], res[k]);
+			} finally {
+				worker.terminate();
+			}
 		}
+		
+		return await addSolve({...accumStats, stage: solve.stage, token: solve.token});
 	}
-	
-	return c.json(await addSolve({...accumStats, stage: solve.stage}) satisfies AddSolveResponse);
-});
+})
 
-app.post("/stats", async c=>{
-	const v = await parse<StageStats>(stageReq, c);
-	getStage(v.stage); // assert exists
-	return c.json(await getStats(v.stage) satisfies StageStatsResponse);
+makeRoute<"stats">({
+	route: "stats",
+	validator: stageReq,
+	async handler({stage}) {
+		getPuzzle(stage); // assert exists
+		return await getStats(stage);
+	}
 });
 	
 const setUsernameReq = z.object({
-	token: z.string(), username: z.string().regex(validUsernameRe)
+	token: z.string(),
+	username: z.string().regex(new RegExp(validUsernameRe)).nullable()
 });
 
-app.post("/setusername", async c=>{
-	const v = await parse<SetUsername>(setUsernameReq, c);
-	await setUsername(v.token, v.username);
+makeRoute<"setusername">({
+	route: "setusername",
+	validator: setUsernameReq,
+	async handler({token, username}) { await setUsername(token, username); }
 });
 
 app.use("*", serveStatic({

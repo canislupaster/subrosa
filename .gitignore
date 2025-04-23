@@ -23,7 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-.env
 .deployenv
 *.tsbuildinfo
 server/db.sqlite

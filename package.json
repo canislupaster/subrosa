@@ -1,5 +1,5 @@
 {
-  "name": "kilngame",
+  "name": "subrose",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -23,6 +23,7 @@
   "devDependencies": {
     "@preact/preset-vite": "^2",
     "@tailwindcss/vite": "^4",
+    "@types/node": "^22.14.1",
     "eslint": "^8",
     "eslint-config-preact": "^1",
     "globals": "^16",

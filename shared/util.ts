@@ -33,11 +33,29 @@ export const COUNT_PLAY_INTERVAL_SECONDS = 2*3600;
 export type CountStage = { stage: string };
 export type AddSolve = {
 	stage: string,
-	procs: Map<number, Procedure>,
-	entry: number
+	procs: ReadonlyMap<number, Procedure>,
+	entry: number,
+	username: string|null,
+	token: string|null
 };
-export const validUsernameRe = /^[A-Za-z0-9 _-]{5,20}$/;
-export type AddSolveResponse = {token: string};
+export const validUsernameRe = "^[A-Za-z0-9 _\\-]{5,20}$";
+export type AddSolveResponse = {token: string, id: number, username: string|null};
 export type StageStats = { stage: string };
-export type StageStatsResponse = (ProgramStats&{username: string|null})[];
-export type SetUsername = {token: string, username: string};
+export type StageStatsResponse = (ProgramStats&{username: string|null, id: number})[];
+export type SetUsername = {token: string, username: string|null};
+
+export type API = {
+	"solve": { request: AddSolve, response: AddSolveResponse },
+	"stats": { request: StageStats, response: StageStatsResponse },
+	"setusername": { request: SetUsername },
+	"count": { request: CountStage}
+};
+
+export type ServerResponse<K extends keyof API> = {
+	type: "error", message: string
+} | {
+	type: "ok", data: API[K] extends {response: unknown} ? API[K]["response"] : null
+};
+
+export const toPrecStat = (x: number, y?: string) =>
+	`${x>1e5 ? x.toPrecision(2) : x}${y!=undefined ? ` ${y}${x==1 ? "" : "s"}` : ""}`;

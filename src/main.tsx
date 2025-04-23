@@ -1,3 +1,4 @@
+import "disposablestack/auto";
 import { Anchor, anchorStyle, bgColor, Button, clearLocalStorage, ConfirmModal, Container, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useFnRef, useGoto, useMd } from "./ui";
 import { ComponentChildren, render } from "preact";
 import { useCallback, useErrorBoundary, useState } from "preact/hooks";
@@ -5,26 +6,26 @@ import { Editor, makeProc } from "./editor";
 import { Stage, stages, Story } from "./story";
 import { EditorState, Procedure, Register } from "../shared/eval";
 import { IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled } from "@tabler/icons-preact";
-import { LocationProvider, Route, Router, useLocation, useRoute } from "preact-iso";
+import { LocationProvider, Route, Router, useLocation } from "preact-iso";
 import { twMerge } from "tailwind-merge";
 import clsx from "clsx";
 import { parseExtra, stringifyExtra } from "../shared/util";
 import { stageUrl } from "../shared/data";
+import { useStageCount } from "./api";
 
 function Footer() {
   return <div className={`mt-20 ${textColor.dim} mb-10`} >
     <p>
       A game by <Anchor href="https://thomasqm.com" >Thomas Marlowe</Anchor>,
       {" "}<Anchor href="https://github.com/kartva" >Kartavya Vashishtha</Anchor>,
-      {" "}and <Anchor href="https://linkedin.com/in/peterjin25/" >Peter Jin</Anchor>
-      {" "}for <Anchor href="https://puhack.horse/kiln" >Kiln</Anchor>
+      {" "}and <Anchor href="https://linkedin.com/in/peterjin25/" >Peter Jin</Anchor>.
     </p>
   </div>;
 }
 
 function Home() {
   const goto = useGoto();
-  return <div className="flex flex-col items-center pt-10 gap-2 max-w-lg" >
+  return <div className="flex flex-col items-center pt-10 gap-2 max-w-lg px-5" >
     <img src="/big.svg" />
     <Text v="md" className="italic" >Leading the world in cryptography for centuries</Text>
       
@@ -84,7 +85,7 @@ function Menu() {
   const [importData, setImportData] = useState("");
   const [exporting, setExporting] = useState(false);
 
-  const percentProgress = `${Math.round((activeStages-1)/stages.length * 100)}%`;
+  const percentProgress = `${Math.round(activeStages/stages.length * 100)}%`;
 
   return <div className="flex flex-col gap-4 pt-20 max-w-xl" >
     <ConfirmModal confirm={()=>{
@@ -123,7 +124,7 @@ function Menu() {
     <Text v="big" >Table of contents</Text>
 
     <div className={clsx(bgColor.default, "w-full py-2 px-2 relative -my-2 overflow-hidden")} >
-      <Text v="md" className="relative z-20" >{activeStages-1}/{stages.length} ({percentProgress})</Text>
+      <Text v="md" className="relative z-20" >{activeStages}/{stages.length} ({percentProgress})</Text>
       <div className={clsx(bgColor.green, "absolute rounded-r-md top-0 bottom-0 left-0 z-10")} style={{width: percentProgress}} />
     </div>
 
@@ -165,8 +166,6 @@ function Menu() {
 
 const procStorage = {
   savedProcs: new Map<number, Procedure>(),
-  changedProcs: new Map<number, Procedure>(),
-  throttleSave: throttle(5000),
 
   getUserProc(i: number): Procedure|null {
     return parseExtra(localStorage.getItem(`proc${i}`)) as Procedure|null;
@@ -179,17 +178,8 @@ const procStorage = {
 
   setUserProc(i: number, proc: Procedure) {
     if (this.savedProcs.get(i)==proc) return;
-
     this.savedProcs.set(i, proc);
-    this.changedProcs.set(i, proc);
-
-    this.throttleSave.call(()=>{
-      for (const [k,v] of this.changedProcs.entries()) {
-        localStorage.setItem(`proc${k}`, stringifyExtra(v));
-      }
-
-      this.changedProcs.clear();
-    });
+    localStorage.setItem(`proc${i}`, stringifyExtra(proc));
   },
 
   setProcs(procs: [number, Procedure][]) {
@@ -199,7 +189,8 @@ const procStorage = {
 };
 
 function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
-  const throttleSave = useFnRef(()=>throttle(2000), []);
+  const throttleSave = useFnRef(()=>throttle(2000, true), []);
+  useStageCount(stage);
 
   const [edit, setEdit] = useState<EditorState>(()=>{
     const userProcs = procStorage.getProcs();
@@ -252,6 +243,7 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
 
 function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
   const goto = useGoto();
+  useStageCount(stage);
   return <div className="md:w-2xl w-md flex flex-col pb-[30dvh] pt-10" >
     <Logo className="w-1/3" />
     <Story stage={stage} next={i+1>=stages.length ? undefined : ()=>{

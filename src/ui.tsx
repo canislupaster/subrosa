@@ -1,5 +1,5 @@
-import { ComponentChildren, JSX, ComponentProps, createContext, ComponentChild, Ref, RefObject } from "preact";
-import { Dispatch, useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { ComponentChildren, JSX, ComponentProps, createContext, ComponentChild, Ref, RefObject, cloneElement, VNode } from "preact";
+import { Dispatch, useCallback, useContext, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
 import { IconChevronDown, IconChevronUp, IconInfoCircleFilled, IconInfoTriangleFilled, IconLoader2, IconX } from "@tabler/icons-preact";
 import { twMerge } from "tailwind-merge";
 import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
@@ -30,7 +30,7 @@ export const bgColor = {
 	hover: "dark:hover:bg-zinc-700 hover:bg-zinc-150",
 	secondary: "dark:bg-zinc-900 bg-zinc-150",
 	green: "dark:enabled:bg-green-800 enabled:bg-green-400",
-	sky: "dark:enabled:bg-sky-600 enabled:bg-sky-300",
+	sky: "dark:enabled:bg-sky-700 enabled:bg-sky-300",
 	red: "dark:enabled:bg-red-800 enabled:bg-red-300",
 	rose: "dark:enabled:bg-rose-900 enabled:bg-rose-300",
 	highlight: "dark:bg-yellow-800 bg-amber-200",
@@ -52,7 +52,7 @@ export const outlineColor = {
 };
 
 export const containerDefault = `${textColor.default} ${bgColor.default} ${borderColor.default} border-1`;
-export const invalidInputStyle = `dark:invalid:bg-rose-900 invalid:bg-rose-400 dark:invalid:border-red-500 invalid:border-red-700`;
+export const invalidInputStyle = `invalid:dark:bg-rose-900 invalid:bg-rose-400 invalid:dark:border-red-500 invalid:theme:border-red-700`;
 export const interactiveContainerDefault = `${textColor.default} ${bgColor.default} ${borderColor.defaultInteractive} ${outlineColor.default} ${invalidInputStyle} border-1`;
 
 export type InputProps = {icon?: ComponentChildren, className?: string, valueChange?: (x: string)=>void}&JSX.InputHTMLAttributes<HTMLInputElement>;
@@ -90,13 +90,14 @@ export function Textarea({className, children, ...props}: JSX.IntrinsicElements[
 }
 
 export type ButtonProps = JSX.IntrinsicElements["button"]&{
-	icon?: ComponentChildren, disabled?: boolean, className?: string
+	icon?: ComponentChildren, iconRight?: ComponentChildren, disabled?: boolean, className?: string
 };
 
-export function Button({className, disabled, icon, ...props}: ButtonProps) {
-	return <button disabled={disabled} className={twMerge(clsx("flex flex-row justify-center gap-1.5 px-4 py-1.5 items-center group", interactiveContainerDefault, icon!=undefined && "pl-3", className))} {...props} >
+export function Button({className, disabled, icon, iconRight, ...props}: ButtonProps) {
+	return <button disabled={disabled} className={twMerge(clsx("flex flex-row justify-center gap-1.5 px-2 py-1.5 items-center group", interactiveContainerDefault), className)} {...props} >
 		{icon}
 		{props.children}
+		{iconRight}
 	</button>;
 }
 
@@ -168,7 +169,7 @@ export const Alert = ({title, txt, bad, className}: {
 		</div>
 		<div>
 			{title!=undefined && <h2 className="font-bold font-display text-lg" >{title}</h2>}
-			<div>{txt}</div>
+			<div className="flex flex-col gap-2" >{txt}</div>
 		</div>
 	</div>;
 
@@ -199,6 +200,62 @@ export const fadeGradient = {
 	secondary: "from-transparent dark:to-zinc-900 to-zinc-150"
 };
 
+type ShowTransitionProps = {
+	children: ComponentChild, open: boolean,
+	openClassName?: string, closedClassName?: string,
+	update?: (show: boolean, element: HTMLElement)=>void
+};
+
+export const ShowTransition = forwardRef<HTMLElement, ShowTransitionProps>(({
+	children, open, openClassName, closedClassName, update
+}, ref) => {
+	const myRef = useRef<HTMLElement>(null);
+	const [show, setShow] = useState(false);
+
+	const cls = open ? openClassName : closedClassName;
+	const removeCls = open ? closedClassName : openClassName;
+	useEffect(()=>{
+		const el = myRef.current;
+		if (!open && !show) return;
+		if (!show) { setShow(true); return; }
+		if (!el) {
+			console.warn("transition element not mounted despite shown");
+			return;
+		}
+
+		update?.(true, el);
+
+		// wait for animations to begin, and then wait for all to end
+		let enabled=true;
+		const wait = ()=>setTimeout(()=>{
+			const anims = el.getAnimations({subtree: true});
+			if (!enabled || anims.length==0) {
+				update?.(false, el);
+				setShow(false);
+				return;
+			}
+
+			void Promise.all(anims.map(x=>x.finished)).then(()=>{
+				tm=wait();
+			});
+		}, 50);
+
+		let tm = open ? null : wait();
+		
+		el.classList.remove(...removeCls?.split(" ") ?? []);
+		el.classList.add(...cls?.split(" ") ?? []);
+
+		return () => {
+			if (tm!=null) clearTimeout(tm);
+			enabled=false;
+		};
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [open, show]);
+
+	if (children==undefined || !show) return <></>;
+	return cloneElement(children as VNode, { ref: cloneRef(ref, myRef) });
+});
+
 export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&{
 	open?: boolean
 }>((
@@ -224,8 +281,9 @@ export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&
 			let newH = (done ? d : d*dt*10/1000) + parseFloat(style.height);
 			if (d<0) newH=Math.floor(newH); else newH=Math.ceil(newH);
 			
+			// do not allow collapse if open is not false
 			if (mainInnerHeight<1 && newH>0) setShowInner(true);
-			else if (mainInnerHeight>0 && newH<1) setShowInner(false);
+			else if (mainInnerHeight>0 && newH<1 && open==false) setShowInner(false);
 			main.style.height = `${newH}px`;
 
 			lt=t;
@@ -328,35 +386,33 @@ export function Modal({bad, open, onClose, title, children, className, ...props}
 	children?: ComponentChildren, className?: string
 }&JSX.HTMLAttributes<HTMLDialogElement>) {
 	const modalRef = useRef<HTMLDialogElement>(null);
-	useEffect(()=>{
-		if (open) modalRef.current?.showModal();
+
+	return <ShowTransition open={open} openClassName="show" update={(show)=>{
+		if (show) modalRef.current?.showModal();
 		else modalRef.current?.close();
-	}, [open]);
+	}} ref={modalRef} >
+		<dialog className={twMerge(clsx(bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "[:not(.show)]:opacity-0 [:not(.show)]:pointer-events-none transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 pt-4 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0 gap-2 group [.show]:opacity-100 [.show]:pointer-events-auto", className))}
+			onClose={(ev)=>{
+				ev.preventDefault();
+				onClose?.();
+			}} {...props} ><ModalContext.Provider value={modalRef} >
 
-	return <dialog className={twMerge(clsx(bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "opacity-0 transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 pt-4 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0 gap-2", className))}
-		style={{opacity: open ? 1 : 0.001, pointerEvents: open ? undefined : "none"}}
-		ref={modalRef}
-		onClose={(ev)=>{
-			ev.preventDefault();
-			onClose?.();
-		}} {...props} ><ModalContext.Provider value={modalRef} >
+			{onClose && <IconButton icon={<IconX />}
+				className={clsx("absolute top-3 right-2 z-30 [:not(:hover)]:theme:bg-transparent [:not(:hover)]:border-transparent")}
+				onClick={()=>onClose()} />}
 
-		{onClose && <IconButton icon={<IconX />}
-			className={clsx("absolute top-3 right-2 z-30 [:not(:hover)]:theme:bg-transparent [:not(:hover)]:border-transparent")}
-			onClick={()=>onClose()} />}
+			{title!=undefined && <>
+				<Text v="big">{title}</Text>
+				<div className="my-0" >
+					<Divider className="absolute left-0 right-0 my-auto" contrast={bad} />
+				</div>
+			</>}
 
-		{title!=undefined && <>
-			<Text v="big">{title}</Text>
-			<div className="my-0" >
-				<Divider className="absolute left-0 right-0 my-auto" contrast={bad} />
-			</div>
-		</>}
+			{children}
 
-		{children}
-
-		<div className="fixed bg-black/30 left-0 right-0 top-0 bottom-0 -z-10"
-			onClick={()=>onClose?.()} />
-	</ModalContext.Provider></dialog>;
+			<div className="fixed bg-black/30 left-0 right-0 top-0 bottom-0 -z-10"
+				onClick={()=>onClose?.()} />
+	</ModalContext.Provider></dialog></ShowTransition>;
 }
 
 const PopupCountCtx = createContext({count: 0, incCount(this: void): number {return 0;}});
@@ -373,12 +429,13 @@ export function cloneRef<T>(...refs: (Ref<T>|undefined)[]): (x: T|null)=>void {
 //opens in modal if already in tooltip...
 export const AppTooltip = forwardRef(({
 	content, children, placement, className, onOpenChange,
-	noClick, noHover, ...props
+	noClick, noHover, disabled, ...props
 }: {
 	content: ComponentChild,
 	placement?: ComponentProps<typeof Popover>["positions"],
 	onOpenChange?: (x: boolean)=>void,
 	noClick?: boolean, noHover?: boolean,
+	disabled?: boolean,
 	className?: string
 }&Omit<JSX.HTMLAttributes<HTMLDivElement>,"content">, ref)=>{
 	const [open, setOpen] = useState<number>(0);
@@ -389,7 +446,7 @@ export const AppTooltip = forwardRef(({
 		if (p.pointerType=="mouse") setOpen(0);
 	}, [setOpen]);
 
-	const isOpen = reallyOpen==count;
+	const isOpen = disabled!=true && reallyOpen==count;
 
 	const interact = useCallback((p: PointerEvent) => {
 		if (p.pointerType=="mouse") setOpen(i=>i+1);
@@ -499,12 +556,12 @@ export function Dropdown({parts, trigger, ...props}: {
 			else if (x.type=="txt") return <div key={x.key ?? i}
 				className="flex flex-row justify-center gap-4 dark:bg-zinc-900 bg-zinc-100 items-center border m-0 dark:border-zinc-700 border-zinc-300 border-t-0 first:border-t rounded-none w-full" >
 				{x.txt}
-			</div>
+			</div>;
 			
 			return <div key={x.key ?? i}
 				className="flex flex-row justify-start gap-4 p-2 dark:bg-zinc-900 bg-zinc-100 items-center border m-0 dark:border-zinc-700 border-zinc-300 border-t-0 first:border-t rounded-none w-full" >
 				{x.txt}
-			</div>
+			</div>;
 		})} 
 		onKeyDown={(ev)=>{
 			if (acts.length==0 || !open) return;
@@ -540,7 +597,7 @@ function LazyAutoFocusSearch({search,setSearch,onSubmit}:{
 
 	return <form onSubmit={(ev)=>{
 		onSubmit?.(); ev.preventDefault();
-	}} className="contents"  >
+	}} >
 		<Input placeholder="Search..." ref={ref}
 			className="theme:border-1 py-1"
 			value={search} valueChange={setSearch} />
@@ -704,14 +761,15 @@ export function useAsync<T extends unknown[], R>(f: (...args: T)=>Promise<R>, op
 	propagateError?: boolean,
 }): {
 	run: (...args: T)=>void,
+	attempted: boolean,
 	loading: boolean,
 	error: Error|null,
-	result: R|null
+	result: R|null,
 } {
 	const [state, setState] = useState<{
-		loading: boolean, error: Error|null, result: R|null
+		loading: boolean, attempted: boolean, error: Error|null, result: R|null
 	}>({
-		loading: false, error: null, result: null
+		loading: false, attempted: false, error: null, result: null
 	});
 	
 	const propError = opts?.propagateError ?? true;
@@ -719,10 +777,10 @@ export function useAsync<T extends unknown[], R>(f: (...args: T)=>Promise<R>, op
 		if (propError && state.error) throw state.error;
 	}, [state.error, propError])
 
-	return {
+	return useMemo(()=>({
 		run(...args) {
 			if (!state.loading) {
-				setState(s=>({...s, loading: true}));
+				setState(s=>({...s, loading: true, attempted: true}));
 
 				f(...args).then(res=>{
 					setState(s=>({...s, result: res}));
@@ -734,7 +792,7 @@ export function useAsync<T extends unknown[], R>(f: (...args: T)=>Promise<R>, op
 			}
 		},
 		...state
-	};
+	}), [f, state]);
 }
 
 export function useAsyncEffect(f: ()=>Promise<void|(()=>void)>, deps: unknown[]) {
@@ -762,6 +820,8 @@ export function useAsyncEffect(f: ()=>Promise<void|(()=>void)>, deps: unknown[])
 		}
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [...deps, x.loading]);
+	
+	return x;
 }
 
 export function listener<E extends HTMLElement, K extends keyof HTMLElementEventMap>(
@@ -788,7 +848,7 @@ export function debounce(ms: number) {
 	} as const;
 }
 
-export function throttle(ms: number) {
+export function throttle(ms: number, callOnDispose?: boolean) {
 	let ts: number|null = null;
 	let cur: (()=>void)|null=null;
 	return {
@@ -800,7 +860,10 @@ export function throttle(ms: number) {
 				cur=f;
 			}
 		},
-		[Symbol.dispose]() { if (ts!=null) clearTimeout(ts); }
+		[Symbol.dispose]() {
+			if (ts!=null) clearTimeout(ts);
+			if (cur!=null && callOnDispose==true) cur?.();
+		}
 	} as const;
 }
 
@@ -814,7 +877,11 @@ export type LocalStorage = Partial<{
 	userProcs: number[],
 	// entry point is always id -1
 	puzzleProcs: Map<string, Procedure>,
-	stepsPerS: number
+	stepsPerS: number,
+	// timestamp of when stage last counted
+	lastStageCount: Map<string, number>,
+	puzzleSolve: Map<string, {token: string, id: number}>,
+	username: string
 }>&{
 	toJSON(): unknown
 };
@@ -823,7 +890,8 @@ const localStorageKeys: (Exclude<keyof LocalStorage,"toJSON">)[] = [
 	"theme", "storyState",
 	"puzzleProcs", "readStory",
 	"solvedPuzzles", "stepsPerS",
-	"userProcs", "storyParagraph"
+	"userProcs", "storyParagraph",
+	"lastStageCount", "puzzleSolve"
 ];
 
 export const LocalStorage = {
@@ -915,7 +983,7 @@ export function ConfirmModal({title, actionName, msg, open, onClose, confirm, de
 			ev.preventDefault();
 			if (defaultYes==true) confirm();
 			onClose();
-		}} >
+		}} className="contents" >
 			<Text>{msg}</Text>
 			<div className="flex flex-row gap-2" >
 				<Button className={bgColor.red} onClick={()=>{
@@ -926,4 +994,19 @@ export function ConfirmModal({title, actionName, msg, open, onClose, confirm, de
 			</div>
 		</form>
 	</Modal>;
+}
+
+export function AlertErrorBoundary({children}: {children?: ComponentChildren}) {
+	const [err, reset] = useErrorBoundary((err)=>{
+		console.error("alert error boundary", err);
+	}) as [unknown, ()=>void];
+
+	if (err!=undefined) {
+		return <Alert bad title="An error occurred" txt={<>
+			<Text>{err instanceof Error ? `Details: ${err.message}` : "Unknown error"}</Text>
+			<Button onClick={()=>reset()} >Retry</Button>
+		</>} />;
+	}
+	
+	return children;
 }

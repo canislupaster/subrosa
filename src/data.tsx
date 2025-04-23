@@ -8,7 +8,9 @@ import { StoryParagraph } from "./story";
 type ExtraData = Readonly<{ [K in typeof data[number]["key"]]:
 	Readonly<(((typeof data)[number]&{key: K})["type"] extends "story" ? {
 		para: ComponentChildren[]
-	} : object)&{
+	} : {
+		solveBlurb?: ComponentChildren
+	})&{
 		blurb: ComponentChildren
 	}>
 }>;
@@ -199,6 +201,7 @@ export const extraData: ExtraData = {
 	},
 	salad: {
 		blurb: "Company cultures are weird.",
+		solveBlurb: "How did Caesar, a military genius, ever believe his cipher was secure?"
 	},
 	first_payslip: {
 		blurb: "Karen, who?",
@@ -342,6 +345,7 @@ export const extraData: ExtraData = {
 	},
 	elzzup: {
 		blurb: "Money is important.",
+		solveBlurb: "🤑"
 	},
 	team_lunch: {
 		blurb: "Like termites emerging from the woodwork.",
@@ -467,7 +471,7 @@ export const extraData: ExtraData = {
 		]
 	},
 	"olive-oil": {
-		blurb: `Three employees walk into a bar. They don't get drunk.`,
+		blurb: `Three employees walk into a bar. They don't get drunk.`
 	},
 	late_night_clarity: {
 		blurb: "People vanish here... professionally, at least.",
@@ -731,7 +735,7 @@ export const extraData: ExtraData = {
 	keyword: {
 		blurb: `The first real puzzle you're solving.`,
 	},
-shell: {
+	shell: {
 		blurb: "Originally used to encrypt Hebrew...",
 	},
 	"rot-13": {

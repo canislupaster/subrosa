@@ -93,3 +93,6 @@ button:not(:disabled) {
   animation: fade-in 0.1s linear forwards;
 }
 
+dialog::backdrop {
+  background: none;
+}

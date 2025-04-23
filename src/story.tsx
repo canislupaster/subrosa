@@ -1,9 +1,8 @@
-import { ComponentChild, ComponentChildren, createContext, Fragment } from "preact";
+import { ComponentChildren, createContext, Fragment } from "preact";
 import { useCallback, useContext, useEffect, useRef, useState } from "preact/hooks";
-import { Anchor, bgColor, Button, LocalStorage, useDisposable, Text, Divider, textColor, anchorStyle } from "./ui";
+import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, textColor } from "./ui";
 import clsx from "clsx";
-import { Puzzle } from "../shared/puzzles";
-import { data, StageData } from "../shared/data";
+import { data } from "../shared/data";
 import { extraData } from "./data";
 
 export function useStoryState<T=string>(key: string) {
@@ -326,7 +325,11 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 	return <div className="flex flex-col gap-2 justify-start items-start max-w-2xl grow story-container"
 		ref={containerRef} >
 
-		<Text v="big" className="my-4" >{stage.name}</Text>
+		<div className="flex flex-row self-stretch justify-between gap-2 items-center" >
+			<Text v="big" className="my-4" >{stage.name}</Text>
+			<Anchor className={textColor.dim} onClick={()=>setIndex(0)} >Reset chapter</Anchor>
+		</div>
+
 		{stage.para.slice(0, index+1).map((v,i)=><Fragment key={i} >
 			<StoryContext.Provider value={{
 				active: index==i, last: next==undefined ? "end"

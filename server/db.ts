@@ -36,24 +36,18 @@ const db = new Kysely<Database>({
 const migrator = new Migrator({
 	db,
 	provider: {
-		getMigrations() {
-			return Promise.resolve({
+		async getMigrations() {
+			return {
 				"1_init": {
 					async up(db) {
-						await db.schema
-							.createTable("play")
+						await db.schema.createTable("play")
 							.addColumn("id", "integer", col => col.primaryKey().autoIncrement())
 							.addColumn("timestamp", "timestamp", col => col.notNull())
 							.addColumn("ip", "text", col => col.notNull())
 							.addColumn("stage", "text", col => col.notNull())
 							.execute();
 
-						await db.schema.createIndex("play_index")
-							.columns(["ip", "stage", "timestamp"])
-							.execute();
-
-						await db.schema
-							.createTable("solve")
+						await db.schema.createTable("solve")
 							.addColumn("id", "integer", col => col.primaryKey().autoIncrement())
 							.addColumn("key", "text", col=>col.notNull().unique())
 							.addColumn("stage", "text", col=>col.notNull())
@@ -63,6 +57,11 @@ const migrator = new Migrator({
 							.addColumn("nodes", "integer", col => col.notNull())
 							.addColumn("username", "text")
 							.execute();
+
+						await db.schema.createIndex("play_index")
+							.on("play")
+							.columns(["ip", "stage", "timestamp"])
+							.execute();
 					},
 					async down(db) {
 						await db.schema.dropTable("solve").execute();
@@ -70,13 +69,18 @@ const migrator = new Migrator({
 						await db.schema.dropTable("play").execute();
 					}
 				} satisfies Migration
-			});
+			};
 		}
 	} satisfies MigrationProvider
 });
 
 console.log("migrating database...");
-await migrator.migrateToLatest();
+
+const res = await migrator.migrateToLatest();
+if (res.error!=undefined) {
+	console.error("migration failed", res.error);
+}
+
 console.log("database ready");
 
 export async function countPlay(ip: string|null, stage: string) {
@@ -100,27 +104,28 @@ export async function countPlay(ip: string|null, stage: string) {
 }
 
 export async function addSolve({
-	time, registers, nodes, stage
-}: { stage: string }&ProgramStats) {
-	const token = randomBytes(16).toString("base64");
+	time, registers, nodes, stage, token
+}: { stage: string, token: string|null }&ProgramStats) {
+	token ??= randomBytes(16).toString("base64");
 	
-	await db.insertInto("solve").values({
-		stage, time, registers, nodes,
-		key: doHash(token),
-		timestamp: Date.now()
-	}).execute();
+	const vs = { stage, time, registers, nodes, timestamp: Date.now() } as const;
+	const ret = await db.insertInto("solve").values({
+		key: doHash(token), ...vs
+	}).returning(["id", "username"]).onConflict(conflict=>
+		conflict.column("key").doUpdateSet(vs)
+	).executeTakeFirstOrThrow();
 	
-	return { token };
+	return { token, id: ret.id, username: ret.username };
 }
 
-export async function setUsername(key: string, username: string) {
-	if (!await db.updateTable("solve").where("key", "=", key)
+export async function setUsername(key: string, username: string|null) {
+	if (!await db.updateTable("solve").where("key", "=", doHash(key))
 		.set("username", username).executeTakeFirst())
 		throw new AppError("no such entry to set name for");
 }
 
 export function getStats(stage: string) {
 	return db.selectFrom("solve").where("stage", "=", stage)
-		.select(["registers", "nodes", "time", "username"])
+		.select(["registers", "nodes", "time", "username", "id"])
 		.limit(1e4).execute();
 }
