@@ -32,7 +32,7 @@ function Home() {
     <Text className="mt-3" >
       <b>Ready to join our team?</b> Apply for a summer internship today! <i>Anyone</i> with strong problem solving skills will excel in our fast-paced growth-oriented environment.
     </Text>
-    <Button onClick={()=>goto("/menu")} >Apply now</Button>
+    <Button onClick={()=>goto("/menu")} autofocus >Apply now</Button>
   
     <Footer />
   </div>;

@@ -271,7 +271,7 @@ const SelectRegisterType = Select<"param"|"string"|"number">;
 
 const getNum = (s: string)=>{
 	const v = Number.parseInt(s,10);
-	if (!/^\d+$/.test(s) || isNaN(v)) return null;
+	if (!/^-?\d+$/.test(s) || isNaN(v)) return null;
 	return v;
 };
 
@@ -652,7 +652,7 @@ function ProcEditor({
 		
 		<div className="flex flex-col gap-2 editor-right min-h-0" >
 			<Text v="bold" className="mb-2" >Registers</Text>
-			<ul className={clsx("flex flex-col gap-2 overflow-y-auto pb-5", stack!=undefined && "max-h-1/3")}
+			<ul className={clsx("flex flex-col gap-2 overflow-y-auto pb-5", stack!=undefined && "basis-1/3 shrink-0 grow max-h-fit")}
 				ref={registerList} >
 				{proc.registerList.map(r=>
 					<RegisterEditor key={r} p={data} reg={r} setReg={setReg} />

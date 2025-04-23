@@ -126,7 +126,7 @@ export function clone(prog: ProgramState) {
 		stats: { ...prog.stats },
 		outputRegister: {...prog.outputRegister, mutable: prog.outputRegister},
 		stack: prog.stack.map(v=>({
-			...v, registers: new Map(v.registers.entries().map(([k,v])=>[
+			...v, registers: new Map([...v.registers.entries()].map(([k,v])=>[
 				k, {...v, mutable: v}
 			]))
 		}))
@@ -139,7 +139,7 @@ export function push(prog: ProgramState, procI: number, params: RegisterRef[]) {
 	const proc = prog.procs.get(procI);
 	if (!proc) throw new InterpreterError({ type: "noProcedure" });
 
-	const needed = proc.registers.values().reduce((a,b)=>a+(b.type=="param" ? 1 : 0), 0);
+	const needed = [...proc.registers.values()].reduce((a,b)=>a+(b.type=="param" ? 1 : 0), 0);
 	if (needed != params.length) {
 		throw new InterpreterError({
 			type: "badParam", nParam: needed, nProvided: params.length
