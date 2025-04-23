@@ -2,10 +2,10 @@ import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState
 import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState } from "../shared/eval";
 import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, mapWith, Modal, Select, SetFn, Text, textColor, ThemeSpinner, throttle, toSearchString, useFnRef, useGoto } from "./ui";
 import { twMerge } from "tailwind-merge";
-import { IconArrowRight, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
+import { IconArrowRight, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref } from "preact";
 import { dragAndDrop, useDragAndDrop } from "@formkit/drag-and-drop/react";
-import { animations, handleEnd, parentValues, remapNodes, setParentValues } from "@formkit/drag-and-drop";
+import { animations, parentValues, remapNodes, setParentValues } from "@formkit/drag-and-drop";
 import clsx from "clsx";
 import { ChangeEvent, SetStateAction } from "preact/compat";
 import { fill, toPrecStat } from "../shared/util";
@@ -25,7 +25,8 @@ const builtinNodes: Node[] = [
 	)),
 	...(["inc", "dec"] as const).map(op=>({ op, lhs: -1 })),
 	{ op: "goto", ref: "unset", conditional: null },
-	{ op: "setIdx", lhs: -1, rhs: -1, idx: -1 }
+	{ op: "setIdx", lhs: -1, rhs: -1, idx: -1 },
+	{ op: "breakpoint" }
 ];
 
 function useValidity(callback: (v: string)=>void): {
@@ -51,7 +52,6 @@ type EditData = {
 	regMap: ReadonlyMap<number, number>,
 	regParam: ReadonlyMap<number, number>,
 	nodeMap: ReadonlyMap<number|null, number>,
-	disableArrows: boolean,
 	runRegisters: ReadonlyMap<number, RegisterRefClone>|null
 };
 
@@ -70,6 +70,7 @@ function RegisterPicker({p, x, setX, desc}: {
 					};
 				})
 			]}
+			className="w-full"
 			searchable
 			disabled={setX==undefined}
 			placeholder={"(unset)"}
@@ -87,8 +88,7 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 	const arrowRef = useRef<HTMLDivElement>(null);
 
 	useEffect(()=>{
-		if (node.ref=="unset" || p.disableArrows
-			|| (node.ref!=undefined && !p.proc.nodes.has(node.ref))) return;
+		if (node.ref=="unset" || (node.ref!=undefined && !p.proc.nodes.has(node.ref))) return;
 		const el = p.nodeRefs.current.get(node.ref);
 		const el2 = p.nodeRefs.current.get(nodeI);
 		const rect = rectRef.current, arrow=arrowRef.current
@@ -126,13 +126,13 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 		};
 
 		updateArrow();
-		const ts = setTimeout(()=>updateArrow(), 200);
+		const ts = setTimeout(()=>updateArrow(), 100);
 
 		return ()=>{
 			clearTimeout(ts);
 			rect.hidden=arrow.hidden=true;
 		};
-	}, [node, node.ref, nodeI, p]);
+	}, [node, node.ref, nodeI, p.nodeRefs, p.proc.nodeList, p.proc.nodes]);
 
 	return <>
 		<div className="absolute w-4 nodrag" hidden ref={arrowRef} >
@@ -202,7 +202,7 @@ function CallInner({
 				<Text v="sm" >{v.name}</Text>
 				<Button onClick={()=>openProc(node.procRef)} >Open</Button>
 			</div>
-			<div className="flex flex-row flex-wrap gap-1" >
+			<div className="flex flex-row flex-wrap gap-1.5" >
 				{params.map((param, i)=>
 					<RegisterPicker key={i} p={p} x={i>=node.params.length ? -1 : node.params[i]}
 						desc={param.name!=undefined ? `#${i+1}: ${param.name}` : `#${i+1}`}
@@ -225,7 +225,8 @@ const nodeHint: Record<Node["op"], string> = {
 	dec: "Decrement the value of a register.",
 	goto: "Jump to another node, optionally conditional on whether the cond register contains a strictly positive value.",
 	setIdx: "Set the element at idx in lhs to rhs.",
-	call: "Call another procedure with parameters."
+	call: "Call another procedure with parameters.",
+	breakpoint: "Pause execution for debugging"
 };
 
 function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active}: {
@@ -246,6 +247,8 @@ function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active}: {
 			<RegisterPicker p={p} x={node.idx} setX={setNode ? idx=>setNode({...node, idx}) : undefined} desc="b" />
 			<RegisterPicker p={p} x={node.rhs} setX={setNode ? rhs=>setNode({...node, rhs}) : undefined} desc="c" />
 		</>;
+	} else if (node.op=="breakpoint") {
+		inner=<Text>breakpoint</Text>;
 	} else {
 		inner = <>
 			<RegisterPicker p={p} x={node.lhs} setX={setNode ? lhs=>setNode({...node, lhs}) : undefined} desc="a" />
@@ -346,12 +349,20 @@ function RegisterEditor({p, reg, setReg}: {
 			: typeof regV.value=="string" ? "string" : "number"}
 			setValue={v=>{
 				if (v=="param") setReg({...regV, type: "param"}, reg);
-				else if (v=="number") setReg({...regV, type: "value", value: 0}, reg);
-				else if (v=="string") setReg({...regV, type: "value", value: value.toString()}, reg);
+				else if (v=="number") {
+					setReg({...regV, type: "value", value: 0}, reg);
+					setValue("0");
+				} else if (v=="string") {
+					setReg({...regV, type: "value", value: value.toString()}, reg);
+					setValue("");
+				}
 			}} />
 
 		{regV.type=="value" && <>
-			<Input className={clsx(err!=null && borderColor.red)} value={value} valueChange={setValue} />
+			<Input className={clsx(err!=null && borderColor.red)}
+				type={regTy=="number" ? "number" : "text"}
+				step={1}
+				value={value} valueChange={setValue} />
 			{err!=null && <Alert bad txt={err} />}
 		</>}
 		
@@ -371,6 +382,7 @@ function RegisterEditor({p, reg, setReg}: {
 
 type ProcRunState = {
 	activeNode?: number,
+	breakpointNode?: number,
 	registers: ReadonlyMap<number, RegisterRefClone>
 };
 
@@ -400,7 +412,6 @@ function ProcEditor({
 	runState: ProcRunState|null, stack?: ComponentChildren
 }&UserProcs) {
 	const nodeRefs = useRef(new Map<number|null,HTMLDivElement>());
-	const [disableArrows, setDisableArrows] = useState(false);
 	const data: EditData = useMemo(()=>{
 		return {
 			i: procI, proc, procs,
@@ -412,10 +423,9 @@ function ProcEditor({
 				...proc.nodeList.map((v,i)=>[v,i] satisfies [number|null, number]),
 				[null, proc.nodeList.length]
 			]),
-			disableArrows,
 			runRegisters: runState?.registers ?? null
 		} as const;
-	}, [procI, proc, procs, disableArrows, runState?.registers]);
+	}, [procI, proc, procs, runState?.registers]);
 
 	const nodeForUserProc = useCallback((i: number): Node => {
 		const proc = procs.get(i)!;
@@ -457,7 +467,6 @@ function ProcEditor({
 			],
 			performTransfer({ initialParent, targetParent, draggedNodes, targetNodes }) {
 				remapNodes(initialParent.el);
-				remapNodes(targetParent.el);
 
 				const newData = updateFromDrag(draggedNodes.map(v=>v.data.value as unknown as DragNode));
 				draggedNodes.forEach((v,i)=>{ v.data.value=newData[i]; });
@@ -467,8 +476,6 @@ function ProcEditor({
 				const up = vs.toSpliced(idx, 0, ...draggedNodes.map(v=>v.data.value));
 				setParentValues(targetParent.el, targetParent.data, up);
 			},
-			handleEnd(state) { setDisableArrows(false); handleEnd(state); },
-			onDragstart() { setDisableArrows(true); },
 			...dragOpts,
 		});
 	}, [proc.nodeList, setProc, updateFromDrag]);
@@ -541,13 +548,20 @@ function ProcEditor({
 	// scroll to active node only on procedure change
 	// (e.g. when switching frames while debugging)
 	// dont overwrite scroll otherwise
+	// (unless in breakpoint)
 	const initialActiveNode = useRef(runState?.activeNode);
 	useEffect(()=>{
-		const active = initialActiveNode.current;
+		const active = runState?.breakpointNode ?? initialActiveNode.current;
 		if (active==undefined) return;
 		const ref = nodeRefs.current.get(active)
-		if (ref) ref.scrollIntoView({ behavior: "instant", block: "center" });
-	}, []);
+
+		if (runState?.breakpointNode==undefined) {
+			ref?.scrollIntoView({ behavior: "smooth", block: "center" });
+		} else {
+			ref?.scrollIntoView({ behavior: "instant", block: "center" });		
+			initialActiveNode.current=undefined;
+		}
+	}, [runState?.breakpointNode]);
 	
 	// i have no idea why this library is so buggy, im just going
 	// to have to work around this trash
@@ -762,7 +776,8 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	puzzle: Stage&{type: "puzzle"}|null, nextStage: ()=>void
 }) {
 	const [runState, setRunState] = useState<ReturnType<typeof clone>|null>();
-	const [runStatus, setRunStatus] = useState<{ type: "done"|"paused"|"stopped" }
+	const [runStatus, setRunStatus] = useState<{ type: "done"|"stopped" }
+		|{ type: "paused", breakpoint?: boolean }
 		|{ type: "running", step: boolean, restart: boolean }>({type: "stopped"});
 	const [runError, setRunError] = useState<InterpreterError|null>(null);
 	const [output, setOutput] = useState<string|null>(null);
@@ -782,6 +797,12 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		setEdit(v=>({ ...v, userProcList: vs }));
 	}, [setEdit])
 	
+	const inBreakpoint = runStatus.type=="paused" && runStatus.breakpoint==true && runState
+		&& runState.stack.length>0 ? runState.stack[runState.stack.length-1].proc : null;
+	useEffect(()=>{
+		if (inBreakpoint!=null) setEdit(e=>({...e, active: inBreakpoint}));
+	}, [inBreakpoint, setEdit]);
+	
 	const [newProc, setNewProc] = useState({open: false, name: ""});
 	const activeProcRunState = useMemo((): ProcRunState|null => {
 		if (!activeProc) return null;
@@ -789,15 +810,17 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 
 		return frame==undefined ? null : {
 			activeNode: activeProc.nodeList[frame.i],
-			registers: frame.registers
+			registers: frame.registers,
+			breakpointNode: inBreakpoint==edit.active ? activeProc.nodeList[frame.i] : undefined
 		};
-	}, [activeProc, edit.active, runState?.stack]);
+	}, [activeProc, edit.active, inBreakpoint, runState?.stack]);
 	
 	const [confirmDelete, setConfirmDelete] = useState<{proc: Procedure|null, open: boolean}>({
 		open: false, proc: null
 	});
 
 	const runStateRef = useRef<ProgramState|null>(null);
+	const [ignoreBreakpoint, setIgnoreBreakpoint] = useState(false);
 	
 	useEffect(()=>{
 		if (runStatus.type=="stopped") {
@@ -840,12 +863,16 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		if (initV==null) throw new Error("unreachable");
 		const v = initV;
 		v.procs = edit.procs;
+		v.stopOnBreakpoint=false;
 
 		let cont=true;
 		const doStep = ()=>{
 			const xd = handle(()=>{
 				const ret = step(v);
-				if (!ret) {
+				if (ret=="breakpoint") {
+					setRunStatus({ type: "paused", breakpoint: true });
+					setRunState(clone(v));
+				} else if (ret==false) {
 					cont=false;
 					setOutput(v.outputRegister.current.toString());
 					setRunStatus({type: "done"});
@@ -853,6 +880,9 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			});
 
 			cont&&=xd;
+
+			// after first step, re-enable breakpoints
+			v.stopOnBreakpoint = !ignoreBreakpoint;
 		};
 		
 		if (runStatus.step) {
@@ -881,7 +911,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			rl[Symbol.dispose]();
 			setRunState(clone(v));
 		};
-	}, [edit.entryProc, edit.input, edit.procs, edit.stepsPerS, runStatus]);
+	}, [edit.entryProc, edit.input, edit.procs, edit.stepsPerS, ignoreBreakpoint, runStatus]);
 	
 	const mod = (m: number) => setEdit(v=>({
 		...v,
@@ -899,7 +929,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	useEffect(()=>setOutput(null), [edit.input, setOutput]);
 	const goto = useGoto();
 
-	const stack = runStatus.type=="stopped" ? undefined : <div className="flex flex-col editor-right-down gap-2 min-h-0" >
+	const stack = runStatus.type=="stopped" ? undefined : <div className="flex flex-col editor-right-down gap-2 min-h-0 pb-4" >
 		<Divider className="mb-0" />
 		<Text v="bold" >Stack</Text>
 
@@ -956,7 +986,16 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 					className="group"
 					disabled={runStatus.type=="running"}
 					onClick={()=>play({ restart: runStatus.type=="done", step: true })} />
-					
+
+				<AppTooltip content={`${ignoreBreakpoint ? "En" : "Dis"}able breakpoints`} >
+					<div>
+						<IconButton icon={
+							ignoreBreakpoint ? <IconCircleOff className="fill-gray-500" />
+							: <IconCircleFilled className="fill-red-500" />
+						} onClick={()=>{ setIgnoreBreakpoint(!ignoreBreakpoint) }} />
+					</div>
+				</AppTooltip>
+
 				<span className="w-2" />
 
 				<IconButton icon={<IconPlayerTrackPrevFilled />} disabled={edit.stepsPerS<0.2}

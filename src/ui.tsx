@@ -535,7 +535,7 @@ export function Dropdown({parts, trigger, ...props}: {
 
 	const [open, setOpen] = useState(false);
 	const ctx = useContext(PopupCountCtx);
-	return <AppTooltip placement="bottom"
+	return <AppTooltip placement={["bottom", "top"]}
 		onOpenChange={setOpen}
 		className="px-0 py-0 max-w-60 overflow-y-auto justify-start max-h-[min(90dvh,30rem)]"
 		content={parts.map((x,i) => {

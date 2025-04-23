@@ -38,12 +38,17 @@ export type Node = Readonly<{
 } | {
 	op: "setIdx", // lhs[idx] = rhs
 	lhs: number, rhs: number, idx: number
+} | {
+	op: "breakpoint"
 }>;
 
 export type RegisterRef = { current: number|string };
 
 export type ProgramStats = {
+	// measures exclude breakpoint nodes
+	// raw # nodes processed
 	time: number,
+	// distinct # nodes processed
 	nodes: number,
 	registers: number
 };
@@ -51,6 +56,7 @@ export type ProgramStats = {
 export type ProgramState = {
 	procs: ReadonlyMap<number, Procedure>, //ehhh
 	outputRegister: RegisterRef,
+	stopOnBreakpoint: boolean,
 	visitedNodes: Map<number,Set<number>>,
 	activeRegisters: Set<RegisterRef>,
 	stats: ProgramStats,
@@ -61,15 +67,17 @@ export type ProgramState = {
 	}[];
 };
 
-export function makeState({input, procs, entry}: {
+export function makeState({input, procs, entry, stopOnBreakpoint}: {
 	input: string,
 	procs: ReadonlyMap<number, Procedure>,
-	entry: number
+	entry: number,
+	stopOnBreakpoint?: boolean
 }): ProgramState {
 	const pstate: ProgramState = {
 		procs, outputRegister: {current: input}, stack: [],
 		visitedNodes: new Map(), activeRegisters: new Set(),
-		stats: { nodes: 0, time: 0, registers: 0 }
+		stats: { nodes: 0, time: 0, registers: 0 },
+		stopOnBreakpoint: stopOnBreakpoint==true
 	};
 
 	push(pstate, entry, [pstate.outputRegister]);
@@ -170,9 +178,8 @@ export const stackLimit = 1024;
 export const strLenLimit = 1024;
 export const timeLimit = 64*stackLimit;
 
-export function step(prog: ProgramState) {
+export function step(prog: ProgramState): "breakpoint"|boolean {
 	if (prog.stack.length==0) return false;
-	prog.stats.time++;
 
 	const last = prog.stack[prog.stack.length-1];
 	const lastProc = prog.procs.get(last.proc);
@@ -198,21 +205,28 @@ export function step(prog: ProgramState) {
 		return true;
 	}
 	
-	// ik this is inflated but its kind of more economical structure
-	// i dont know why i did that
-	const oldVis = prog.visitedNodes.get(last.proc);
-	if (oldVis) {
-		if (!oldVis.has(nodeI)) {
-			oldVis.add(nodeI);
-			prog.stats.nodes++; 
-		}
-	} else {
-		prog.visitedNodes.set(last.proc, new Set([nodeI]));
-		prog.stats.nodes++;
-	}
-
 	const x = lastProc.nodes.get(nodeI);
 	if (!x) throw new InterpreterError({ type: "noNodeToGoto" });
+	if (x.op!="breakpoint") {
+		prog.stats.time++;
+
+		// ik this is inflated but its kind of more economical structure
+		// i dont know why i did that
+		const oldVis = prog.visitedNodes.get(last.proc);
+		if (oldVis) {
+			if (!oldVis.has(nodeI)) {
+				oldVis.add(nodeI);
+				prog.stats.nodes++; 
+			}
+		} else {
+			prog.visitedNodes.set(last.proc, new Set([nodeI]));
+			prog.stats.nodes++;
+		}
+	}
+	
+	if (x.op=="breakpoint" && prog.stopOnBreakpoint) {
+		return "breakpoint";
+	}
 
 	const get = (r: number) => {
 		const v = last.registers.get(r);
@@ -350,7 +364,7 @@ export function test({ input, output, proc, procs }: TestParams): Verdict {
 		const pstate = makeState({ input, procs, entry: proc });
 		pstateStats = pstate.stats;
 
-		while (step(pstate)) {
+		while (step(pstate)==true) {
 			if (pstate.stats.time >= timeLimit) return {type: "TLE", ...pstateStats};
 		}
 
