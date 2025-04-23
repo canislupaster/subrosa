@@ -38,6 +38,7 @@ const node = z.union([
 	z.object({ op: z.literal("call"), procRef: z.number(), params: z.array(z.number()) }),
 	z.object({ op: z.enum(["add", "sub", "set", "access"]), lhs: z.number(), rhs: z.number() }),
 	z.object({ op: z.literal("setIdx"), lhs: z.number(), rhs: z.number(), idx: z.number() }),
+	z.object({ op: z.literal("breakpoint") })
 ]);
 
 const procedure = z.object({
@@ -95,7 +96,7 @@ makeRoute<"count">({
 	route: "count",
 	validator: stageReq,
 	async handler({stage}, c) {
-		const ip = [...c.req.raw.headers].find(x=>x[0]=="X-Forwarded-For")?.[1]?.split(",")?.[0]?.trim()
+		const ip = c.req.raw.headers.get("x-forwarded-for")?.split(",")?.[0]?.trim()
 			?? getConnInfo(c).remote.address ?? null;
 
 		if (!data.some(x=>stageUrl(x)==stage)) throw new AppError("stage not found", 404);

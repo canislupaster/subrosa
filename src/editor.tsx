@@ -154,11 +154,12 @@ function GotoInner({p, node, setNode, nodeI}: {
 			const el = ev.target;
 			const targetNode = [...p.nodeRefs.current.entries()]
 				.filter(([,y])=>y.contains(el as globalThis.Node|null)).map(v=>v[0]);
-			if (targetNode.length) ev.preventDefault();
-			setNode?.({
-				...node,
-				ref: targetNode.length && targetNode[0]!=nodeI ? targetNode[0] : "unset"
-			});
+
+			if (targetNode.length && targetNode[0]!=nodeI) {
+				ev.preventDefault();
+				setNode?.({ ...node, ref: targetNode[0] });
+			}
+
 			setSelecting(false);
 		};
 
@@ -608,7 +609,7 @@ function ProcEditor({
 				{isUserProc && <IconButton icon={<IconTrash />} onClick={()=>{delProc();}} />}
 			</div>
 			 
-			<ul ref={nodeRef} className="pl-[50px] flex flex-col gap-1 items-stretch overflow-y-auto relative pb-10" >
+			<ul ref={nodeRef} className="pl-[50px] flex flex-col gap-1 items-stretch overflow-y-auto relative pb-20" >
 				{proc.nodeList.flatMap((v,i)=>{
 					const node = proc.nodes.get(v)!;
 					return [

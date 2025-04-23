@@ -29,7 +29,7 @@ type Database = { play: PlayStage, solve: SolvePuzzle };
 
 const db = new Kysely<Database>({
 	dialect: new DenoSqlite3Dialect({
-		database: new Sqlite("./db.sqlite")
+		database: new Sqlite("./db.sqlite", { int64: true })
 	})
 });
 
@@ -42,7 +42,7 @@ const migrator = new Migrator({
 					async up(db) {
 						await db.schema.createTable("play")
 							.addColumn("id", "integer", col => col.primaryKey().autoIncrement())
-							.addColumn("timestamp", "timestamp", col => col.notNull())
+							.addColumn("timestamp", "integer", col => col.notNull())
 							.addColumn("ip", "text", col => col.notNull())
 							.addColumn("stage", "text", col => col.notNull())
 							.execute();
@@ -52,7 +52,7 @@ const migrator = new Migrator({
 							.addColumn("key", "text", col=>col.notNull().unique())
 							.addColumn("stage", "text", col=>col.notNull())
 							.addColumn("time", "integer", col => col.notNull())
-							.addColumn("timestamp", "timestamp", col => col.notNull())
+							.addColumn("timestamp", "integer", col => col.notNull())
 							.addColumn("registers", "integer", col => col.notNull())
 							.addColumn("nodes", "integer", col => col.notNull())
 							.addColumn("username", "text")

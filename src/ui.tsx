@@ -891,7 +891,8 @@ const localStorageKeys: (Exclude<keyof LocalStorage,"toJSON">)[] = [
 	"puzzleProcs", "readStory",
 	"solvedPuzzles", "stepsPerS",
 	"userProcs", "storyParagraph",
-	"lastStageCount", "puzzleSolve"
+	"lastStageCount", "puzzleSolve",
+	"username"
 ];
 
 export const LocalStorage = {

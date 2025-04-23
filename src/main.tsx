@@ -5,7 +5,7 @@ import { useCallback, useErrorBoundary, useState } from "preact/hooks";
 import { Editor, makeProc } from "./editor";
 import { Stage, stages, Story } from "./story";
 import { EditorState, Procedure, Register } from "../shared/eval";
-import { IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled } from "@tabler/icons-preact";
+import { IconBrandGithubFilled, IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled } from "@tabler/icons-preact";
 import { LocationProvider, Route, Router, useLocation } from "preact-iso";
 import { twMerge } from "tailwind-merge";
 import clsx from "clsx";
@@ -14,12 +14,16 @@ import { stageUrl } from "../shared/data";
 import { useStageCount } from "./api";
 
 function Footer() {
-  return <div className={`mt-20 ${textColor.dim} mb-10`} >
+  return <div className={`mt-20 ${textColor.dim} mb-10 flex flex-col items-center gap-2`} >
     <p>
-      A game by <Anchor href="https://thomasqm.com" >Thomas Marlowe</Anchor>,
-      {" "}<Anchor href="https://github.com/kartva" >Kartavya Vashishtha</Anchor>,
-      {" "}and <Anchor href="https://linkedin.com/in/peterjin25/" >Peter Jin</Anchor>.
+      A game by <Anchor href="https://thomasqm.com" target="_blank" >Thomas Marlowe</Anchor>,
+      {" "}<Anchor href="https://github.com/kartva" target="_blank" >Kartavya Vashishtha</Anchor>,
+      {" "}and <Anchor href="https://linkedin.com/in/peterjin25/" target="_blank" >Peter Jin</Anchor>.
     </p>
+    <p><Anchor href="https://github.com/canislupaster/subrose" className={clsx("items-center", textColor.dim)}
+      target="_blank" >
+      <IconBrandGithubFilled /> GitHub
+    </Anchor></p>
   </div>;
 }
 
