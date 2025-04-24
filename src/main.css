@@ -61,14 +61,13 @@ button:not(:disabled) {
 	grid-template:
 		"a a a" 3.5rem
 		"b c d" 1fr
-		"b e d" 1.8fr / 1.2fr 1fr 0.7fr;
+		"b c d" 1.8fr / 1.2fr 1fr 0.7fr;
 }
 
 .editor-top { grid-area: a; }
 .editor-left { grid-area: b; }
 .editor-right { grid-area: d; }
-.editor-mid-up { grid-area: c; }
-.editor-mid-down { grid-area: e; }
+.editor-mid { grid-area: c; }
 
 .main-text p {
   text-indent: 1rem;

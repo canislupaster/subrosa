@@ -159,10 +159,10 @@ function Leaderboard({submission: s, puzzle}: {
 }
 
 export function Submission({
-	submission: s, setSolved, nextStage, setLoading, setInput, puzzle
+	submission: s, setSolved, nextStage, setLoading, puzzle
 }: { 
 	submission: Submission|null, setLoading: (x: boolean)=>void,
-	setInput: (x: string)=>void, puzzle: Stage&{type: "puzzle"},
+	puzzle: Stage&{type: "puzzle"},
 	setSolved: ()=>void, nextStage: ()=>void
 }) {
 	const [status, setStatus] = useState<SubmissionStatus>(null);
@@ -179,9 +179,8 @@ export function Submission({
 			const worker = new Tester();
 			stack.defer(()=>worker.terminate());
 
-			const tc = puzzle.generator();
 			worker.postMessage(stringifyExtra({
-				input: tc, output: puzzle.solve(tc),
+				puzzle: puzzle.key,
 				proc: s.active, procs: s.procs
 			} satisfies Parameters<typeof test>[0]))
 			
@@ -192,8 +191,7 @@ export function Submission({
 
 				worker.onerror = (err)=>{
 					console.error("worker error", err);
-					if (err instanceof Error) rej(err);
-					else rej(new Error("unknown worker error"));
+					rej(new Error(`error in worker: ${err.message}`));
 				};
 			});
 			
@@ -204,7 +202,6 @@ export function Submission({
 			}
 			
 			setStatus({ type: "done", verdict });
-			setInput(tc);
 		} finally {
 			stack.dispose();
 		}

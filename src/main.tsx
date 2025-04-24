@@ -1,7 +1,7 @@
 import "disposablestack/auto";
-import { Anchor, anchorStyle, bgColor, Button, clearLocalStorage, ConfirmModal, Container, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useFnRef, useGoto, useMd } from "./ui";
-import { ComponentChildren, render } from "preact";
-import { useCallback, useErrorBoundary, useState } from "preact/hooks";
+import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Input, Loading, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useFnRef, useGoto, useMd } from "./ui";
+import { ComponentChildren, ComponentProps, render } from "preact";
+import { useCallback, useEffect, useErrorBoundary, useState } from "preact/hooks";
 import { Editor, makeProc } from "./editor";
 import { Stage, stages, Story } from "./story";
 import { EditorState, Procedure, Register } from "../shared/eval";
@@ -93,7 +93,7 @@ function Menu() {
 
   return <div className="flex flex-col gap-4 pt-20 max-w-xl" >
     <ConfirmModal confirm={()=>{
-      clearLocalStorage();
+      localStorage.clear();
       setCompleted(getCompleted());
     }} msg={"Are you sure you want to clear your progress?"}
       open={confirmReset} onClose={()=>setConfirmReset(false)} />
@@ -110,7 +110,7 @@ function Menu() {
           (LocalStorage[k as keyof LocalStorage] as unknown) = save.localStorage[k as keyof LocalStorage] as unknown;
         }
         
-        procStorage.setProcs(save.procs);
+        procStorage.setUserProcs(save.procs);
         setCompleted(getCompleted());
         setImporting(false);
       }} className="flex flex-col gap-2" >
@@ -133,19 +133,19 @@ function Menu() {
     </div>
 
     {withDone.flat().map(stage=>{
-      const dimmed = stage.i>activeStages ? textColor.dim : "";
-      return <div className={twMerge(stage.i<=activeStages && anchorStyle, "flex flex-col gap-0.5 p-2 pt-1 group items-stretch relative pr-10")}
+      const a = stage.i<=activeStages;
+      return <div className={twMerge(a && anchorHover, "flex flex-col gap-0.5 p-2 pt-1 group items-stretch relative pr-10")}
         key={stageUrl(stage)}
         onClick={stage.i<=activeStages ? ()=>{
           goto(stageUrl(stage));          
         } : undefined} >
         <div className="flex flex-row gap-2 items-center" >
           {stage.done ? <IconCircleCheckFilled /> : stage.i<=activeStages && <IconCircleDashedCheck />}
-          <Text v="bold" className={dimmed} >{stage.name}</Text>
+          <Text v="bold" className={clsx(a ? anchorUnderline : textColor.dim)} >{stage.name}</Text>
           {stage.type=="puzzle" && <IconPuzzleFilled />}
         </div>
         {stage.i<=activeStages && <IconChevronRight size={36} className="transition-transform group-hover:translate-x-4 absolute top-2 right-4" />}
-        <Text v="sm" className={dimmed} >{stage.blurb}</Text>
+        <Text v="sm" className={clsx(!a && textColor.dim)} >{stage.blurb}</Text>
       </div>
     })}
 
@@ -156,7 +156,7 @@ function Menu() {
       <Anchor onClick={()=>{
         const txt = stringifyExtra({
           localStorage: LocalStorage,
-          procs: procStorage.getProcs()
+          procs: procStorage.getUserProcs()
         } satisfies Save);
 
         void window.navigator.clipboard.writeText(txt);
@@ -171,23 +171,23 @@ function Menu() {
 const procStorage = {
   savedProcs: new Map<number, Procedure>(),
 
-  getUserProc(i: number): Procedure|null {
+  getProc(i: number): Procedure|null {
     return parseExtra(localStorage.getItem(`proc${i}`)) as Procedure|null;
   },
   
-  getProcs() {
+  getUserProcs() {
     return (LocalStorage.userProcs ?? [])
-      .map((i): [number,Procedure]=>[i, this.getUserProc(i)!]);
+      .map((i): [number,Procedure]=>[i, this.getProc(i)!]);
   },
 
-  setUserProc(i: number, proc: Procedure) {
+  setProc(i: number, proc: Procedure) {
     if (this.savedProcs.get(i)==proc) return;
     this.savedProcs.set(i, proc);
     localStorage.setItem(`proc${i}`, stringifyExtra(proc));
   },
 
-  setProcs(procs: [number, Procedure][]) {
-    for (const [i,x] of procs) this.setUserProc(i,x);
+  setUserProcs(procs: [number, Procedure][]) {
+    for (const [i,x] of procs) this.setProc(i,x);
     LocalStorage.userProcs = procs.map(([x])=>x);
   }
 };
@@ -197,25 +197,36 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
   useStageCount(stage);
 
   const [edit, setEdit] = useState<EditorState>(()=>{
-    const userProcs = procStorage.getProcs();
-    const entryProc = LocalStorage.puzzleProcs?.get(stage.key) ?? {
-      ...makeProc("Solution"),
-      registerList: [0], registers: new Map([
-        [0, {
-          name: "Input and output", type: "param"
-        } satisfies Register]
-      ]),
-      maxRegister: 1
-    };
-
-    const maxProc = Math.max(0, ...userProcs.map(([i])=>i+1));
-
+    const userProcs = procStorage.getUserProcs();
+    // backwards compat for like 2 people
+    let maxProc = LocalStorage.maxProc ?? Math.max(0, ...userProcs.map(([i])=>i+1));
+    let entryProcI = LocalStorage.puzzleProcs?.get(stage.key);
+    let entryProc: Procedure;
+    if (typeof entryProcI=="number") {
+      entryProc = procStorage.getProc(entryProcI)!;
+    } else if (entryProcI && typeof entryProcI=="object") {
+      entryProc = entryProcI;
+      entryProcI = maxProc++;
+    } else {
+      entryProcI = maxProc++;
+      entryProc = {
+        ...makeProc("Main"),
+        registerList: [0], registers: new Map([
+          [0, {
+            name: "Input and output", type: "param"
+          } satisfies Register]
+        ]),
+        maxRegister: 1
+      };
+    }
+    
     return {
-      procs: new Map([...userProcs, [-1, entryProc]]),
+      procs: new Map([...userProcs, [entryProcI, entryProc]]),
       userProcList: userProcs.map(([i])=>i),
-      maxProc, entryProc: -1, active: -1,
-      input: "", stepsPerS: LocalStorage.stepsPerS ?? 5,
-      solved: LocalStorage.solvedPuzzles?.has(stage.key) ?? false
+      maxProc, entryProc: entryProcI, active: entryProcI,
+      decoded: "", stepsPerS: LocalStorage.stepsPerS ?? 5,
+      solved: LocalStorage.solvedPuzzles?.has(stage.key) ?? false,
+      undoHistory: [], procHistory: [], curNumUndo: 0
     };
   });
   
@@ -223,17 +234,16 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
     const ns = cb(old);
 
     throttleSave.current?.call(()=>{
-      LocalStorage.puzzleProcs = mapWith(
-        LocalStorage.puzzleProcs ?? null,
-        stage.key, ns.procs.get(ns.entryProc)
-      );
-
       LocalStorage.stepsPerS = ns.stepsPerS;
-      procStorage.setProcs(
+      procStorage.setUserProcs(
         [...ns.procs.entries()]
           .map(([k,v]): [number, Procedure]=>[k,v])
           .filter(([k])=>k!=ns.entryProc)
       );
+
+      LocalStorage.maxProc = ns.maxProc;
+      procStorage.setProc(ns.entryProc, ns.procs.get(ns.entryProc)!);
+      LocalStorage.puzzleProcs = mapWith(LocalStorage.puzzleProcs ?? null, stage.key, ns.entryProc);
     });
 
     return ns;
@@ -243,6 +253,34 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
   return <Editor edit={edit} setEdit={setEdit2} puzzle={stage} nextStage={()=>{
     goto(stageUrl(stages[i+1]));
   }} />;
+}
+
+function PuzzleStageWrap(props: ComponentProps<typeof PuzzleStage>) {
+  const [editingElsewhere, setEditingElsewhere] = useState<boolean|null>(null);
+  useEffect(()=>{
+    const newEditingElsewhere = LocalStorage.currentlyEditing!=undefined
+      && LocalStorage.currentlyEditing >= Date.now()-5000
+    setEditingElsewhere(newEditingElsewhere);
+    if (newEditingElsewhere) return;
+
+    LocalStorage.currentlyEditing=Date.now();
+    const int = setInterval(()=>LocalStorage.currentlyEditing=Date.now(), 1000);
+
+    const unload = ()=>{ LocalStorage.currentlyEditing = undefined; };
+    window.addEventListener("unload", unload);
+
+    return ()=>{
+      clearInterval(int);
+      window.removeEventListener("unload", unload);
+      LocalStorage.currentlyEditing = undefined;
+    };
+  }, []);
+  
+  if (editingElsewhere==null) return <Loading />;
+  if (editingElsewhere) return <ErrorPage errName="Don't open up multiple tabs!" >
+    You might impinge on the spatial-temporal consistency of your programs! Your progress might be nuked! I didn't design for this! What kind of game syncs progress between multiple windows?!
+  </ErrorPage>;
+  return <PuzzleStage {...props} />;
 }
 
 function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
@@ -292,7 +330,7 @@ function InnerApp() {
       return <Route key={path} path={path} component={
         ()=>stage.i>activeStages ? <LockedStage />
           : stage.type=="story" ? <StoryStage i={stage.i} stage={stage} />
-          : <PuzzleStage i={stage.i} stage={stage} />
+          : <PuzzleStageWrap i={stage.i} stage={stage} />
       } />;
     }) }
     <Route default component={()=><ErrorPage errName="Page not found" >

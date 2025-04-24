@@ -1,17 +1,41 @@
 import { charToNum, numToChar } from "./eval.ts";
 import { fill } from "./util.ts";
 
+// https://github.com/bryc/code/blob/master/jshash/PRNGs.md
+export class RNG {
+	constructor(public a: number = Date.now()+Math.random()) { }
+	// splitmix32
+	next() {
+		this.a |= 0; this.a = this.a + 0x9e3779b9 | 0;
+		let t = this.a ^ this.a >>> 16; t = Math.imul(t, 0x21f0aaad);
+				t = t ^ t >>> 15; t = Math.imul(t, 0x735a2d97);
+		return (t = t ^ t >>> 15) >>> 0;
+	}
+	nextRange(min: number, max: number) {
+		return min + (this.next()%(max - min + 1));
+	}
+	nextString(chars: string[], len: number) {
+		return fill(len, ()=>chars[this.nextRange(0,chars.length-1)]).join("");
+	}
+	shuffle<T>(s: readonly T[]): T[] {
+		const ns = [...s];
+		for (let i = s.length-1; i >= 0; --i) {
+			const ri = this.nextRange(0, i);
+			[ns[i], ns[ri]] = [ns[ri], ns[i]];
+		}
+		return ns;
+	}
+}
+
+// puzzle task is solve(generator) -> generated value
 export type Puzzle = {
 	name: string,
 	key: string,
-	generator: ()=>string, // generate an input
-	solve: (inp: string)=>string, // encrypt an input
+	generator: (seed?: number)=>string, // generate an input
+	encode: (inp: string)=>string, // encrypt an input
 };
-
+	
 // Default generator
-function randString(chars: string[], len: number) {
-	return fill(len, ()=>chars[Math.floor(chars.length*Math.random())]).join("");
-}
 
 const alphaLen: number = 26;
 // abcdefghijklmnopqrstuvwxyz
@@ -19,8 +43,7 @@ const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i));
 // const alpha = charMap.map(x=>x[0]);
 const defaultGenLen: number = 10;
 // Uniform random int
-const randInt = (min: number, max: number)=>Math.floor(Math.random() * (max - min + 1)) + min;
-export const defaultGen = ()=>randString(alpha, defaultGenLen); // Don't generate spaces
+export const defaultGen = (seed?: number)=>new RNG(seed).nextString(alpha, defaultGenLen); // Don't generate spaces
 
 // Adds ct to c[0], wrapping around both directions
 // Skips space
@@ -33,21 +56,13 @@ function charAdd(c: string, ct: number) : string {
 	return numToChar[cc];
 }
 
-function shuffle<T>(s: T[]): T[] {
-	for (let i = s.length-1; i >= 0; --i) {
-		const ri = randInt(0, i);
-		[s[i], s[ri]] = [s[ri], s[i]];
-	}	
-	return s;
-}
-
 export const puzzles = [
 	{
 		// Caesar
 		name: "Decrypting your password.",
 		key: "salad",
 		generator: defaultGen,
-		solve(inp) {
+		encode(inp) {
 			const key: number = 2;
 			const len: number = inp.length;
 			return fill(len, i=>charAdd(inp.charAt(i), key)).join("");
@@ -58,7 +73,7 @@ export const puzzles = [
 		name: "How much do they pay me, exactly?",
 		key: "elzzup",
 		generator: defaultGen,
-		solve(inp) {
+		encode(inp) {
 			return inp.split("").reverse().join("");
 		}
 	},
@@ -67,7 +82,7 @@ export const puzzles = [
 		name: "Team Puzzles are Just the Thing You Need.",
 		key: "olive-oil",
 		generator: defaultGen,
-		solve(inp) {
+		encode(inp) {
 			const len: number = inp.length;
 			return fill(len, i=>charAdd(inp.charAt(i), i)).join("");
 		}
@@ -86,10 +101,11 @@ export const puzzles = [
 		// Segment Reverse
 		name: "You gotta work for your promotions.",
 		key: "implementation-challenge",
-		generator() {
-			return fill(defaultGenLen, ()=>(Math.random() > 0.8 ? "x" : randString(alpha, 1))).join("");
+		generator(seed?: number) {
+			const rng = new RNG(seed);
+			return fill(defaultGenLen, ()=>(rng.nextRange(0,9)>=8 ? "x" : rng.nextString(alpha, 1))).join("");
 		},
-		solve(inp) {
+		encode(inp) {
 			let result = "";
 			const seg: string[] = [];
 			for (const char of inp) {
@@ -109,7 +125,7 @@ export const puzzles = [
 		name: "Can you handle the truth?",
 		key: "keyword",
 		generator: defaultGen,
-		solve(inp) {
+		encode(inp) {
 			const key = "mikah"; // change
 			let cipherAlphabet = "";
 			for (const char of key) {
@@ -130,7 +146,7 @@ export const puzzles = [
 		name: "bash",
 		key: "shell",
 		generator: defaultGen,
-		solve(inp) {
+		encode(inp) {
 			return fill(inp.length, i=>numToChar[alphaLen-1-charToNum[inp.charAt(i)]]).join("");
 		}
 	},
@@ -139,7 +155,7 @@ export const puzzles = [
 		name: "Rot 13",
 		key: "rot-13",
 		generator: defaultGen,
-		solve(inp) {
+		encode(inp) {
 			let sum = 0;
 			const base = 13;
 			for (let i = inp.length-1; i >= 0; --i) {
@@ -165,7 +181,7 @@ export const puzzles = [
 		name: "Tricky transposition",
 		key: "leaf",
 		generator: defaultGen,
-		solve(inp) {
+		encode(inp) {
 			return fill(inp.length, i=>inp.charAt(i % 2 == 0 ? Math.floor(i / 2) : 
 				Math.floor(i / 2) + Math.floor((inp.length + 1) / 2))).join(""); // Start from halfway, rounded up if odd
 		}
@@ -175,7 +191,7 @@ export const puzzles = [
 		name: "Secret 2",
 		key: "vinegar",
 		generator: defaultGen,
-		solve(inp) {
+		encode(inp) {
 			const key = "waas"; // change
 			return fill(inp.length, i=>charAdd(inp.charAt(i), charToNum[key.charAt(i % key.length)])).join("");
 		}
@@ -185,17 +201,18 @@ export const puzzles = [
 		name: "ABCs",
 		key: "abcdfghijklmnopqrstuvwxyz",
 		generator: defaultGen,
-		solve(inp) {
+		encode(inp) {
+			const rng = new RNG(123); // fixed seed
 			const seg: string[] = [];
 			let res = "";
 			for (const char of inp) {
 				if (seg.length != 0 && charToNum[seg[seg.length-1]] > charToNum[char]) {
-					res += `${shuffle(seg).join("")}x`;
+					res += `${rng.shuffle(seg).join("")}x`;
 					seg.length = 0;
 				} 
 				seg.push(char);
 			}
-			res += shuffle(seg).join("");
+			res += rng.shuffle(seg).join("");
 			return res;
 		}
 	}

@@ -1,4 +1,5 @@
-import { fill } from "./util.ts";
+import { data, StageData } from "./data.ts";
+import { fill, stringifyExtra } from "./util.ts";
 
 export type Register = Readonly<({
 	type: "value", value: number|string // initial values, determined by program state at runtime
@@ -86,17 +87,80 @@ export function makeState({input, procs, entry, stopOnBreakpoint}: {
 
 export type EditorState = Readonly<{
 	procs: ReadonlyMap<number, Procedure>,
+	undoHistory: readonly (readonly [number, Procedure])[],
+	curNumUndo: number,
+
 	userProcList: number[],
+	procHistory: number[],
 	maxProc: number,
 
 	entryProc: number,
 	active: number,
 	
-	input: string,
+	decoded: string,
 	stepsPerS: number,
 
 	solved: boolean
 }>;
+
+export type NodeSelection = Readonly<{
+	nodes: Node[],
+	registers: Register[],
+	procRegisters: ReadonlyMap<number, number[]>
+}>;
+
+function remapNodes(
+	nodes: Node[], getReg: (reg: number)=>number,
+	getNode: (node: number)=>number|null
+) {
+	return nodes.map((x): Node => {
+		if (x.op=="call") return { ...x, params: x.params.map(getReg) };
+		else if (x.op=="goto") return {
+			...x, conditional: x.conditional==null ? null : getReg(x.conditional),
+			ref: typeof x.ref=="number" ? getNode(x.ref) : x.ref
+		};
+		else if (x.op=="inc" || x.op=="dec") return { ...x, lhs: getReg(x.lhs) };
+		else if (x.op=="add" || x.op=="sub" || x.op=="access" || x.op=="set") return {
+			...x, lhs: getReg(x.lhs), rhs: getReg(x.rhs)
+		};
+		else if (x.op=="setIdx") return {
+			...x, lhs: getReg(x.lhs), rhs: getReg(x.rhs), idx: getReg(x.idx)
+		};
+		else if (x.op=="breakpoint") return x;
+		return x.op; // never
+	});
+}
+	
+export function toSelection(procI: number, proc: Procedure, nodes: number[]): NodeSelection {
+	const regKeys = ["lhs", "rhs", "idx", "conditional"] as const;
+
+	const regsUsed = new Set(nodes.flatMap(node=>{
+		const x = proc.nodes.get(node)!;
+		if (x.op=="call") return x.params;
+		const x2 = x as Partial<Record<(typeof regKeys)[number], number>>;
+		return regKeys.flatMap(k=>k in x2 && x2[k]!=null ? [x2[k]] : []);
+	}));
+	
+	const newRegList = proc.registerList
+		.filter(reg=>regsUsed.has(reg))
+		.map(reg=>[reg, proc.registers.get(reg)!] as const);
+
+	const newRegMap = new Map(newRegList.map(([v],i)=>[v,i]));
+	const nodeMap = new Map(nodes.map((v,i)=>[v,i]));
+
+	return {
+		nodes: remapNodes(nodes.map(i=>proc.nodes.get(i)!), x=>newRegMap.get(x)!, x=>nodeMap.get(x)??null),
+		registers: newRegList.map(([,b])=>b),
+		procRegisters: new Map([ [ procI, newRegList.map(([a])=>a) ] ])
+	};
+}
+
+export function fromSelection(
+	sel: NodeSelection, remapNode: number[], remapRegister: number[]
+): [number, Node][] {
+	return remapNodes(sel.nodes, x=>remapRegister[x], x=>remapNode[x])
+		.map((x,i)=>[remapNode[i], x]);
+}
 
 export class InterpreterError extends Error {
 	constructor(public value: {
@@ -108,7 +172,7 @@ export class InterpreterError extends Error {
 	txt() {
 		switch (this.value.type) {
 			case "badParam":
-				return `Expected ${this.value.nParam} parameters, but got ${this.value.nProvided}`;
+				return `Expected at least ${this.value.nParam} parameters, but only ${this.value.nProvided} provided`;
 			case "noRegister":
 				return "Register not found";
 			case "noNodeToGoto":
@@ -126,7 +190,7 @@ export class InterpreterError extends Error {
 }
 
 // creates an non-runnable (register refs are broken) but accurate copy
-export type RegisterRefClone = RegisterRef&{ mutable: RegisterRef };
+export type RegisterRefClone = Readonly<RegisterRef>&{ mutable: RegisterRef };
 export function clone(prog: ProgramState) {
 	return {
 		...prog,
@@ -148,7 +212,7 @@ export function push(prog: ProgramState, procI: number, params: RegisterRef[]) {
 	if (!proc) throw new InterpreterError({ type: "noProcedure" });
 
 	const needed = [...proc.registers.values()].reduce((a,b)=>a+(b.type=="param" ? 1 : 0), 0);
-	if (needed != params.length) {
+	if (needed > params.length) {
 		throw new InterpreterError({
 			type: "badParam", nParam: needed, nProvided: params.length
 		});
@@ -351,27 +415,60 @@ export type Verdict = Readonly<{
 }&ProgramStats>;
 
 export type TestParams = {
-	input: string,
-	output: string,
-	proc: number,
+	puzzle: string, proc: number,
 	procs: ReadonlyMap<number,Procedure>
 };
 
-export function test({ input, output, proc, procs }: TestParams): Verdict {
-	let pstateStats: ProgramStats = {nodes: 0, time: 0, registers: 0};
+// puzzle assumed to be valid key of puzzle stage
+const numTests = 15;
+export async function test({ puzzle, proc, procs }: TestParams): Promise<Verdict> {
+	const pstateStats: ProgramStats[] = [];
 
-	try {
-		const pstate = makeState({ input, procs, entry: proc });
-		pstateStats = pstate.stats;
+	// median
+	const getStats = ()=>{
+		const out: ProgramStats = {nodes: 0, registers: 0, time: 0};
 
-		while (step(pstate)==true) {
-			if (pstate.stats.time >= timeLimit) return {type: "TLE", ...pstateStats};
+		if (pstateStats.length>0) {
+			for (const k of ["nodes", "registers", "time"] as const) {
+				pstateStats.sort((a,b)=>a[k]-b[k]);
+				out[k] = Math.ceil((
+					pstateStats[Math.floor(pstateStats.length/2)][k]
+					+ pstateStats[Math.floor((pstateStats.length-1)/2)][k]
+				)/2);
+			}
 		}
 
-		if (pstate.outputRegister.current!=output) return {type: "WA", ...pstateStats};
-		return {type: "AC", ...pstate.stats};
+		return out;
+	};
+
+	try {
+		// lmao now its deterministic, but supposedly impossible to game
+		// (u cant succeed on client and fail on server)
+		let seed = Number(new BigUint64Array(
+			(await crypto.subtle.digest("SHA-1", new TextEncoder().encode(
+				stringifyExtra({ proc, procs })
+			))).slice(0,8)
+		)[0] % BigInt(Number.MAX_SAFE_INTEGER));
+
+		for (let i=0; i<numTests; i++) {
+			const stage = data.find(x=>x.key==puzzle) as StageData&{type: "puzzle"};
+
+			const plaintxt = stage.generator(seed++);
+			const encoded = stage.encode(plaintxt);
+
+			const pstate = makeState({ input: encoded, procs, entry: proc });
+			pstateStats.push(pstate.stats);
+
+			while (step(pstate)==true) {
+				if (pstate.stats.time >= timeLimit) return {type: "TLE", ...getStats()};
+			}
+
+			if (pstate.outputRegister.current!=plaintxt) return {type: "WA", ...getStats()};
+		}
+
+		return {type: "AC", ...getStats()};
 	} catch (e) {
-		if (e instanceof InterpreterError) return {type: "RE", ...pstateStats};
+		if (e instanceof InterpreterError) return {type: "RE", ...getStats()};
 		throw e;
 	}
 }

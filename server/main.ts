@@ -8,7 +8,7 @@ import { data, StageData, stageUrl } from "../shared/data.ts";
 import { AddSolve, API, CountStage, parseExtra, ServerResponse, stringifyExtra, validUsernameRe } from "../shared/util.ts";
 import { addSolve, countPlay, getStats, setUsername } from "./db.ts";
 import { getConnInfo } from 'hono/deno';
-import { ProgramStats, Verdict } from "../shared/eval.ts";
+import { TestParams, Verdict } from "../shared/eval.ts";
 import { StatusCode } from "hono/utils/http-status";
 
 export class AppError extends Error {
@@ -116,41 +116,35 @@ makeRoute<"solve">({
 	validator: addSolveReq,
 	async handler(solve) {
 		const stage = getPuzzle(solve.stage);
-		const accumStats: ProgramStats = { nodes: 0, time: 0, registers: 0 };
 
-		for (let testI=0; testI<10; testI++) {
-			const input = stage.generator();
-			const output = stage.solve(input);
+		const worker = new Worker(
+			new URL("../shared/worker.ts", import.meta.url).href,
+			{ type: "module" }
+		);
+			
+		try {
+			const delay = new Promise<null>((res)=>setTimeout(()=>res(null), 10_000));
+			const recv = new Promise<Verdict|"error">((res)=>{
+				worker.onmessageerror = worker.onerror = ()=>res("error");
+				worker.onmessage = (e)=>res(parseExtra(e.data as string) as Verdict);
+			});
 
-			const worker = new Worker(
-				new URL("../shared/worker.ts", import.meta.url).href,
-				{ type: "module" }
-			);
-				
-			try {
-				const delay = new Promise<null>((res)=>setTimeout(()=>res(null), 10_000));
-				const recv = new Promise<Verdict|"error">((res)=>{
-					worker.onmessageerror = worker.onerror = ()=>res("error");
-					worker.onmessage = (e)=>res(parseExtra(e.data as string) as Verdict);
-				});
+			worker.postMessage(stringifyExtra({
+				puzzle: stage.key, proc: solve.entry, procs: solve.procs
+			} satisfies TestParams));
+			
+			const res = await Promise.race([delay, recv]);
 
-				worker.postMessage(stringifyExtra({
-					input, output, proc: solve.entry, procs: solve.procs
-				}));
-				
-				const res = await Promise.race([delay, recv]);
-				if (res==null) throw new AppError("execution timed out");
-				if (res=="error") throw new AppError("execution error");
-				if (res.type!="AC") throw new AppError(`received verdict ${res.type} != AC (tc ${testI+1})`);
-				
-				for (const k of ["nodes", "time", "registers"] as const)
-					accumStats[k]=Math.max(accumStats[k], res[k]);
-			} finally {
-				worker.terminate();
-			}
+			if (res==null) throw new AppError("execution timed out");
+			if (res=="error") throw new AppError("execution error");
+			if (res.type!="AC") throw new AppError(`received verdict ${res.type} != AC`);
+	
+			return await addSolve({
+				...res, stage: solve.stage, token: solve.token
+			});
+		} finally {
+			worker.terminate();
 		}
-		
-		return await addSolve({...accumStats, stage: solve.stage, token: solve.token});
 	}
 })
 

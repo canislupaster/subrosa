@@ -6,7 +6,7 @@ import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
 import { forwardRef, SetStateAction } from "preact/compat";
 import clsx from "clsx";
 import { useLocation } from "preact-iso";
-import { Procedure } from "../shared/eval";
+import { NodeSelection, Procedure } from "../shared/eval";
 import { parseExtra, stringifyExtra } from "../shared/util";
 
 // dump of a bunch of UI & utility stuff ive written...
@@ -107,7 +107,9 @@ export const IconButton = ({className, icon, disabled, ...props}: {icon?: Compon
 	</button>;
 
 type AnchorProps = JSX.AnchorHTMLAttributes<HTMLAnchorElement>;
-export const anchorStyle = "text-gray-600 dark:text-gray-300 inline-flex flex-row align-baseline items-baseline gap-1 underline decoration-dashed decoration-1 underline-offset-2 transition-all hover:text-black dark:hover:text-gray-50 hover:bg-cyan-100/5 cursor-pointer";
+export const anchorHover = "transition-all hover:text-black dark:hover:text-gray-50 hover:bg-cyan-100/5 cursor-pointer";
+export const anchorUnderline = "text-gray-600 dark:text-gray-300 inline-flex flex-row align-baseline items-baseline gap-1 underline decoration-dashed decoration-1 underline-offset-2";
+export const anchorStyle = clsx(anchorHover, anchorUnderline);
 
 export const Anchor = forwardRef<HTMLAnchorElement, AnchorProps>((
 	{className,children,...props}: AnchorProps, ref
@@ -256,14 +258,16 @@ export const ShowTransition = forwardRef<HTMLElement, ShowTransitionProps>(({
 	return cloneElement(children as VNode, { ref: cloneRef(ref, myRef) });
 });
 
+// init=true -> dont animate expanding initially
 export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&{
-	open?: boolean
+	open?: boolean, init?: boolean
 }>((
-	{children, open, className, style, ...props}, ref
+	{children, open, className, style, init, ...props}, ref
 )=>{
 	const myRef = useRef<HTMLDivElement>(null);
 	const innerRef = useRef<HTMLDivElement>(null);
-	const [showInner, setShowInner] = useState(false);
+	const initCollapse = useRef(init!=true);
+	const [showInner, setShowInner] = useState(open!=false);
 
 	useEffect(()=>{
 		const main=myRef.current, inner = innerRef.current
@@ -271,13 +275,15 @@ export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&
 
 		let frame: number|null;
 		setShowInner(main.clientHeight>0 || open!=false);
+
 		let lt = performance.now();
 		const cb = ()=>requestAnimationFrame((t)=>{
 			const dt = t-lt;
 			const style = getComputedStyle(main);
 			const mainInnerHeight = main.clientHeight - parseFloat(style.paddingBottom) - parseFloat(style.paddingTop);
 			const d = (open==false ? 0 : inner.clientHeight) - mainInnerHeight;
-			const done = Math.abs(d) < 5;
+			const done = !initCollapse.current || Math.abs(d) < 5;
+			initCollapse.current=true;
 			let newH = (done ? d : d*dt*10/1000) + parseFloat(style.height);
 			if (d<0) newH=Math.floor(newH); else newH=Math.ceil(newH);
 			
@@ -297,6 +303,7 @@ export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&
 		observer.observe(inner);
 
 		frame = cb();
+
 		return ()=>{
 			observer.disconnect();
 			if (frame!=null) cancelAnimationFrame(frame);
@@ -332,8 +339,7 @@ export function ShowMore({children, className, maxh, forceShowMore, inContainer}
 
 	const expanded = showMore==null || showMore==true || forceShowMore==true;
 
-	return <div className={className} >
-		<Collapse>
+	return <Collapse init ><div className={className} >
 			<div ref={ref} className={`relative ${expanded ? "" : "max-h-52 overflow-y-hidden"}`} style={{maxHeight: expanded ? undefined : maxh}}>
 				<div ref={inner} className={expanded ? "overflow-y-auto max-h-dvh" : ""} >
 					{children}
@@ -355,8 +361,7 @@ export function ShowMore({children, className, maxh, forceShowMore, inContainer}
 			}} className="pt-2" >
 				Show less
 			</MoreButton>}
-		</Collapse>
-	</div>;
+	</div></Collapse>;
 }
 
 type TextVariants = "big"|"lg"|"md"|"dim"|"bold"|"normal"|"err"|"sm"|"smbold"|"code";
@@ -875,13 +880,22 @@ export type LocalStorage = Partial<{
 	readStory: Set<string>,
 
 	userProcs: number[],
-	// entry point is always id -1
-	puzzleProcs: Map<string, Procedure>,
+	maxProc: number,
+	puzzleProcs: Map<string, number|Procedure>,
+
+	// prevent editing in multiple tabs
+	// updates with last timestamp
+	// cleared with onbeforeunload
+	currentlyEditing: number;
+
 	stepsPerS: number,
 	// timestamp of when stage last counted
 	lastStageCount: Map<string, number>,
 	puzzleSolve: Map<string, {token: string, id: number}>,
-	username: string
+	username: string,
+
+	clipboard: NodeSelection,
+	builtInExpand: boolean
 }>&{
 	toJSON(): unknown
 };
@@ -892,7 +906,9 @@ const localStorageKeys: (Exclude<keyof LocalStorage,"toJSON">)[] = [
 	"solvedPuzzles", "stepsPerS",
 	"userProcs", "storyParagraph",
 	"lastStageCount", "puzzleSolve",
-	"username"
+	"username", "currentlyEditing",
+	"clipboard", "builtInExpand",
+	"maxProc"
 ];
 
 export const LocalStorage = {
@@ -901,24 +917,16 @@ export const LocalStorage = {
 	}
 } as unknown as LocalStorage;
 
-let localLocalStorage: Omit<LocalStorage, "toJSON"> = {};
-
-export function clearLocalStorage() {
-	localLocalStorage = {};
-	localStorage.clear();
-}
-
 for (const k of localStorageKeys) {
 	Object.defineProperty(LocalStorage, k, {
 		get() {
-			if (localLocalStorage[k]!=undefined) return localLocalStorage[k];
 			const vStr = localStorage.getItem(k);
-			(localLocalStorage[k] as unknown) = vStr!=null ? parseExtra(vStr) : undefined;
-			return localLocalStorage[k];
+			return vStr!=null ? parseExtra(vStr) : undefined;
 		},
 		set(newV) {
-			(localLocalStorage[k] as unknown) = newV;
-			localStorage.setItem(k, stringifyExtra(newV));
+			if (newV==undefined) localStorage.removeItem(k);
+			else localStorage.setItem(k, stringifyExtra(newV));
+			return newV as unknown;
 		}
 	});
 }
@@ -939,9 +947,9 @@ export function mapWith<K,V>(map: ReadonlyMap<K,V>|null, k: K, v?: V) {
 	return newMap;
 }
 
-export function setWith<K>(set: ReadonlySet<K>|null, k: K) {
+export function setWith<K>(set: ReadonlySet<K>|null, k: K, del?: boolean) {
 	const newSet = new Set(set);
-	newSet.add(k);
+	if (del==true) newSet.delete(k); else newSet.add(k);
 	return newSet;
 }
 
