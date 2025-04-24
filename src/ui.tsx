@@ -664,8 +664,10 @@ export const ThemeContext = createContext<{
 export const useTheme = ()=>useContext(ThemeContext).theme;
 
 const ToastContext = createContext(undefined as unknown as {
-	toastsRoot: RefObject<HTMLDivElement>
+	pushToast(this: void, x: string): void;
 });
+
+export function useToast() { return useContext(ToastContext).pushToast; }
 
 export function Container({children, className, ...props}: {
 	children?: ComponentChildren, className?: string
@@ -685,11 +687,38 @@ export function Container({children, className, ...props}: {
 		return ()=>html.classList.remove(theme);
 	}, [theme, incCount]);
 	
-	const toastsRef = useRef<HTMLDivElement>(null);
+	const toastKey = useRef(1);
+	const [toasts, setToasts] = useState<[number,string][]>([[0,""]]);
+	useEffect(()=>{
+		if (toasts.length<=1) return;
+		const tm = setTimeout(() => {
+			setToasts(toasts.toSpliced(0,1));
+		}, 2000);
+		return ()=>clearTimeout(tm);
+	}, [toasts]);
 
 	return <PopupCountCtx.Provider value={{count, incCount}} >
-		<ToastContext.Provider value={{toastsRoot: toastsRef}} >
-			<div className="fixed top-5 left-0 right-0 px-10 z-[1000] flex flex-col items-center gap-3" ref={toastsRef} />
+		<ToastContext.Provider value={{pushToast: useCallback((toast: string)=>{
+			setToasts(xs=>[...xs.slice(0,3), [toastKey.current++, toast]]);
+		}, [])}} >
+			<div className="fixed bottom-5 left-2 px-10 z-[12000] flex flex-col items-center gap-3" >
+				{toasts.map((x,i)=>
+					<ShowTransition key={x[0]} open={i!=0}
+						openClassName="opacity-100" closedClassName="opacity-0" >
+
+						<div className={twMerge(
+							containerDefault, "p-2 pl-5 gap-5 flex flex-row items-center transition-opacity",
+							bgColor.sky
+						)} >
+							{x[1]}
+							<button className="ml-auto" onClick={()=>{
+								setToasts(xs=>xs.filter(y=>y[0]!=x[0]));
+							}} ><IconX /></button>
+						</div>
+					</ShowTransition>
+				)}
+			</div>
+
 			<div className={twMerge("font-body dark:text-gray-100 dark:bg-neutral-950 text-gray-950 bg-neutral-100 min-h-dvh", className)}
 				{...props} >
 				{children}
@@ -698,38 +727,6 @@ export function Container({children, className, ...props}: {
 	</PopupCountCtx.Provider>;
 }
 
-export function Toast({children, className, duration}: {
-	children?: ComponentChildren, className?: string, duration?: number
-}) {
-	const ctx = useContext(ToastContext);
-	const [renderTo, setRenderTo] = useState<null|HTMLDivElement>(null);
-	const [hide, setHide] = useState(false);
-	useEffect(()=>{
-		const r = ctx.toastsRoot.current!;
-		const target = document.createElement("div");
-		target.style.display = "contents";
-		r.appendChild(target);
-		setRenderTo(target);
-		const tm = setTimeout(()=>setHide(true), duration ?? 2000);
-		return ()=>{
-			clearTimeout(tm);
-			target.remove();
-			setRenderTo(null);
-		};
-	}, [ctx.toastsRoot, duration]);
-	
-	return renderTo && createPortal(<ShowTransition open={!hide}
-		openClassName="opacity-100" closedClassName="opacity-0" >
-
-		<div className={twMerge(
-			containerDefault, "p-2 pl-5 gap-5 flex flex-row items-center transition-opacity",
-			bgColor.sky, className
-		)} >
-			{children} <button className="ml-auto" onClick={()=>setHide(true)} ><IconX /></button>
-		</div>
-	</ShowTransition>, renderTo);
-}
-	
 export const toSearchString = (x: string) => x.toLowerCase().replace(/[^a-z0-9\n]/g, "");
 
 export function useMediaQuery(q: MediaQueryList|string|null, init: boolean=false) {

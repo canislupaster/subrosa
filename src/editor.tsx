@@ -1,6 +1,6 @@
-import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { Dispatch, MutableRef, useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection } from "../shared/eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, Collapse, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, textColor, ThemeSpinner, throttle, toSearchString, useFnRef, useGoto } from "./ui";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, Collapse, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, textColor, ThemeSpinner, throttle, toSearchString, useFnRef, useGoto, useToast } from "./ui";
 import { twMerge } from "tailwind-merge";
 import { IconArrowRight, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref } from "preact";
@@ -659,6 +659,7 @@ function ProcEditor({
 		};
 	}, [proc.maxNode, proc.nodeList, procI, selection, setProc]);
 
+	const toast = useToast();
 	useEffect(()=>{
 		// hacky af to sync selection with multidrag
 		const dragState = dragStateRef.current;
@@ -707,12 +708,17 @@ function ProcEditor({
 						nodeList: p.nodeList.filter(i=>!selection.has(i))
 					}));
 				}
+
+				toast(ev.key=="c" ? "Copied" : ev.key=="x" ? "Cut" : "Deleted");
 			} else if (ev.key=="v") {
 				const data = LocalStorage.clipboard;
 				if (!data || remappingClipboard.open) return;
 				const regMap = data.registers.length==0 ? [] : data.procRegisters.get(procI);
 				if (regMap==null) setRemappingClipboard({ sel: data, open: true });
-				else pasteSel(data, regMap);
+				else {
+					pasteSel(data, regMap);
+					toast("Pasted");
+				}
 			} else {
 				return;
 			}
@@ -726,7 +732,7 @@ function ProcEditor({
 			document.removeEventListener("keydown", clipboardListener)
 			document.removeEventListener("click", docClick);
 		};
-	}, [data.nodeRefs, pasteSel, proc, proc.nodeList, procI, remappingClipboard.open, selection, setProc, undo]);
+	}, [data.nodeRefs, pasteSel, proc, proc.nodeList, procI, remappingClipboard.open, selection, setProc, undo, toast]);
 	
 	const [builtinExpand, setBuiltinExpand] = useState(()=>LocalStorage.builtInExpand ?? false);
 
@@ -974,6 +980,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	const [runError, setRunError] = useState<InterpreterError|null>(null);
 	const [output, setOutput] = useState<string|null>(null);
 
+	const toast = useToast();
 	const activeProc = edit.procs.get(edit.active);
 	useEffect(()=>{
 		if (!activeProc) setEdit(v=>({...v, active: v.entryProc}));
@@ -997,7 +1004,10 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	
 	const undo = useCallback((redo: boolean)=>setEdit(v=>{
 		if ((!redo && v.curNumUndo >= v.undoHistory.length)
-			|| (redo && v.curNumUndo==0)) return v;
+			|| (redo && v.curNumUndo==0)) {
+			toast(redo ? "Out of redoes" : "Out of undoes");
+			return v;
+		}
 
 		const idx = redo ? v.undoHistory.length-v.curNumUndo : v.undoHistory.length-1-v.curNumUndo
 		const step = v.undoHistory[idx];
@@ -1007,7 +1017,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			curNumUndo: redo ? v.curNumUndo-1 : v.curNumUndo+1,
 			undoHistory: v.undoHistory.toSpliced(idx, 1, [step[0], v.procs.get(step[0])!])
 		};
-	}), [setEdit]);
+	}), [setEdit, toast]);
 	
 	const setProcList = useCallback((vs: number[])=>{
 		setEdit(v=>({ ...v, userProcList: vs }));
@@ -1088,6 +1098,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				const ret = step(v);
 				if (ret=="breakpoint") {
 					setRunStatus({ type: "paused", breakpoint: true });
+					toast("Breakpoint hit");
 					setRunState(clone(v));
 				} else if (ret==false) {
 					cont=false;

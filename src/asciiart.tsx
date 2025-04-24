@@ -14,21 +14,19 @@ function rgb2hsv([r,g,b]: readonly [number, number, number]): [number, number, n
 	return [60*(h<0?h+6:h), v&&c/v, v];
 }
 
-const palette = ([
-	[0, 0, 0], [205, 0, 0], [0, 205, 0],
-	[205, 205, 0], [0, 0, 238], [205, 0, 205],
-	[0, 205, 205], [229, 229, 229], [127, 127, 127],
-	[255, 0, 0], [0, 255, 0], [255, 255, 0],
-	[92, 92, 255], [255, 0, 255], [0, 255, 255],
-	[255, 255, 255]
-] as const).map(x=>[
-	rgb2hsv(x.map(v=>v/255) as [number,number,number]),
-	`#${x.map(v=>`${Math.floor(v/16).toString(16)}${(v%16).toString(16)}`).join("")}`
+const palette = (
+	"#000000000000:#b7b7b8b89e9e:#9292cbcbafaf:#a6a6cbcb9e9e:#a4a4a7a7c3c3:#b7b7a7a7b2b2:#9292babac3c3:#e7e7e7e7e7e7:#808080808080:#dedef2f2eaea:#dedef2f2eaea:#dedef2f2eaea:#dedef2f2eaea:#dedef2f2eaea:#dedef2f2eaea:#ffffffffffff".split(":").map(x=>x.slice(0,7))
+).map(x=>[
+	rgb2hsv(
+		[0,2,4].map(v=>(Number.parseInt(x.slice(v+2,v+3), 16) + 16*Number.parseInt(x.slice(v+1,v+2), 16))/255) as [number,number,number]
+	),
+	// `#${x.map(v=>`${Math.floor(v/16).toString(16)}${(v%16).toString(16)}`).join("")}`
+	x
 ] as const);
 
 type ImageProps = {
 	src: string, contrast?: number, brightness?: number,
-	hue?: number, scale?: number, yScale?: number
+	saturation?: number, hue?: number, scale?: number, yScale?: number
 };
 
 const imagePropsKeys: (keyof ImageProps)[] = [
@@ -36,7 +34,7 @@ const imagePropsKeys: (keyof ImageProps)[] = [
 ] as const;
 
 async function loadImage({
-	src, contrast, brightness, hue, scale, yScale
+	src, contrast, brightness, hue, scale, yScale, saturation
 }: ImageProps) {
 	const image = new Image();
 	const prom = new Promise<void>((res,rej) => {
@@ -47,7 +45,7 @@ async function loadImage({
 	image.src = src;
 	await prom;
 
-	const sc = (scale ?? 100)/Math.max(image.height, image.width);
+	const sc = (scale ?? 120)/Math.max(image.height, image.width);
 	const w = Math.ceil(image.width*sc), h=Math.ceil(image.height*sc*(yScale ?? 100)/250);
 	const offscreen = new OffscreenCanvas(w,h);
 	const ctx = offscreen.getContext("2d")!;
@@ -59,20 +57,34 @@ async function loadImage({
 		hsv[2] *= data.data[i+3]/255;
 		arr.push(hsv);
 	}
+	
+	const sobel: number[] = [];
+	for (let i=0; i<h; i++) for (let j=0; j<w; j++) {
+		const mat: number[] = [];
+		for (let di=-1; di<=1; di++) for (let dj=-1; dj<=1; dj++) {
+			mat.push(i+di>=0 && i+di<h && j+dj>=0 && j+dj<w ? arr[(i+di)*w + j+dj][2] : 0);
+		}
+
+		const dx = j>0 && j<w-1 ? [-1,0,1,-2,0,2,-1,0,1].reduce((a,v,i)=>a+mat[i]*v, 0) : 0;
+		const dy = i>0 && i<h-1 ? [-1,-2,-1,0,0,0,1,2,1].reduce((a,v,i)=>a+mat[i]*v, 0) : 0;
+		sobel.push(dx*dx + dy*dy);
+	}
 
 	const value = arr.map(v=>v[2]);
 	const minV = Math.min(...value), maxV = Math.max(...value);
-	const bias = (brightness ?? 0)-minV, mul = (contrast ?? 100)/(maxV - minV)/100;
+	const bias = (brightness ?? 0)/100-minV, mul = (contrast ?? 100)/(maxV - minV)/100;
 	let out="<span>";
 	let wi=0;
 	let lastHex = "";
+	let sobelI=0;
 	for (const x of arr) {
-		x[2] = Math.max(Math.min((x[2]+bias)*mul,1),0);
+		x[2] = Math.max(Math.min((x[2]+bias)*mul + sobel[sobelI++]*1.7-0.7,1),0);
+		if (saturation!=null) x[1] *= saturation / 100;
 		x[0] = (x[0]+(hue??0))%360;
 		let bestScore = Number.MAX_SAFE_INTEGER, bestHex="";
 		for (const [y, hex] of palette) {
 			const d = (360+x[0]-y[0])%360;
-			const score = (d>180 ? 360-d : d)*3 + Math.abs(x[1]-y[1]) + Math.abs(x[2]-y[2]);
+			const score = (d>180 ? 360-d : d) + Math.abs(x[1]-y[1])*100 + Math.abs(x[2]-y[2])*10;
 			if (score<bestScore) { [bestScore, bestHex] = [score,hex]; }
 		}
 
@@ -82,7 +94,7 @@ async function loadImage({
 			lastHex=bestHex;
 		}
 
-		out+=bestChar[Math.round(x[2]*100)];
+		out+=bestChar[Math.round(x[2]*x[2]*100)];
 		if (++wi==w) {out+=`</span>\n<span>`; wi=0;}
 	}
 	out+="</span>";

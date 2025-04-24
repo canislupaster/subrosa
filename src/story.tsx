@@ -169,7 +169,7 @@ const StoryContext = createContext(undefined as unknown as {
 
 export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 	children?: ComponentChildren,
-	asciiArt?: string,
+	asciiArt?: ComponentChildren,
 	noCursor?: boolean,
 	end?: {
 		type: "choice", key: string, choices: {
