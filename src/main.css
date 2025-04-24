@@ -87,6 +87,9 @@ button:not(:disabled) {
   background: linear-gradient(to right, #d1ffde4d, #5efd8b);
   animation: blinker 0.7s cubic-bezier(0.98, -0.01, 0.09, 1.01) infinite alternate
 }
+.asciiart span {
+  animation: fade-in 0.2s linear 0s both 1;
+}
 
 .main-text .text-bit {
   animation: fade-in 0.1s linear forwards;

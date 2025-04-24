@@ -3,7 +3,7 @@ import { Dispatch, useCallback, useContext, useEffect, useErrorBoundary, useMemo
 import { IconChevronDown, IconChevronUp, IconInfoCircleFilled, IconInfoTriangleFilled, IconLoader2, IconX } from "@tabler/icons-preact";
 import { twMerge } from "tailwind-merge";
 import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
-import { forwardRef, SetStateAction } from "preact/compat";
+import { createPortal, forwardRef, SetStateAction } from "preact/compat";
 import clsx from "clsx";
 import { useLocation } from "preact-iso";
 import { NodeSelection, Procedure } from "../shared/eval";
@@ -260,9 +260,9 @@ export const ShowTransition = forwardRef<HTMLElement, ShowTransitionProps>(({
 
 // init=true -> dont animate expanding initially
 export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&{
-	open?: boolean, init?: boolean
+	open?: boolean, init?: boolean, speed?: number
 }>((
-	{children, open, className, style, init, ...props}, ref
+	{children, open, className, style, init, speed, ...props}, ref
 )=>{
 	const myRef = useRef<HTMLDivElement>(null);
 	const innerRef = useRef<HTMLDivElement>(null);
@@ -282,9 +282,9 @@ export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&
 			const style = getComputedStyle(main);
 			const mainInnerHeight = main.clientHeight - parseFloat(style.paddingBottom) - parseFloat(style.paddingTop);
 			const d = (open==false ? 0 : inner.clientHeight) - mainInnerHeight;
-			const done = !initCollapse.current || Math.abs(d) < 5;
+			const done = !initCollapse.current || Math.abs(d) < 1;
 			initCollapse.current=true;
-			let newH = (done ? d : d*dt*10/1000) + parseFloat(style.height);
+			let newH = (done ? d : d*dt*(speed ?? 1)/100) + parseFloat(style.height);
 			if (d<0) newH=Math.floor(newH); else newH=Math.ceil(newH);
 			
 			// do not allow collapse if open is not false
@@ -308,7 +308,7 @@ export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&
 			observer.disconnect();
 			if (frame!=null) cancelAnimationFrame(frame);
 		};
-	}, [open]);
+	}, [open, speed]);
 
 	return <div ref={cloneRef(ref, myRef)} className={twMerge("overflow-hidden", className as string)}
 		style={{height: 0, ...style as JSX.CSSProperties}} {...props} >
@@ -663,6 +663,10 @@ export const ThemeContext = createContext<{
 }>(undefined as never)
 export const useTheme = ()=>useContext(ThemeContext).theme;
 
+const ToastContext = createContext(undefined as unknown as {
+	toastsRoot: RefObject<HTMLDivElement>
+});
+
 export function Container({children, className, ...props}: {
 	children?: ComponentChildren, className?: string
 }&JSX.HTMLAttributes<HTMLDivElement>) {
@@ -680,13 +684,50 @@ export function Container({children, className, ...props}: {
 		html.classList.add(theme);
 		return ()=>html.classList.remove(theme);
 	}, [theme, incCount]);
+	
+	const toastsRef = useRef<HTMLDivElement>(null);
 
 	return <PopupCountCtx.Provider value={{count, incCount}} >
-		<div className={twMerge("font-body dark:text-gray-100 dark:bg-neutral-950 text-gray-950 bg-neutral-100 min-h-dvh", className)}
-			{...props} >
-			{children}
-		</div>
+		<ToastContext.Provider value={{toastsRoot: toastsRef}} >
+			<div className="fixed top-5 left-0 right-0 px-10 z-[1000] flex flex-col items-center gap-3" ref={toastsRef} />
+			<div className={twMerge("font-body dark:text-gray-100 dark:bg-neutral-950 text-gray-950 bg-neutral-100 min-h-dvh", className)}
+				{...props} >
+				{children}
+			</div>
+		</ToastContext.Provider>
 	</PopupCountCtx.Provider>;
+}
+
+export function Toast({children, className, duration}: {
+	children?: ComponentChildren, className?: string, duration?: number
+}) {
+	const ctx = useContext(ToastContext);
+	const [renderTo, setRenderTo] = useState<null|HTMLDivElement>(null);
+	const [hide, setHide] = useState(false);
+	useEffect(()=>{
+		const r = ctx.toastsRoot.current!;
+		const target = document.createElement("div");
+		target.style.display = "contents";
+		r.appendChild(target);
+		setRenderTo(target);
+		const tm = setTimeout(()=>setHide(true), duration ?? 2000);
+		return ()=>{
+			clearTimeout(tm);
+			target.remove();
+			setRenderTo(null);
+		};
+	}, [ctx.toastsRoot, duration]);
+	
+	return renderTo && createPortal(<ShowTransition open={!hide}
+		openClassName="opacity-100" closedClassName="opacity-0" >
+
+		<div className={twMerge(
+			containerDefault, "p-2 pl-5 gap-5 flex flex-row items-center transition-opacity",
+			bgColor.sky, className
+		)} >
+			{children} <button className="ml-auto" onClick={()=>setHide(true)} ><IconX /></button>
+		</div>
+	</ShowTransition>, renderTo);
 }
 	
 export const toSearchString = (x: string) => x.toLowerCase().replace(/[^a-z0-9\n]/g, "");

@@ -4,6 +4,7 @@ import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, text
 import clsx from "clsx";
 import { data } from "../shared/data";
 import { extraData } from "./data";
+import { AsciiArt } from "./asciiart";
 
 export function useStoryState<T=string>(key: string) {
 	const [x, setX] = useState<T>();

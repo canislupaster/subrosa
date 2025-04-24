@@ -15,7 +15,7 @@ import { Submission } from "./api";
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 export const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2 nodrag");
 const dropStyle = "[.drop,.drop_*]:theme:bg-amber-800";
-const nameInputProps = { minLength: 1, maxLength: 20, pattern: "^[\\w-_ ]+$" } as const;
+const nameInputProps = { minLength: 1, maxLength: 20, pattern: "^[\\w\\-_ ]+$" } as const;
 // const validNameRe = /^[\\w ]{1,20}$/;
 const validTextRe = new RegExp(`^[a-z ]{0,${strLenLimit}}$`);
 
