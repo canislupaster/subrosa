@@ -98,3 +98,30 @@ button:not(:disabled) {
 dialog::backdrop {
   background: none;
 }
+
+@keyframes expand {
+  0% {  opacity: 0.5; color: var(--color-amber-300); }
+  100% { color: inherit; }
+}
+
+@keyframes bganim-intro {
+  0% {  color: var(--color-zinc-300); opacity: 1; }
+  100% { color: var(--color-gray-600); opacity: 0.1; }
+}
+
+.bg-anim {
+  animation: bganim-intro 0.5s ease-in-out;
+}
+
+.bg-anim span {
+  display: inline-block;
+  overflow: hidden;
+}
+
+.bg-anim span.adding {
+  animation: expand 0.5s ease-in-out;
+}
+
+.bg-anim span.removing {
+  animation: expand 0.5s ease-in-out reverse both;
+}

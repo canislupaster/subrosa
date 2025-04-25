@@ -39,7 +39,7 @@ export type Puzzle = {
 
 const alphaLen: number = 26;
 // abcdefghijklmnopqrstuvwxyz
-const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i)); 
+export const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i)); 
 // const alpha = charMap.map(x=>x[0]);
 const defaultGenLen: number = 10;
 // Uniform random int

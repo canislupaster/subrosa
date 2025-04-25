@@ -1,17 +1,52 @@
 import "disposablestack/auto";
-import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Input, Loading, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, Toast, useFnRef, useGoto, useMd } from "./ui";
-import { ComponentChildren, ComponentProps, render } from "preact";
-import { useCallback, useEffect, useErrorBoundary, useState } from "preact/hooks";
+import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Input, Loading, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useDisposable, useFnRef, useMd } from "./ui";
+import { ComponentChildren, ComponentProps, createContext, render, JSX } from "preact";
+import { useCallback, useContext, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
 import { Editor, makeProc } from "./editor";
 import { Stage, stages, Story } from "./story";
 import { EditorState, Procedure, Register } from "../shared/eval";
 import { IconBrandGithubFilled, IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled } from "@tabler/icons-preact";
-import { LocationProvider, Route, Router, useLocation } from "preact-iso";
+import { LocationProvider, Route, Router, useLocation, useRoute } from "preact-iso";
 import { twMerge } from "tailwind-merge";
 import clsx from "clsx";
 import { parseExtra, stringifyExtra } from "../shared/util";
 import { stageUrl } from "../shared/data";
 import { useStageCount } from "./api";
+import { BgAnimComponent } from "./bganim";
+
+export const GotoContext = createContext(undefined as unknown as {
+  goto: (this: void, path: string)=>void,
+  addTransition(f: ()=>Promise<void>): Disposable
+});
+
+// idk i usually use pushstate iirc or smh i guess not today!
+export function useGoto() { return useContext(GotoContext).goto; }
+export function FadeRoute({className, ...props}: JSX.IntrinsicElements["div"]&{
+  className?: string
+}) {
+  const ctx = useContext(GotoContext);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(()=>{
+    const el = ref.current;
+    if (!el) return;
+
+    let anim: Animation|null=null;
+    const trans = ctx.addTransition(async ()=>{
+      anim?.cancel();
+      anim = await el.animate([ { opacity: 1 }, { opacity: 0 } ], {
+        duration: 500, fill: "forwards", iterations: 1
+      }).finished;
+    });
+
+    return ()=>{
+      trans[Symbol.dispose]();
+      anim?.cancel();
+    };
+  }, [ctx]);
+
+  return <div {...props} className={twMerge("animate-fade-in", className)} ref={ref} />;
+}
 
 function Footer() {
   return <div className={`mt-20 ${textColor.dim} mb-10 flex flex-col items-center gap-2`} >
@@ -29,17 +64,20 @@ function Footer() {
 
 function Home() {
   const goto = useGoto();
-  return <div className="flex flex-col items-center pt-10 gap-2 max-w-lg px-5" >
+  return <><FadeRoute className="flex flex-col items-center pt-10 gap-2 max-w-lg px-5" >
     <img src="/big.svg" />
-    <Text v="md" className="italic" >Leading the world in cryptography for centuries</Text>
+    <Text v="md" className="italic" >Leading the world in cryptography</Text>
       
     <Text className="mt-3" >
       <b>Ready to join our team?</b> Apply for a summer internship today! <i>Anyone</i> with strong problem solving skills will excel in our fast-paced growth-oriented environment.
     </Text>
-    <Button onClick={()=>goto("/menu")} autofocus >Apply now</Button>
+
+    <Button onClick={()=>goto("/menu")} autofocus
+      className="text-2xl px-4 py-3 border-2 my-4" >Apply now</Button>
   
     <Footer />
-  </div>;
+    
+  </FadeRoute><BgAnimComponent /></>;
 }
 
 export function Logo({className}: {className?: string}) {
@@ -91,7 +129,7 @@ function Menu() {
 
   const percentProgress = `${Math.round(activeStages/stages.length * 100)}%`;
 
-  return <div className="flex flex-col gap-4 pt-20 max-w-xl" >
+  return <><FadeRoute className="flex flex-col gap-4 pt-20 max-w-xl" >
     <ConfirmModal confirm={()=>{
       localStorage.clear();
       setCompleted(getCompleted());
@@ -164,8 +202,9 @@ function Menu() {
         setExporting(true);
       }} >Export data</Anchor>
     </div>
+    
     <Footer />
-  </div>;
+  </FadeRoute><BgAnimComponent /></>;
 }
 
 const procStorage = {
@@ -250,9 +289,9 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
   }), [stage.key, throttleSave]);
 
   const goto = useGoto();
-  return <Editor edit={edit} setEdit={setEdit2} puzzle={stage} nextStage={()=>{
+  return <FadeRoute><Editor edit={edit} setEdit={setEdit2} puzzle={stage} nextStage={()=>{
     goto(stageUrl(stages[i+1]));
-  }} />;
+  }} /></FadeRoute>;
 }
 
 function PuzzleStageWrap(props: ComponentProps<typeof PuzzleStage>) {
@@ -286,13 +325,13 @@ function PuzzleStageWrap(props: ComponentProps<typeof PuzzleStage>) {
 function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
   const goto = useGoto();
   useStageCount(stage);
-  return <div className="md:w-2xl w-md flex flex-col pb-[30dvh] pt-10" >
+  return <FadeRoute className="md:w-2xl w-md flex flex-col pb-[30dvh] pt-10" >
     <Logo className="w-1/3" />
     <Story stage={stage} next={i+1>=stages.length ? undefined : ()=>{
       LocalStorage.readStory = setWith(LocalStorage.readStory??null, stage.key);
       goto(stageUrl(stages[i+1]));
     }} />
-  </div>;
+  </FadeRoute>;
 }
 
 function LockedStage() {
@@ -305,8 +344,8 @@ function InnerApp() {
   const [err, resetErr] = useErrorBoundary((err)=>{
     console.error("app error boundary", err);
   }) as [unknown, ()=>void];
-  const route = useLocation();
   const md = useMd();
+  const route = useRoute();
 
   if (err!=undefined) return <ErrorPage err={err} reset={resetErr} />;
 
@@ -342,18 +381,36 @@ function InnerApp() {
 function App({theme: initialTheme}: {theme: Theme}) {
   const [theme, setTheme] = useState(initialTheme);
 
-  return <LocationProvider>
+  const route = useLocation();
+  const [nextRoute, setNextRoute] = useState<string|null>(null);
+  const routeTransitions = useRef<Set<()=>Promise<void>>>(new Set());
+  const gotoCtx = useMemo(()=>({
+    goto: (x: string)=>setNextRoute(x),
+    addTransition: (t: ()=>Promise<void>)=>{
+      routeTransitions.current.add(t);
+      return { [Symbol.dispose]: ()=>routeTransitions.current.delete(t) };
+    }
+  }), []);
+
+  useAsyncEffect(async ()=>{
+    if (nextRoute==null) return;
+    await Promise.all([...routeTransitions.current.values()].map(x=>x()));
+    route.route(nextRoute);
+    setNextRoute(null);
+  }, [nextRoute, route.url, route.route]);
+
+  return <GotoContext.Provider value={gotoCtx} >
     <ThemeContext.Provider value={{theme, setTheme}} >
       <Container className="flex flex-col items-center" >
         <InnerApp />
       </Container>
     </ThemeContext.Provider>
-  </LocationProvider>;
+  </GotoContext.Provider>;
 }
 
 document.addEventListener("DOMContentLoaded", ()=>{
 	const initialTheme = LocalStorage.theme
 		?? "dark";//(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 
-	render(<App theme={initialTheme} />, document.body);
+	render(<LocationProvider><App theme={initialTheme} /></LocationProvider>, document.body);
 });

@@ -1,10 +1,10 @@
 import { ComponentChildren, createContext, Fragment } from "preact";
-import { useCallback, useContext, useEffect, useRef, useState } from "preact/hooks";
-import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, textColor } from "./ui";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, textColor, AppTooltip, IconButton, setWith, borderColor, mapWith } from "./ui";
 import clsx from "clsx";
 import { data } from "../shared/data";
-import { extraData } from "./data";
-import { AsciiArt } from "./asciiart";
+import { extraData, Message, messages } from "./data";
+import { IconCircleFilled, IconMailFilled } from "@tabler/icons-preact";
 
 export function useStoryState<T=string>(key: string) {
 	const [x, setX] = useState<T>();
@@ -261,6 +261,88 @@ export const stages: ReadonlyArray<Stage> = data.map(d=>({
 	...d, ...extraData[d.key]
 } as Stage));
 
+const keyMessages = new Map<string, Message>(messages.map(x=>[x.key, x]));
+const today = new Date();
+
+export function Messages({ stage }: {stage: Stage}) {
+	const [messageList, setMessages] = useState<{
+		message: Message, read: boolean, time: Date
+	}[]>(()=>[...LocalStorage.seenMessages?.entries() ?? []].map(([x, t])=>({
+		message: keyMessages.get(x), read: true, time: new Date(t)
+	})).filter((x): x is {message: Message, read: boolean, time: Date}=>x.message!=undefined));
+
+	const [activeMessage, setActiveMessage] = useState<(typeof messageList)[number]|null>(null);
+	const numUnread = useMemo(()=>messageList.reduce((a,b)=>a+(b.read ? 0 : 1),0), [messageList]);
+	
+	useEffect(()=>{
+		const keyToStageI = new Map(data.map((x,i)=>[x.key, i]));
+		const curI = keyToStageI.get(stage.key)!;
+		const curMessages = new Set(messageList.map(x=>x.message.key));
+		const available = messages.filter(msg=>{
+			const si = keyToStageI.get(msg.minStageKey);
+			return si!=null && si>=curI && !curMessages.has(msg.key);
+		});
+		
+		const check = ()=>{
+			const t = new Date();
+			for (const msg of available) {
+				const p = msg.expectedMinutes<=1e-4 ? 1 : 1-Math.exp(-1/msg.expectedMinutes);
+				if (Math.random()<p) {
+					setMessages(msgs=>[...msgs, {message: msg, read: false, time: t}]);
+					LocalStorage.seenMessages = mapWith(LocalStorage.seenMessages??null, msg.key, t.getTime());
+				}
+			}
+		};
+
+		check();
+		const int = setInterval(check, 60*1000);
+		return ()=>clearInterval(int);
+	}, [messageList, stage.key]);
+
+	const formatTime = (x: Date)=>
+		x.getDate()==today.getDate() && x.getMonth()==today.getMonth()
+			? x.toLocaleTimeString() : x.toLocaleString();
+	
+	return <AppTooltip content={
+		<div className="flex flex-row" >
+			<div className="flex flex-col gap-2" >
+				{messageList.map(msg=><button key={msg.message.key} className={clsx("flex flex-row gap-1 border-b-1", borderColor.default)} onClick={()=>{
+					setActiveMessage(msg);
+				}} >
+					{!msg.read && <div className={clsx("animate-pulse rounded-full w-4 aspect-square", bgColor.sky)} />}
+					<div className="flex flex-col gap-1 items-start" >
+						{msg.message.subject}
+						{msg.message.from}
+					</div>
+					<Text v="dim" >{formatTime(msg.time)}</Text>
+				</button>)}
+			</div>
+
+			<Divider />
+			
+			{activeMessage ? <div>
+				<div className="flex flex-col gap-1 items-start" >
+					{activeMessage.message.subject}
+					{activeMessage.message.from}
+					<Text v="dim" >{formatTime(activeMessage.time)}</Text>
+				</div>
+
+				<Divider />
+
+				{activeMessage.message.content}
+			</div> : <div className="flex place-content-center p-4" >
+				<Text v="dim" >No message selected</Text>
+			</div>}
+		</div>
+	} >
+		<div>
+			<IconButton icon={<IconMailFilled />} className="relative" >
+				<Text v="smbold" className={clsx("absolute -top-2 -right-2 rounded-full", bgColor.red)} >{numUnread}</Text>
+			</IconButton>
+		</div>
+	</AppTooltip>;
+}
+
 export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>void}) {
 	const [index, setIndex] = useState(()=>{
 		return LocalStorage.storyParagraph?.[stage.key] ?? 0;
@@ -328,7 +410,10 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 
 		<div className="flex flex-row self-stretch justify-between gap-2 items-center" >
 			<Text v="big" className="my-4" >{stage.name}</Text>
-			<Anchor className={textColor.dim} onClick={()=>setIndex(0)} >Reset chapter</Anchor>
+			<div className="flex flex-col gap-1 items-end" >
+				<Anchor className={textColor.dim} onClick={()=>setIndex(stage.para.length)} >Skip chapter</Anchor>
+				{index>0 && <Anchor className={textColor.dim} onClick={()=>setIndex(0)} >Reset chapter</Anchor>}
+			</div>
 		</div>
 
 		{stage.para.slice(0, index+1).map((v,i)=><Fragment key={i} >

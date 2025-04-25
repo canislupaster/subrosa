@@ -1,6 +1,6 @@
-import { Dispatch, MutableRef, useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection } from "../shared/eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, Collapse, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, textColor, ThemeSpinner, throttle, toSearchString, useFnRef, useGoto, useToast } from "./ui";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, Collapse, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, textColor, ThemeSpinner, throttle, toSearchString, useFnRef, useToast } from "./ui";
 import { twMerge } from "tailwind-merge";
 import { IconArrowRight, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref } from "preact";
@@ -11,6 +11,7 @@ import { ChangeEvent, SetStateAction } from "preact/compat";
 import { fill, toPrecStat } from "../shared/util";
 import { Stage } from "./story";
 import { Submission } from "./api";
+import { useGoto } from "./main";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 export const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2 nodrag");
@@ -103,18 +104,27 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 		const r = node.ref;
 		if (r=="unset" || (r!=undefined && !p.proc.nodes.has(r))) return;
 
+		// otherwise should always exist
+
+		let timeout: number|undefined;
 		let cleanup = ()=>{};
+		let lastParams = fill(4, -1);
+		const dispatch = ()=>{timeout=setTimeout(updateArrow, 50);}
 		const updateArrow = ()=>{
+			timeout=undefined;
+
 			const el = p.nodeRefs.current.get(r);
 			const el2 = p.nodeRefs.current.get(nodeI);
 			const rect = rectRef.current, arrow=arrowRef.current
-			if (!el || !el2 || !rect || !arrow) return;
+			if (!el || !el2 || !rect || !arrow) { dispatch(); return; }
 
 			let a = el2.getBoundingClientRect()
 			let b = el.getBoundingClientRect();
 
+			cleanup();
+			cleanup=()=>rect.hidden=arrow.hidden=true;
+
 			rect.hidden=arrow.hidden=false;
-			cleanup = ()=>rect.hidden=arrow.hidden=true;
 			const parent = rect.offsetParent!;
 
 			const c = parent.getBoundingClientRect();
@@ -125,6 +135,11 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 			arrow.style.top = `${b.y + b.height/2 - c.top - arrowHeight/2 
 				+ (a.y < b.y ? -1 : 1) + yo}px`;
 			arrow.style.right = `${c.right - b.left - 1}px`;
+
+			const params = [b.y + yo, b.height,a.y + yo, a.height];
+			// schedule another update if still hot
+			if (params.some((v,i)=>Math.abs(lastParams[i]-v) > 1)) dispatch();
+			lastParams=params;
 
 			if (a.y > b.y) [a,b] = [b,a];
 			const depth = 0.7*(2*(b.y - a.y)/parent.scrollHeight + (Math.sin((a.y+yo)/50)+1)/4);
@@ -142,12 +157,7 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 		};
 
 		updateArrow();
-		const ts = setTimeout(()=>updateArrow(), 10);
-
-		return ()=>{
-			clearTimeout(ts);
-			cleanup();
-		};
+		return ()=>{ if (timeout!=undefined) clearTimeout(timeout); cleanup(); }
 	}, [node, node.ref, nodeI, p.nodeRefs, p.proc.nodeList, p.proc.nodes]);
 
 	return <>
@@ -1139,7 +1149,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			rl[Symbol.dispose]();
 			setRunState(clone(v));
 		};
-	}, [edit.entryProc, puzzle, edit.decoded, edit.procs, edit.stepsPerS, ignoreBreakpoint, runStatus]);
+	}, [edit.entryProc, puzzle, edit.decoded, edit.procs, edit.stepsPerS, ignoreBreakpoint, runStatus, toast]);
 	
 	const mod = (m: number) => setEdit(v=>({
 		...v,

@@ -3,7 +3,7 @@ import { Dispatch, useCallback, useContext, useEffect, useErrorBoundary, useMemo
 import { IconChevronDown, IconChevronUp, IconInfoCircleFilled, IconInfoTriangleFilled, IconLoader2, IconX } from "@tabler/icons-preact";
 import { twMerge } from "tailwind-merge";
 import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
-import { createPortal, forwardRef, SetStateAction } from "preact/compat";
+import { forwardRef, SetStateAction } from "preact/compat";
 import clsx from "clsx";
 import { useLocation } from "preact-iso";
 import { NodeSelection, Procedure } from "../shared/eval";
@@ -719,9 +719,10 @@ export function Container({children, className, ...props}: {
 				)}
 			</div>
 
-			<div className={twMerge("font-body dark:text-gray-100 dark:bg-neutral-950 text-gray-950 bg-neutral-100 min-h-dvh", className)}
+			<div className={twMerge("font-body dark:text-gray-100 text-gray-950 min-h-dvh relative", className)}
 				{...props} >
 				{children}
+				<div className="bg-neutral-100 dark:bg-neutral-950 absolute left-0 top-0 bottom-0 right-0 -z-50" />
 			</div>
 		</ToastContext.Provider>
 	</PopupCountCtx.Provider>;
@@ -745,23 +746,15 @@ export function useMediaQuery(q: MediaQueryList|string|null, init: boolean=false
 	return x;
 }
 
-const queries: Record<"md"|"lg",MediaQueryList|null> = {md:null, lg:null};
+const queries: Record<"md"|"lg",MediaQueryList|null> = {
+	md:window.matchMedia("(min-width: 768px)"), lg:window.matchMedia("(min-width: 1024px)")
+};
 
 export const useMd = () => {
-	try {
-		if (queries.md==null)
-			queries.md = window.matchMedia("(min-width: 768px)");
-	} catch { void null; }
-
 	return useMediaQuery(queries.md);
 };
 
 export const useLg = () => {
-	try {
-		if (queries.lg==null)
-			queries.lg = window.matchMedia("(min-width: 1024px)");
-	} catch { void null; }
-
 	return useMediaQuery(queries.lg);
 };
 
@@ -933,7 +926,9 @@ export type LocalStorage = Partial<{
 	username: string,
 
 	clipboard: NodeSelection,
-	builtInExpand: boolean
+	builtInExpand: boolean,
+
+	seenMessages: Map<string, number> //time message received
 }>&{
 	toJSON(): unknown
 };
@@ -998,12 +993,6 @@ export function mapSetFn<T,R>(x: SetFn<T>, f: (x: R, old: T)=>T, get: (x: T)=>R)
 		if (typeof nv=="function") x(old=>(f((nv as (v: R)=>R)(get(old)), old)));
 		else x(old=>f(nv, old));
 	};
-}
-
-// idk i usually use pushstate iirc or smh i guess not today!
-export function useGoto() {
-	const loc = useLocation();
-	return (path: string)=>loc.route(path);
 }
 
 export function useFnRef<T extends Disposable>(f: ()=>T, deps?: unknown[]) {

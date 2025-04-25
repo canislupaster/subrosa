@@ -3,7 +3,7 @@
 
 import { ComponentChildren } from "preact";
 import { data } from "../shared/data";
-import { StoryParagraph } from "./story";
+import { Message, Messages, StoryParagraph } from "./story";
 import { AsciiArt } from "./asciiart";
 
 type ExtraData = Readonly<{ [K in typeof data[number]["key"]]:
@@ -15,6 +15,15 @@ type ExtraData = Readonly<{ [K in typeof data[number]["key"]]:
 		blurb: ComponentChildren
 	}>
 }>;
+
+export type Message = {
+	key: string,
+	minStageKey: (typeof data)[number]["key"],
+	expectedMinutes: number,
+	from: ComponentChildren,
+	subject: ComponentChildren,
+	content: ComponentChildren
+};
 
 export const extraData: ExtraData = {
 	intro: {
@@ -719,3 +728,13 @@ export const extraData: ExtraData = {
 		blurb: "aeHv fnu!",
 	}
 } as const;
+
+export const messages = [
+	{
+		key: "intro-message",
+		minStageKey: "intro",
+		expectedMinutes: 2,
+		from: "me", subject: "abc",
+		content: "hi there"
+	}
+] as const satisfies Message[];

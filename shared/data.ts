@@ -3,7 +3,7 @@ import { Puzzle, puzzles } from "./puzzles.ts";
 export type StageData = (Puzzle&{type: "puzzle"}) | {
 	type: "story",
 	name: string,
-	key: string,
+	key: string
 };
 
 export const stageUrl = (x: StageData) => `/${x.type}/${x.key}`;

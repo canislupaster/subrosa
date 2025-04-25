@@ -4,8 +4,10 @@ import { Collapse, Text, useAsyncEffect } from "./ui";
 
 const chars = [["Q",38],["W",37],["B",36],["g",36],["M",35],["N",35],["R",35],["&",34],["@",33],["D",33],["H",33],["O",33],["K",32],["b",32],["m",32],["0",31],["G",31],["d",31],["p",31],["q",31],["8",30],["E",30],["U",30],["w",30],["6",29],["9",29],["A",29],["P",29],["S",29],["h",29],["k",29],["$",28],["X",28],["Z",28],["%",27],["4",27],["5",27],["V",27],["3",26],["I",26],["a",26],["j",26],["#",25],["2",25],["C",25],["F",25],["e",25],["n",25],["o",25],["J",24],["f",24],["u",24],["y",24],["s",23],["t",23],["z",23],["1",22],["T",22],["Y",22],["l",21],["x",21],["7",20],["L",20],["c",20],["{",20],["}",20],["[",19],["]",19],["i",19],["v",19],["|",19],["(",17],[")",17],["\"",16],["\\",16],["/",16],[";",16],["r",16],["*",15],["<",14],["=",14],[">",14],["!",13],["+",13],["^",13],[":",12],[",",10],["'",8],["~",8],["-",7],[".",6],["`",4],[" ",0]] as const;
 
+const charMul = 100/Math.max(...chars.map(x=>x[1]));
 const bestChar = fill(101, i=>{
-	return chars[chars.reduce((ci,v,j)=>ci==-1 || Math.abs(v[1]-i) < Math.abs(chars[ci][1]-i) ? j : ci, -1)][0];
+	return chars[chars.reduce((ci,v,j)=>ci==-1
+		|| Math.abs(v[1]*charMul-i) < Math.abs(chars[ci][1]*charMul-i) ? j : ci, -1)][0];
 });
 
 function rgb2hsv([r,g,b]: readonly [number, number, number]): [number, number, number] {
@@ -59,10 +61,11 @@ async function loadImage({
 	}
 	
 	const sobel: number[] = [];
+	const mat = fill(9, 0);
 	for (let i=0; i<h; i++) for (let j=0; j<w; j++) {
-		const mat: number[] = [];
+		let mi=0;
 		for (let di=-1; di<=1; di++) for (let dj=-1; dj<=1; dj++) {
-			mat.push(i+di>=0 && i+di<h && j+dj>=0 && j+dj<w ? arr[(i+di)*w + j+dj][2] : 0);
+			mat[mi++] = i+di>=0 && i+di<h && j+dj>=0 && j+dj<w ? arr[(i+di)*w + j+dj][2] : 0;
 		}
 
 		const dx = j>0 && j<w-1 ? [-1,0,1,-2,0,2,-1,0,1].reduce((a,v,i)=>a+mat[i]*v, 0) : 0;
@@ -78,7 +81,7 @@ async function loadImage({
 	let lastHex = "";
 	let sobelI=0;
 	for (const x of arr) {
-		x[2] = Math.max(Math.min((x[2]+bias)*mul + sobel[sobelI++]*1.7-0.7,1),0);
+		x[2] = Math.max(Math.min((x[2]+bias)*mul + sobel[sobelI++]*1.7-0.6,1),0);
 		if (saturation!=null) x[1] *= saturation / 100;
 		x[0] = (x[0]+(hue??0))%360;
 		let bestScore = Number.MAX_SAFE_INTEGER, bestHex="";
@@ -90,7 +93,7 @@ async function loadImage({
 
 		if (lastHex!=bestHex) {
 			out+=`</span><span style="color: ${bestHex}; animation-delay: ${
-				Math.floor(Math.random()*500)}ms;" >`;
+				Math.floor(Math.random()*1000)}ms;" >`;
 			lastHex=bestHex;
 		}
 
