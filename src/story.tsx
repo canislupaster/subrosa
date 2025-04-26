@@ -353,7 +353,7 @@ export function Messages({ stage }: { stage: Stage }) {
 	return <>
 		<Modal open={open} onClose={()=>setOpen(false)} title="Mail" className="pb-0" >
 			<div className="flex flex-row items-stretch -mt-2 -mx-6 min-h-0" >
-				<div className="flex flex-col basis-1/3 min-h-20 overflow-y-auto shrink-0 items-stretch" >
+				<div className="flex flex-col basis-1/3 min-h-20 overflow-y-auto shrink-0 items-stretch pb-5" >
 					{messageList.map((msg,i)=><button key={msg.message.key} className={clsx("flex flex-row gap-3 border-b-1 p-4 items-start justify-stretch", borderColor.default, msg==activeMessage ? bgColor.secondary : bgColor.hover)} disabled={msg==activeMessage} onClick={()=>{
 						const nmsg = {...msg, read: true};
 						setMessages(messageList.toSpliced(i, 1, nmsg));

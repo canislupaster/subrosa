@@ -28,7 +28,7 @@
 
 @custom-variant dark (&:is(.dark, .dark *));
 @custom-variant theme (&:is(.dark *,.light *));
-@custom-variant enabled (&:not(disabled));
+@custom-variant enabled (&:not(:disabled));
 
 h3,h2,h1 {
 	font-family: var(--font-big);
@@ -125,3 +125,70 @@ dialog::backdrop {
 .bg-anim span.removing {
   animation: expand 0.5s ease-in-out reverse both;
 }
+
+/* why did i do this */
+@keyframes back {
+	0% {
+		opacity: 0;
+		transform: scale(0.4) translateX(70%);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1) translateX(-25%);
+	}
+}
+
+@keyframes arrow-big {
+	0% {
+		opacity: 0;
+		transform: scale(0.2) translateX(20%);
+	}
+	20% {
+		opacity: 0;
+		transform: scale(0.2) translateX(20%);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(0.7) scaleX(0.8) translateX(-65%);
+	}
+}
+
+@keyframes rose {
+  0% { transform: scale(1) translateX(0) rotate(0deg); }
+	100% {
+    transform: translateX(220%) scale(0.8) rotate(230deg);
+	}
+}
+
+@keyframes subrose-text {
+  0% { opacity: 1; transform: scale(1) translateX(0); }
+	100% {
+		opacity: 0;
+		transform: scale(0.5) translateX(-100%);
+	}
+}
+
+@keyframes arrow-sm {
+	0% {
+		opacity: 0;
+		transform: scale(0.4) translateX(40%);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1) scaleX(0.8) translateX(-140%);
+	}
+}
+
+svg.logo * {
+	transform-box: fill-box;
+	transform-origin: center;
+	animation-duration: 0.6s;
+	animation-timing-function: ease-in-out;
+	animation-play-state: paused;
+  animation-fill-mode: both;
+}
+svg.logo .arrow-big { animation-name: arrow-big; }
+svg.logo .subrose-text { animation-name: subrose-text; }
+svg.logo .arrow-sm { animation-name: arrow-sm; }
+svg.logo .rose { animation-name: rose; }
+svg.logo .back { animation-name: back; }

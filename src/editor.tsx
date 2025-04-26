@@ -1,6 +1,6 @@
 import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection } from "../shared/eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, Collapse, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, textColor, ThemeSpinner, throttle, toSearchString, useFnRef, useToast } from "./ui";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, textColor, ThemeSpinner, throttle, toSearchString, useFnRef, useToast } from "./ui";
 import { twMerge } from "tailwind-merge";
 import { IconArrowRight, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref } from "preact";
@@ -12,6 +12,8 @@ import { fill, toPrecStat } from "../shared/util";
 import { Messages, Stage } from "./story";
 import { Submission } from "./api";
 import { useGoto } from "./main";
+import { Reference } from "./reference";
+import { LogoBack } from "./logo";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 export const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2 nodrag");
@@ -30,7 +32,7 @@ const builtinNodes: Node[] = [
 	...(["inc", "dec"] as const).map(op=>({ op, lhs: -1 })),
 	{ op: "goto", ref: "unset", conditional: null },
 	{ op: "setIdx", lhs: -1, rhs: -1, idx: -1 },
-	{ op: "breakpoint" }
+	{ op: "breakpoint", conditional: null }
 ];
 
 function useValidity(value: string, callback: (v: string)=>void): {
@@ -54,8 +56,7 @@ function useValidity(value: string, callback: (v: string)=>void): {
 				setV({ editing: true, value: elem.value });
 			}
 			db.current?.call(()=>{
-				if (elem.reportValidity())
-					callback(elem.value);
+				if (elem.reportValidity()) callback(elem.value);
 			});
 		}
 	};
@@ -149,7 +150,7 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 			lastParams=params;
 
 			if (a.y > b.y) [a,b] = [b,a];
-			const depth = 0.7*(2*(b.y - a.y)/parent.scrollHeight + ((0.3234*(a.y+yo))%1)/3);
+			const depth = 0.7*(2*(b.y - a.y)/parent.scrollHeight + ((123.3234*nodeI)%1.1324)*0.9);
 			const obj = {
 				top: `${a.y + a.height/2 - c.top + yo}px`,
 				bottom: `${c.bottom - (b.y + b.height/2) - yo}px`,
@@ -267,7 +268,7 @@ const nodeHint: Record<Node["op"], string> = {
 	goto: "Jump to another node, optionally conditional on whether the cond register contains a strictly positive value.",
 	setIdx: "Set the element at idx in lhs to rhs.",
 	call: "Call another procedure with parameters.",
-	breakpoint: "Pause execution for debugging"
+	breakpoint: "Pause execution for debugging, optionally conditional on whether the cond register contains a strictly positive value."
 };
 
 function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active, selected}: {
@@ -289,7 +290,10 @@ function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active, sel
 			<RegisterPicker p={p} x={node.rhs} setX={setNode ? rhs=>setNode({...node, rhs}) : undefined} desc="c" />
 		</>;
 	} else if (node.op=="breakpoint") {
-		inner=<Text>breakpoint</Text>;
+		inner=<>
+			<RegisterPicker p={p} x={node.conditional ?? -1} setX={setNode ? v=>
+				setNode({...node, conditional: v<0 ? null : v}) : undefined} desc="cond" />
+		</>;
 	} else {
 		inner = <>
 			<RegisterPicker p={p} x={node.lhs} setX={setNode ? lhs=>setNode({...node, lhs}) : undefined} desc="a" />
@@ -298,13 +302,22 @@ function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active, sel
 		</>;
 	}
 	
+	const hint = useMemo(()=>{
+		if (node.op=="call") {
+			const v = p.procs.get(node.procRef);
+			if (v && v.comment!=undefined) return v.comment;
+		}
+
+		return nodeHint[node.op];
+	}, [node, p.procs]);
+
 	return <div className={twMerge(nodeStyle, "transition-colors", (active ?? false) ? bgColor.highlight : (selected==true && bgColor.md), dropStyle)} >
 		<img src={`/${iconURL(node)}`} className="w-10 cursor-move draghandle mb-4" />
 		{idx!=undefined && <Text v="dim" className="absolute left-1 bottom-1" >{idx}</Text>}
 		{inner}
 		{setNode ? <button onClick={()=>{ setNode(null); }}
 			className="-mr-2 ml-auto float-end" ><IconX /></button>
-			: <AppTooltip content={nodeHint[node.op]} >
+			: <AppTooltip content={<p className="break-words" >{hint}</p>} >
 				<button className="-mr-2 ml-auto float-end" ><IconInfoCircle /></button>
 			</AppTooltip>}
 	</div>;
@@ -421,7 +434,7 @@ function RegisterEditor({p, reg, setReg}: {
 			<Divider className="my-1" />
 			<Text v="dim" >Current value ({typeof runValue=="string" ? "text" : "numeric"}):</Text>
 
-			<Input className={clsx(err2!=null && borderColor.red)} value={runValue} valueChange={setRunV} />
+			<Input className={clsx(err2 && borderColor.red)} value={runValue} valueChange={setRunV} />
 			{err2 && <Alert bad txt="Invalid register value" />}
 		</>}
 	</div>;
@@ -766,8 +779,6 @@ function ProcEditor({
 		};
 	}, [data.nodeRefs, pasteSel, proc, proc.nodeList, procI, remappingClipboard.open, selection, setProc, undo, toast]);
 	
-	const [builtinExpand, setBuiltinExpand] = useState(()=>LocalStorage.builtInExpand ?? false);
-
 	return <>
 		<ConfirmModal open={confirmClear} onClose={()=>setConfirmClear(false)} msg={
 			"Are you sure you want to delete all nodes in this procedure?"
@@ -805,7 +816,7 @@ function ProcEditor({
 		</Modal>
 
 		<div className="flex flex-col items-stretch gap-1 editor-left min-h-0" >
-			<div className={clsx("mb-2 flex flex-row gap-3 items-end pl-1 shrink-0 h-11", !isUserProc && "pl-2")} >
+			<div className={clsx("mb-2 flex flex-row gap-2 items-end pl-1 shrink-0 h-11", !isUserProc && "pl-2")} >
 				{back && <Anchor className="items-center self-end mr-2" onClick={()=>openProc()} >
 					<IconChevronLeft size={32} />
 				</Anchor>}
@@ -813,13 +824,23 @@ function ProcEditor({
 				{!isUserProc ? <Text v="bold" >Procedure <Text v="code" >{proc.name}</Text></Text>
 				: <>
 					<Text v="bold" >Procedure</Text>
-					<HiddenInput {...procNameValidity} {...nameInputProps} className="w-fit -mb-1" />
+					<HiddenInput {...procNameValidity} {...nameInputProps} className="w-fit" />
 				</>}
 				
 				<Button className="ml-auto py-1" onClick={()=>{
 					setConfirmClear(true);
 				}} >Clear</Button>
-				{isUserProc && <IconButton icon={<IconTrash />} onClick={()=>{delProc();}} />}
+				{isUserProc && <>
+					<AppTooltip placement="right" className="px-2 pb-2" content={<>
+						<Text v="dim" >Comment</Text>
+						<Input maxLength={1024} value={proc.comment} valueChange={v=>setProc(p=>({
+							...p, comment: v.length==0 ? undefined : v
+						}))} />
+					</>} >
+						<div><IconButton icon={<IconInfoCircle size={20} />} /></div>
+					</AppTooltip>
+					<IconButton icon={<IconTrash size={20} />} onClick={()=>{delProc();}} />
+				</>}
 			</div>
 			 
 			<ul ref={nodeListRef} className="pl-[50px] flex flex-col gap-1 items-stretch overflow-y-auto relative pb-20" >
@@ -854,42 +875,38 @@ function ProcEditor({
 		<div className="flex flex-col gap-2 editor-mid min-h-0 max-h-full" >
 			<div className="flex flex-row justify-between gap-2 items-end mt-2" >
 				<Text v="bold" >Built-in</Text>
-				<Button className="py-1" onClick={()=>{
-					setBuiltinExpand(LocalStorage.builtInExpand = !builtinExpand);
-				}} >{builtinExpand ? "Collapse" : "Expand"}</Button>
 			</div>
 
-			<div className={clsx("overflow-y-auto grow",
-				builtinExpand ? "basis-full" : "basis-1/4 shrink")} >
-				<Collapse init >
-					<ul className="flex flex-col gap-2 pb-2" ref={builtinRef} >
-						{builtinNodes.map(v=><ProcNode key={v.op} p={data} node={v} setNode={setNode} openProc={openProc} />)}
-					</ul>
-				</Collapse>
-			</div>
+			<ul className="flex flex-row flex-wrap gap-2 pb-1" ref={builtinRef} >
+				{builtinNodes.map(v=>
+					<AppTooltip key={v.op} placement="bottom" content={nodeHint[v.op]} >
+						<div className={twMerge(blankStyle, "py-2", bgColor.hover)} >
+							<img src={`/${iconURL(v)}`} className="w-10 cursor-move draghandle" />
+						</div>
+					</AppTooltip>
+				)}
+			</ul>
 			
-			<div className="contents" hidden={builtinExpand} >
-				<Divider className="my-1" />
+			<Divider className="my-1" />
 
-				<div className="flex flex-row gap-2 items-center flex-wrap gap-y-0" >
-					<Text v="bold" >My procedures</Text>
-					<Button onClick={()=>openProc(entryProc)} className="ml-auto py-1" >Main</Button>
-					<Input value={procFilter} valueChange={setProcFilter} className="py-1 basis-1/2" placeholder={"Search"} />
-				</div>
-
-				<ul className={clsx("flex flex-col overflow-y-auto gap-2 pb-5 shrink grow")} ref={userProcListRef} >
-
-					{userProcList.map(i=>{
-						if (!procs.has(i) || !showProcs.has(i)) return <div key={i} />;
-						return <ProcNode key={i} p={data} node={nodeForUserProc(i)} setNode={setNode} openProc={openProc} />;
-					})}
-
-					<Button className={blankStyle} onClick={()=>addProc()} >
-						<IconPlus />
-						<Text v="sm" >Create procedure</Text>
-					</Button>
-				</ul>
+			<div className="flex flex-row gap-2 items-center flex-wrap gap-y-0" >
+				<Text v="bold" >My procedures</Text>
+				<Button onClick={()=>openProc(entryProc)} className="ml-auto py-1" >Main</Button>
+				<Input value={procFilter} valueChange={setProcFilter} className="py-1 basis-1/2 border-1" placeholder={"Search"} />
 			</div>
+
+			<ul className={clsx("flex flex-col overflow-y-auto gap-2 pb-5 shrink grow")} ref={userProcListRef} >
+
+				{userProcList.map(i=>{
+					if (!procs.has(i) || !showProcs.has(i)) return <div key={i} />;
+					return <ProcNode key={i} p={data} node={nodeForUserProc(i)} setNode={setNode} openProc={openProc} />;
+				})}
+
+				<Button className={blankStyle} onClick={()=>addProc()} >
+					<IconPlus />
+					<Text v="sm" >Create procedure</Text>
+				</Button>
+			</ul>
 		</div>
 		
 		<div className="flex flex-col gap-1 editor-right min-h-0" >
@@ -903,7 +920,7 @@ function ProcEditor({
 				<Button className={blankStyle} onClick={()=>{
 					setProc(p=>({
 						...p, registerList: [...p.registerList, p.maxRegister],
-						registers: mapWith(p.registers, p.maxRegister, { name: null, type: "value", value: "" }),
+						registers: mapWith(p.registers, p.maxRegister, { name: null, type: "value", value: 0 }),
 						maxRegister: p.maxRegister+1
 					}));
 				}} >
@@ -1126,7 +1143,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		if (initV==null) throw new Error("unreachable");
 		const v = initV;
 		v.procs = edit.procs;
-		v.stopOnBreakpoint=false;
+		v.stopOnBreakpoint=doPush && !ignoreBreakpoint;
 
 		let cont=true;
 		const doStep = ()=>{
@@ -1239,7 +1256,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	</>} disabled={runState==null} ><div>
 		<IconButton disabled={runState==null} icon={<IconChartBar />} />
 	</div></AppTooltip>;
-
+	
 	return <div className="grid h-dvh gap-x-4 pl-3 px-5 w-full editor" >
 		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center" >
 			<div className="flex flex-row gap-2 items-center h-full" >
@@ -1290,6 +1307,10 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 					{/* use hidden long text to prevent resizing */}
 					<span className="opacity-0 -z-10" >stopped</span>
 				</Text>
+
+				<span className="w-2" />
+				<Reference />
+				{puzzle && <Messages stage={puzzle} />}
 			</div>
 
 			{puzzle ? <button className={twMerge(anchorStyle, "flex flex-row p-1 grow items-center justify-center gap-4")}
@@ -1303,10 +1324,9 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				No puzzle
 			</Text>}
 			
-			{puzzle && <Messages stage={puzzle} />}
 			<button onClick={()=>goto("/menu")}
 				className={twMerge("flex flex-row hover:scale-105 transition-transform h-full")} >
-				<img src="/logo.svg" className="max-h-full" />
+				<LogoBack />
 			</button>
 		</div>
 		

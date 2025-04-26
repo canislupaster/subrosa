@@ -124,8 +124,9 @@ export async function setUsername(key: string, username: string|null) {
 		throw new AppError("no such entry to set name for");
 }
 
-export function getStats(stage: string) {
+export function getStats(stage: string, sort: "nodes"|"time"|"registers") {
 	return db.selectFrom("solve").where("stage", "=", stage)
 		.select(["registers", "nodes", "time", "username", "id"])
+		.orderBy(sort, "asc").orderBy("time", "asc")
 		.limit(1e4).execute();
 }

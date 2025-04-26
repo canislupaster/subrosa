@@ -58,7 +58,7 @@ export type InputProps = {icon?: ComponentChildren, className?: string, valueCha
 export const Input = forwardRef<HTMLInputElement, InputProps>((
 	{className, icon, onInput, valueChange, ...props}, ref
 )=>{
-	const input = <input type="text" className={clsx("w-full p-2 border-2 transition duration-300 rounded-none", icon!=undefined && "pl-11", interactiveContainerDefault, borderColor.focus, className)} onInput={
+	const input = <input type="text" className={twMerge("w-full p-2 border-2 transition duration-300 rounded-none", icon!=undefined && "pl-11", interactiveContainerDefault, borderColor.focus, className)} onInput={
 		onInput ?? (valueChange!=undefined ? (ev: InputEvent)=>{
 			valueChange((ev.currentTarget as HTMLInputElement).value);
 		} : undefined)
@@ -385,9 +385,10 @@ export function Text({className, children, v, ...props}:
 
 const ModalContext = createContext<null|RefObject<HTMLDialogElement>>(null);
 
+export const transparentNoHover = "[:not(:hover)]:theme:bg-transparent [:not(:hover)]:border-transparent";
 //not very accessible 🤡
-export function Modal({bad, open, onClose, title, children, className, ...props}: {
-	bad?: boolean, open: boolean, onClose?: ()=>void, title?: ComponentChildren,
+export function Modal({bad, open, onClose, closeButton, title, children, className, ...props}: {
+	bad?: boolean, open: boolean, onClose?: ()=>void, closeButton?: boolean, title?: ComponentChildren,
 	children?: ComponentChildren, className?: string
 }&JSX.HTMLAttributes<HTMLDialogElement>) {
 	const modalRef = useRef<HTMLDialogElement>(null);
@@ -402,8 +403,8 @@ export function Modal({bad, open, onClose, title, children, className, ...props}
 				onClose?.();
 			}} {...props} ><ModalContext.Provider value={modalRef} >
 
-			{onClose && <IconButton icon={<IconX />}
-				className={clsx("absolute top-3 right-2 z-30 [:not(:hover)]:theme:bg-transparent [:not(:hover)]:border-transparent")}
+			{onClose && closeButton!=false && <IconButton icon={<IconX />}
+				className={clsx("absolute top-3 right-2 z-30", transparentNoHover)}
 				onClick={()=>onClose()} />}
 
 			{title!=undefined && <>
@@ -609,7 +610,7 @@ function LazyAutoFocusSearch({search,setSearch,onSubmit}:{
 	</form>;
 }
 
-export function Select<T>({ options, value, setValue, placeholder, className, disabled, searchable, ...props }: {
+export function Select<T>({ children, options, value, setValue, placeholder, className, disabled, searchable, ...props }: {
 	options: { label: ComponentChildren, value?: T, key?: string|number, disabled?: boolean }[],
 	value?: T, setValue?: (x: T)=>void,
 	placeholder?: ComponentChildren, searchable?: boolean,
@@ -636,7 +637,7 @@ export function Select<T>({ options, value, setValue, placeholder, className, di
 	}, [options, search, setValue, value]);
 
 	const ctx = useContext(PopupCountCtx);
-	return <Dropdown noHover trigger={<div>
+	return <Dropdown noHover trigger={children!=undefined ? children : <div>
 		<Button className={twMerge("pr-1 pl-1 py-0.5 min-w-0", className)} disabled={disabled} >
 			<div className="basis-16 grow whitespace-nowrap overflow-hidden max-w-24" >
 				{curOpt==undefined ? placeholder : curOpt.label}
@@ -924,10 +925,11 @@ export type LocalStorage = Partial<{
 	lastStageCount: Map<string, number>,
 	puzzleSolve: Map<string, {token: string, id: number}>,
 	username: string,
+	
+	seenReference: boolean,
+	referencePage: string,
 
 	clipboard: NodeSelection,
-	builtInExpand: boolean,
-
 	seenMessages: Map<string, number> //time message received
 }>&{
 	toJSON(): unknown
@@ -940,8 +942,8 @@ const localStorageKeys: (Exclude<keyof LocalStorage,"toJSON">)[] = [
 	"userProcs", "storyParagraph",
 	"lastStageCount", "puzzleSolve",
 	"username", "currentlyEditing",
-	"clipboard", "builtInExpand",
-	"maxProc", "seenMessages"
+	"clipboard", "maxProc", "seenMessages",
+	"seenReference"
 ];
 
 export const LocalStorage = {

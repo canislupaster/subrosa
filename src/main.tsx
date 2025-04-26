@@ -13,6 +13,7 @@ import { parseExtra, stringifyExtra } from "../shared/util";
 import { stageUrl } from "../shared/data";
 import { useStageCount } from "./api";
 import { BgAnimComponent } from "./bganim";
+import { LogoBack } from "./logo";
 
 export const GotoContext = createContext(undefined as unknown as {
   goto: (this: void, path: string)=>void,
@@ -82,7 +83,7 @@ function Home() {
 
 export function Logo({className}: {className?: string}) {
   const goto = useGoto();
-  return <button onClick={()=>goto("/")} className={twMerge("w-1/2 self-end hover:scale-105 transition-transform", className)} ><img src="/logo.svg" /></button>;
+  return <button onClick={()=>goto("/")} className={twMerge("w-1/2 self-end hover:scale-105 transition-transform", className)} ><LogoBack /></button>;
 }
 
 function ErrorPage({errName, err, reset, children}: {

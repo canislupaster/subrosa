@@ -40,7 +40,7 @@ export type AddSolve = {
 };
 export const validUsernameRe = "^[A-Za-z0-9 _\\-]{5,20}$";
 export type AddSolveResponse = {token: string, id: number, username: string|null};
-export type StageStats = { stage: string };
+export type StageStats = { stage: string, orderBy: "time"|"registers"|"nodes" };
 export type StageStatsResponse = (ProgramStats&{username: string|null, id: number})[];
 export type SetUsername = {token: string, username: string|null};
 

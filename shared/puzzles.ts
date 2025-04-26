@@ -128,6 +128,8 @@ export const puzzles = [
 		key: "keyword",
 		generator: defaultGen,
 		encode(inp) {
+			inp=[...inp].filter(x=>x!=" ").join("");
+
 			const key = "mikah"; // change
 			let cipherAlphabet = "";
 			for (const char of key) {
@@ -141,8 +143,8 @@ export const puzzles = [
 				}
 			}
 
-			const reverseCipher = fill(cipherAlphabet.length, i=>charToNum[cipherAlphabet.indexOf(numToChar[i])]).join();
-			return fill(inp.length, i=>reverseCipher.charAt(charToNum[inp.charAt(i)])).join("");
+			const reverseCipher = fill(cipherAlphabet.length, i=>numToChar[cipherAlphabet.indexOf(numToChar[i])]).join("");
+			return fill(inp.length, i=>reverseCipher[charToNum[inp[i]]]).join("");
 		}
 	},
 	{

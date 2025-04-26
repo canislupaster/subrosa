@@ -5,7 +5,7 @@ import { serveStatic } from "hono/deno";
 import { Buffer } from "node:buffer";
 import process from "node:process";
 import { data, StageData, stageUrl } from "../shared/data.ts";
-import { AddSolve, API, CountStage, parseExtra, ServerResponse, stringifyExtra, validUsernameRe } from "../shared/util.ts";
+import { AddSolve, API, CountStage, parseExtra, ServerResponse, StageStats, stringifyExtra, validUsernameRe } from "../shared/util.ts";
 import { addSolve, countPlay, getStats, setUsername } from "./db.ts";
 import { getConnInfo } from 'hono/deno';
 import { TestParams, Verdict } from "../shared/eval.ts";
@@ -20,8 +20,12 @@ const app = new Hono();
 export const doHash = (pass: string)=>createHash("SHA256").update(Buffer.from(pass)).digest().toString("hex");
 
 const stageReq = z.object({
-	stage: z.string()
+	stage: z.string(),
 }) satisfies z.ZodType<CountStage>;
+
+const statsReq = stageReq.and(z.object({
+	orderBy: z.literal("time").or(z.literal("nodes")).or(z.literal("registers"))
+})) satisfies z.ZodType<StageStats>;
 
 const register = z.object({
 	type: z.literal("value"),
@@ -38,7 +42,7 @@ const node = z.union([
 	z.object({ op: z.literal("call"), procRef: z.number(), params: z.array(z.number()) }),
 	z.object({ op: z.enum(["add", "sub", "set", "access"]), lhs: z.number(), rhs: z.number() }),
 	z.object({ op: z.literal("setIdx"), lhs: z.number(), rhs: z.number(), idx: z.number() }),
-	z.object({ op: z.literal("breakpoint") })
+	z.object({ op: z.literal("breakpoint"), conditional: z.number().nullable() })
 ]);
 
 const procedure = z.object({
@@ -150,10 +154,10 @@ makeRoute<"solve">({
 
 makeRoute<"stats">({
 	route: "stats",
-	validator: stageReq,
-	async handler({stage}) {
+	validator: statsReq,
+	async handler({stage, orderBy}) {
 		getPuzzle(stage); // assert exists
-		return await getStats(stage);
+		return await getStats(stage, orderBy);
 	}
 });
 	

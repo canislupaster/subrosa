@@ -18,6 +18,8 @@ export type Procedure = Readonly<{
 	// guaranteed to exist in register map
 	registerList: readonly number[]
 	maxRegister: number,
+	
+	comment?: string,
 
 	registers: ReadonlyMap<number,Register>,
 	nodes: ReadonlyMap<number,Node>
@@ -40,7 +42,8 @@ export type Node = Readonly<{
 	op: "setIdx", // lhs[idx] = rhs
 	lhs: number, rhs: number, idx: number
 } | {
-	op: "breakpoint"
+	op: "breakpoint",
+	conditional: number|null // if positive
 }>;
 
 export type RegisterRef = { current: number|string };
@@ -126,7 +129,9 @@ function remapNodes(
 		else if (x.op=="setIdx") return {
 			...x, lhs: getReg(x.lhs), rhs: getReg(x.rhs), idx: getReg(x.idx)
 		};
-		else if (x.op=="breakpoint") return x;
+		else if (x.op=="breakpoint") return {
+			...x, conditional: x.conditional==null ? null : getReg(x.conditional)
+		}
 		return x.op; // never
 	});
 }
@@ -288,10 +293,6 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 		}
 	}
 	
-	if (x.op=="breakpoint" && prog.stopOnBreakpoint) {
-		return "breakpoint";
-	}
-
 	const get = (r: number) => {
 		const v = last.registers.get(r);
 		if (!v) throw new InterpreterError({ type: "noRegister" })
@@ -379,7 +380,10 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 	};
 
 	let next = last.i+1;
-	if (x.op=="set") {
+	if (x.op=="breakpoint" && prog.stopOnBreakpoint
+		&& (x.conditional==null || castToNum(x.conditional)>0)) {
+		return "breakpoint";
+	} else if (x.op=="set") {
 		get(x.lhs).current = get(x.rhs).current;
 	} else if (x.op=="add" || x.op=="sub") {
 		compute(x.op, get(x.lhs), get(x.rhs));
@@ -399,7 +403,7 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 
 		if (to==-1 || to==undefined) throw new InterpreterError({ type: "noNodeToGoto" });
 
-		if (x.conditional!=undefined) {
+		if (x.conditional!=null) {
 			const num = castToNum(x.conditional);
 			if (num>0) next=to;
 		} else {

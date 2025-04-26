@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { Procedure, ProgramStats, test, Verdict } from "../shared/eval";
 import { Stage } from "./story";
 import { API, COUNT_PLAY_INTERVAL_SECONDS, parseExtra, ServerResponse, StageStatsResponse, stringifyExtra, toPrecStat, validUsernameRe } from "../shared/util";
@@ -72,9 +72,9 @@ function Leaderboard({submission: s, puzzle}: {
 	const [input, setInput] = useState(()=>LocalStorage.username ?? "");
 
 	const [data, setData] = useState<{
-		type: "data",
-		tokenId: {token: string, id: number}, stats: StageStatsResponse
+		type: "data", tokenId: {token: string, id: number}
 	}|{ type: "nosolve" }|null>(null);
+	const [stats, setStats] = useState<StageStatsResponse|null>(null);
 
 	const refresh = useAsyncEffect(async ()=>{
 		setData(null);
@@ -91,22 +91,22 @@ function Leaderboard({submission: s, puzzle}: {
 		}
 		
 		if (tokenId) {
-			const stats = await makeReq<"stats">("stats", { stage: puzzle.key });
-			setData({type: "data", tokenId, stats});
+			setData({type: "data", tokenId});
 		} else {
 			setData({type: "nosolve"});
 		}
 	}, [s]);
 	
-	const stats = useMemo(()=>{
-		if (data?.type!="data") return [];
-		return data?.stats.toSorted((x,y)=>x[sort]-y[sort])
-	}, [sort, data]);
-
+	useAsyncEffect(async ()=>{
+		setStats(null);
+		if (data?.type!="data") return;
+		setStats(await makeReq<"stats">("stats", { stage: puzzle.key, orderBy: sort }));
+	}, [data, sort]);
+	
 	const api = useAPI<"setusername">();
 	
-	if (!data) return <Loading />;
 	if (data?.type=="nosolve") return <></>;
+	if (!data || !stats) return <Loading />;
 
 	const upName = (s:string|null)=>{
 		api.run("setusername", { token: data.tokenId.token, username: s }, ()=>{
