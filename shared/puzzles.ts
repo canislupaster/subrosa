@@ -140,7 +140,9 @@ export const puzzles = [
 					cipherAlphabet += char;
 				}
 			}
-			return fill(inp.length, i=>cipherAlphabet.charAt(charToNum[inp.charAt(i)])).join("");
+
+			const reverseCipher = fill(cipherAlphabet.length, i=>charToNum[cipherAlphabet.indexOf(numToChar[i])]).join();
+			return fill(inp.length, i=>reverseCipher.charAt(charToNum[inp.charAt(i)])).join("");
 		}
 	},
 	{
