@@ -9,14 +9,17 @@ import { animations, DragState, handleNodePointerdown, parentValues, remapNodes,
 import clsx from "clsx";
 import { ChangeEvent, SetStateAction } from "preact/compat";
 import { fill, toPrecStat } from "../shared/util";
-import { Stage } from "./story";
+import { Messages, Stage } from "./story";
 import { Submission } from "./api";
 import { useGoto } from "./main";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 export const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2 nodrag");
 const dropStyle = "[.drop,.drop_*]:theme:bg-amber-800";
-const nameInputProps = { minLength: 1, maxLength: 20, pattern: "^[\\w\\-_ ]+$" } as const;
+const nameInputProps = {
+	minLength: 1, maxLength: 20,
+	pattern: "^[\\w\\-_\\[\\]\\{\\}!\\(\\) ]+$"
+} as const;
 // const validNameRe = /^[\\w ]{1,20}$/;
 const validTextRe = new RegExp(`^[a-z ]{0,${strLenLimit}}$`);
 
@@ -62,11 +65,16 @@ type EditData = {
 	i: number,
 	proc: Procedure,
 	procs: ReadonlyMap<number, Procedure>,
-	nodeRefs: MutableRef<Map<number|null, HTMLDivElement>>,
+	nodeRefs: MutableRef<Map<number|"end", HTMLDivElement>>,
 	regMap: ReadonlyMap<number, number>,
 	regParam: ReadonlyMap<number, number>,
-	nodeMap: ReadonlyMap<number|null, number>,
-	runRegisters: ReadonlyMap<number, RegisterRefClone>|null
+	nodeMap: ReadonlyMap<number|"end", number>,
+	runRegisters: ReadonlyMap<number, RegisterRefClone>|null,
+
+	// i dont like how i pass some state deeply
+	// and then theres just this
+	setSelectingGoto: (x: number|null)=>void,
+	selectingGoto: number|null
 };
 
 const regLabel = (i: number, v: Register)=>`#${i+1}${v.name!=undefined ? `: ${v.name}` : ""}`;
@@ -102,12 +110,14 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 
 	useEffect(()=>{
 		const r = node.ref;
-		if (r=="unset" || (r!=undefined && !p.proc.nodes.has(r))) return;
+		if (r=="unset" || (r!="end" && !p.proc.nodes.has(r))) {
+			if (rectRef.current) rectRef.current.hidden=true;
+			if (arrowRef.current) arrowRef.current.hidden=true;
+			return;
+		}
 
 		// otherwise should always exist
-
 		let timeout: number|undefined;
-		let cleanup = ()=>{};
 		let lastParams = fill(4, -1);
 		const dispatch = ()=>{timeout=setTimeout(updateArrow, 50);}
 		const updateArrow = ()=>{
@@ -120,9 +130,6 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 
 			let a = el2.getBoundingClientRect()
 			let b = el.getBoundingClientRect();
-
-			cleanup();
-			cleanup=()=>rect.hidden=arrow.hidden=true;
 
 			rect.hidden=arrow.hidden=false;
 			const parent = rect.offsetParent!;
@@ -142,7 +149,7 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 			lastParams=params;
 
 			if (a.y > b.y) [a,b] = [b,a];
-			const depth = 0.7*(2*(b.y - a.y)/parent.scrollHeight + (Math.sin((a.y+yo)/50)+1)/4);
+			const depth = 0.7*(2*(b.y - a.y)/parent.scrollHeight + ((0.3234*(a.y+yo))%1)/3);
 			const obj = {
 				top: `${a.y + a.height/2 - c.top + yo}px`,
 				bottom: `${c.bottom - (b.y + b.height/2) - yo}px`,
@@ -157,28 +164,32 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 		};
 
 		updateArrow();
-		return ()=>{ if (timeout!=undefined) clearTimeout(timeout); cleanup(); }
+		window.addEventListener("resize", updateArrow);
+		return ()=>{
+			if (timeout!=undefined) clearTimeout(timeout);
+			window.removeEventListener("resize", updateArrow);
+		};
 	}, [node, node.ref, nodeI, p.nodeRefs, p.proc.nodeList, p.proc.nodes]);
 
 	return <>
 		<div className="absolute w-4 nodrag" hidden ref={arrowRef} >
 			<img src="/arrow.svg" />
 		</div>
-		<div className="absolute border-2 border-r-0 border-white nodrag" hidden ref={rectRef} />
+		<div className={clsx("absolute border-2 border-r-0 nodrag", borderColor.focus)} hidden ref={rectRef} />
 	</>;
 }
 
 const getClickNode = (ev: MouseEvent, refs: EditData["nodeRefs"])=>{
-	return [...refs.current.entries()]
+	const candidates =  [...refs.current.entries()]
 		.filter(([,y])=>y.contains(ev.target as globalThis.Node|null))
-		.map(v=>v[0])?.[0];
+	return candidates.length==0 ? null : candidates[0][0];
 }
 
 function GotoInner({p, node, setNode, nodeI}: {
 	p: EditData, node: Node&{op: "goto"}, nodeI?: number
 	setNode?: (x: Node)=>void
 }) {
-	const [selecting, setSelecting] = useState(false);
+	const selecting = nodeI!=undefined && p.selectingGoto==nodeI;
 
 	useEffect(()=>{
 		if (!selecting) return;
@@ -189,18 +200,18 @@ function GotoInner({p, node, setNode, nodeI}: {
 				setNode?.({ ...node, ref: targetNode });
 			}
 
-			setSelecting(false);
+			p.setSelectingGoto(null);
 		};
 
-		document.addEventListener("click", cb);
-		return ()=>document.removeEventListener("click", cb);
-	}, [node, nodeI, p.nodeRefs, p.proc.nodes, selecting, setNode]);
+		document.addEventListener("click", cb, true);
+		return ()=>document.removeEventListener("click", cb, true);
+	}, [node, nodeI, p, selecting, setNode]);
 	
-	const to = p.nodeMap.get(node.ref as number|null);
+	const to = node.ref=="unset" ? null : p.nodeMap.get(node.ref);
 
 	return <>
 		<Button onClick={()=>{
-			setSelecting(true);
+			if (nodeI!=undefined) p.setSelectingGoto(selecting ? null : nodeI);
 		}} className={
 			selecting ? bgColor.highlight : node.ref=="unset" && setNode ? bgColor.red : ""
 		} >
@@ -390,6 +401,8 @@ function RegisterEditor({p, reg, setReg}: {
 					setReg({...regV, type: "value", value: value.toString()}, reg);
 					setValue("");
 				}
+				
+				setErr(null);
 			}} />
 
 		{regV.type=="value" && <>
@@ -451,21 +464,23 @@ function ProcEditor({
 	undo: (redo: boolean)=>void
 }&UserProcs) {
 	const isUserProc = entryProc!=procI; // whether proc is editable
-	const nodeRefs = useRef(new Map<number|null,HTMLDivElement>());
+	const nodeRefs = useRef(new Map<number|"end",HTMLDivElement>());
+	const [selectingGoto, setSelectingGoto] = useState<number|null>(null);
 	const data: EditData = useMemo(()=>{
 		return {
 			i: procI, proc, procs,
+			selectingGoto, setSelectingGoto,
 			nodeRefs,
 			regMap: new Map(proc.registerList.map((v,i)=>[v,i])),
 			regParam: new Map(proc.registerList.filter(a=>proc.registers.get(a)?.type=="param")
 				.map((x,i)=>[x,i])),
-			nodeMap: new Map([
-				...proc.nodeList.map((v,i)=>[v,i] satisfies [number|null, number]),
-				[null, proc.nodeList.length]
+			nodeMap: new Map<number|"end", number>([
+				...proc.nodeList.map((v,i)=>[v,i] satisfies [number|"end", number]),
+				["end", proc.nodeList.length]
 			]),
 			runRegisters: runState?.registers ?? null
 		} as const;
-	}, [procI, proc, procs, runState?.registers]);
+	}, [procI, proc, procs, selectingGoto, runState?.registers]);
 
 	const nodeForUserProc = useCallback((i: number): Node => {
 		const proc = procs.get(i)!;
@@ -513,6 +528,7 @@ function ProcEditor({
 			},
 			performTransfer({ initialParent, targetParent, draggedNodes, targetNodes }) {
 				remapNodes(initialParent.el);
+				remapNodes(targetParent.el, true);
 
 				const newData = updateFromDrag(draggedNodes.map(v=>v.data.value as unknown as DragNode));
 				draggedNodes.forEach((v,i)=>{ v.data.value=newData[i]; });
@@ -536,6 +552,7 @@ function ProcEditor({
 	useEffect(()=>{
 		dragAndDrop<HTMLUListElement, DragNode>({
 			parent: userProcListRef.current,
+			dropZone: false,
 			state: [
 				userProcList.map(i=>({type: "user", i})),
 				((nodes: DragNode[])=>setProcList(nodes.map(x=>x.i))) as Dispatch<SetStateAction<DragNode[]>>
@@ -546,7 +563,7 @@ function ProcEditor({
 		});
 	}, [setProcList, userProcList]);
 
-	const nodeRefSetter = (node: number|null) => (el: HTMLDivElement|null) => {
+	const nodeRefSetter = (node: number|"end") => (el: HTMLDivElement|null) => {
 		if (el==null) return;
 		nodeRefs.current.set(node, el);
 		return ()=>nodeRefs.current.delete(node);
@@ -569,6 +586,7 @@ function ProcEditor({
 	useEffect(()=>{
 		dragAndDrop<HTMLUListElement, number>({
 			parent: registerList.current,
+			dropZone: false,
 			state: [
 				proc.registerList as number[], // mutability
 				(
@@ -682,8 +700,8 @@ function ProcEditor({
 		}
 
 		const docClick = (ev: MouseEvent)=>{
-			const node = getClickNode(ev,data.nodeRefs);
-			if (node==null) {
+			const node = getClickNode(ev, data.nodeRefs);
+			if (node==null || node=="end") {
 				setSelection(new Set());
 				return;
 			}
@@ -700,7 +718,8 @@ function ProcEditor({
 		};
 		
 		const clipboardListener = (ev: KeyboardEvent)=>{
-			if (!ev.metaKey && !ev.ctrlKey && ev.key!="Backspace") return;
+			if (!ev.metaKey && !ev.ctrlKey && ev.key!="Backspace"
+				|| ev.target!=document.body) return;
 
 			if (ev.key=="z") {
 				undo(ev.shiftKey);
@@ -736,11 +755,14 @@ function ProcEditor({
 			ev.preventDefault();
 		};
 		
+		const el = nodeListRef.current;
+		if (!el) return;
+
 		document.addEventListener("keydown", clipboardListener)
-		document.addEventListener("click", docClick);
+		el.addEventListener("click", docClick);
 		return ()=>{
 			document.removeEventListener("keydown", clipboardListener)
-			document.removeEventListener("click", docClick);
+			el.removeEventListener("click", docClick);
 		};
 	}, [data.nodeRefs, pasteSel, proc, proc.nodeList, procI, remappingClipboard.open, selection, setProc, undo, toast]);
 	
@@ -782,7 +804,7 @@ function ProcEditor({
 			</div>
 		</Modal>
 
-		<div className="flex flex-col items-stretch gap-2 editor-left min-h-0" >
+		<div className="flex flex-col items-stretch gap-1 editor-left min-h-0" >
 			<div className={clsx("mb-2 flex flex-row gap-3 items-end pl-1 shrink-0 h-11", !isUserProc && "pl-2")} >
 				{back && <Anchor className="items-center self-end mr-2" onClick={()=>openProc()} >
 					<IconChevronLeft size={32} />
@@ -791,7 +813,7 @@ function ProcEditor({
 				{!isUserProc ? <Text v="bold" >Procedure <Text v="code" >{proc.name}</Text></Text>
 				: <>
 					<Text v="bold" >Procedure</Text>
-					<HiddenInput {...procNameValidity} className="w-fit -mb-1" />
+					<HiddenInput {...procNameValidity} {...nameInputProps} className="w-fit -mb-1" />
 				</>}
 				
 				<Button className="ml-auto py-1" onClick={()=>{
@@ -816,13 +838,13 @@ function ProcEditor({
 					];
 				})}
 			
-				<div className={blankStyle} ref={nodeRefSetter(null)} >
+				<div className={clsx(blankStyle, selectingGoto!=null && clsx(bgColor.hover, "cursor-pointer"))} ref={nodeRefSetter("end")} >
 					{proc.nodeList.length==0 ? <>
 						<IconInfoCircle />
 						<Text v="sm" >Use the library on the right to add nodes</Text>
 					</> : <>
 						<img src="/end.svg" className="w-7" />
-						<Text v="sm" >End of procedure</Text>
+						<Text v="sm" >End of procedure{selectingGoto!=null && " (you can jump here)"}</Text>
 						<Text v="dim" className="bottom-1 left-1 absolute" >{proc.nodeList.length+1}</Text>
 					</>}
 				</div>
@@ -849,7 +871,7 @@ function ProcEditor({
 			<div className="contents" hidden={builtinExpand} >
 				<Divider className="my-1" />
 
-				<div className="flex flex-row gap-2 items-center flex-wrap" >
+				<div className="flex flex-row gap-2 items-center flex-wrap gap-y-0" >
 					<Text v="bold" >My procedures</Text>
 					<Button onClick={()=>openProc(entryProc)} className="ml-auto py-1" >Main</Button>
 					<Input value={procFilter} valueChange={setProcFilter} className="py-1 basis-1/2" placeholder={"Search"} />
@@ -904,8 +926,7 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStag
 	puzzle: Stage&{type: "puzzle"},
 	edit: EditorState, output: string|null,
 	setInput: (x: string)=>void,
-	setSolved: ()=>void,
-	nextStage: ()=>void
+	setSolved: ()=>void, nextStage: ()=>void
 }) {
 	const input = edit.decoded;
 	const [input2, setInput2] = useState(input);
@@ -926,6 +947,7 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStag
 
 	return <div className="flex flex-col items-stretch gap-2" >
 		<Text className="mb-1" >{puzzle.blurb}</Text>
+		{puzzle.extraDesc!=undefined && <Text className="mb-1" >{puzzle.extraDesc}</Text>}
 		
 		<div className="flex flex-row gap-2 -mb-1" >
 			<Text v="dim" >
@@ -985,7 +1007,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 }) {
 	const [runState, setRunState] = useState<ReturnType<typeof clone>|null>();
 	const [runStatus, setRunStatus] = useState<{ type: "done"|"stopped" }
-		|{ type: "paused", breakpoint?: boolean }
+		|{ type: "paused", breakpoint?: number }
 		|{ type: "running", step: boolean, restart: boolean }>({type: "stopped"});
 	const [runError, setRunError] = useState<InterpreterError|null>(null);
 	const [output, setOutput] = useState<string|null>(null);
@@ -1033,11 +1055,14 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		setEdit(v=>({ ...v, userProcList: vs }));
 	}, [setEdit])
 	
-	const inBreakpoint = runStatus.type=="paused" && runStatus.breakpoint==true && runState
+	const inBreakpoint = runStatus.type=="paused" && runStatus.breakpoint!=undefined && runState
 		&& runState.stack.length>0 ? runState.stack[runState.stack.length-1].proc : null;
 	useEffect(()=>{
-		if (inBreakpoint!=null) setEdit(e=>({...e, active: inBreakpoint}));
-	}, [inBreakpoint, setEdit]);
+		if (inBreakpoint!=null) {
+			toast("Breakpoint hit");
+			setEdit(e=>({...e, active: inBreakpoint}));
+		}
+	}, [inBreakpoint, setEdit, toast]);
 	
 	const [newProc, setNewProc] = useState({open: false, name: ""});
 	const activeProcRunState = useMemo((): ProcRunState|null => {
@@ -1047,9 +1072,10 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		return frame==undefined ? null : {
 			activeNode: activeProc.nodeList[frame.i],
 			registers: frame.registers,
-			breakpointNode: inBreakpoint==edit.active ? activeProc.nodeList[frame.i] : undefined
+			breakpointNode: inBreakpoint==edit.active && runStatus.type=="paused"
+				? runStatus.breakpoint : undefined
 		};
-	}, [activeProc, edit.active, inBreakpoint, runState?.stack]);
+	}, [activeProc, edit.active, inBreakpoint, runState?.stack, runStatus]);
 	
 	const [confirmDelete, setConfirmDelete] = useState<{proc: Procedure|null, open: boolean}>({
 		open: false, proc: null
@@ -1107,8 +1133,10 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			const xd = handle(()=>{
 				const ret = step(v);
 				if (ret=="breakpoint") {
-					setRunStatus({ type: "paused", breakpoint: true });
-					toast("Breakpoint hit");
+					const top = v.stack[v.stack.length-1];
+					// needs to be computed here since modifying
+					const breakNode = edit.procs.get(top.proc)?.nodeList[top.i];
+					setRunStatus({ type: "paused", breakpoint: breakNode });
 					setRunState(clone(v));
 				} else if (ret==false) {
 					cont=false;
@@ -1215,12 +1243,6 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	return <div className="grid h-dvh gap-x-4 pl-3 px-5 w-full editor" >
 		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center" >
 			<div className="flex flex-row gap-2 items-center h-full" >
-				<button onClick={()=>goto("/menu")}
-					className={twMerge("flex flex-row hover:scale-105 transition-transform h-full")} >
-					<img src="/logo.svg" className="max-h-full" />
-				</button>
-
-				<span className="w-2" />
 				{stats}
 				<IconButton icon={<IconPlayerStopFilled className="fill-red-500" />}
 					disabled={runStatus.type=="stopped"}
@@ -1280,11 +1302,19 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			</button> : <Text v="md" className={textColor.dim} >
 				No puzzle
 			</Text>}
+			
+			{puzzle && <Messages stage={puzzle} />}
+			<button onClick={()=>goto("/menu")}
+				className={twMerge("flex flex-row hover:scale-105 transition-transform h-full")} >
+				<img src="/logo.svg" className="max-h-full" />
+			</button>
 		</div>
 		
 		{puzzle && <Modal open={open} onClose={()=>setOpen(false)} title={puzzle.name} >
 			<PuzzleInput puzzle={puzzle} edit={edit} output={output}
-				setInput={setInput} setSolved={markSolved} nextStage={nextStage} />
+				setInput={setInput} setSolved={markSolved} nextStage={()=>{
+					nextStage(); setOpen(false);
+				}} />
 		</Modal>}
 		
 		<ConfirmModal open={confirmDelete.open}

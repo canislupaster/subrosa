@@ -5,7 +5,6 @@ import { twMerge } from "tailwind-merge";
 import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
 import { forwardRef, SetStateAction } from "preact/compat";
 import clsx from "clsx";
-import { useLocation } from "preact-iso";
 import { NodeSelection, Procedure } from "../shared/eval";
 import { parseExtra, stringifyExtra } from "../shared/util";
 
@@ -101,9 +100,10 @@ export function Button({className, disabled, icon, iconRight, ...props}: ButtonP
 	</button>;
 }
 
-export const IconButton = ({className, icon, disabled, ...props}: {icon?: ComponentChildren, disabled?: boolean, className?: string}&JSX.IntrinsicElements["button"]) =>
+export const IconButton = ({className, children, icon, disabled, ...props}: {icon?: ComponentChildren, disabled?: boolean, className?: string}&JSX.IntrinsicElements["button"]) =>
 	<button className={twMerge(clsx("rounded-sm p-1.5 flex items-center justify-center h-fit aspect-square", interactiveContainerDefault, className))} disabled={disabled} {...props} >
 		{icon}
+		{children}
 	</button>;
 
 type AnchorProps = JSX.AnchorHTMLAttributes<HTMLAnchorElement>;
@@ -176,7 +176,7 @@ export const Alert = ({title, txt, bad, className}: {
 	</div>;
 
 export const Divider = ({className, contrast}: {className?: string, contrast?: boolean}) =>
-	<span className={twMerge(clsx("w-full h-px shrink-0", contrast??false ? "dark:bg-zinc-400 bg-zinc-500" : "dark:bg-zinc-600 bg-zinc-300", "my-2", className))} />;
+	<span className={twMerge(clsx("w-full h-px shrink-0 block", contrast??false ? "dark:bg-zinc-400 bg-zinc-500" : "dark:bg-zinc-600 bg-zinc-300", "my-2", className))} />;
 
 export const Card = ({className, children, ...props}:
 	JSX.HTMLAttributes<HTMLDivElement>&{className?: string}
@@ -407,7 +407,7 @@ export function Modal({bad, open, onClose, title, children, className, ...props}
 				onClick={()=>onClose()} />}
 
 			{title!=undefined && <>
-				<Text v="big">{title}</Text>
+				<Text v="big" className="pr-8" >{title}</Text>
 				<div className="my-0" >
 					<Divider className="absolute left-0 right-0 my-auto" contrast={bad} />
 				</div>
@@ -751,11 +751,11 @@ const queries: Record<"md"|"lg",MediaQueryList|null> = {
 };
 
 export const useMd = () => {
-	return useMediaQuery(queries.md);
+	return useMediaQuery(queries.md, true);
 };
 
 export const useLg = () => {
-	return useMediaQuery(queries.lg);
+	return useMediaQuery(queries.lg, true);
 };
 
 export function useDebounce<T>(f: ()=>T, debounceMs: number): T {
@@ -941,7 +941,7 @@ const localStorageKeys: (Exclude<keyof LocalStorage,"toJSON">)[] = [
 	"lastStageCount", "puzzleSolve",
 	"username", "currentlyEditing",
 	"clipboard", "builtInExpand",
-	"maxProc"
+	"maxProc", "seenMessages"
 ];
 
 export const LocalStorage = {

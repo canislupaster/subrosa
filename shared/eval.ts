@@ -28,7 +28,7 @@ export type Node = Readonly<{
 } | {
 	op: "goto",
 	conditional: number|null, // if positive
-	ref: number|"unset"|null // undefined is return
+	ref: number|"unset"|"end" // undefined is return
 } | {	
 	op: "call",
 	procRef: number,
@@ -117,7 +117,7 @@ function remapNodes(
 		if (x.op=="call") return { ...x, params: x.params.map(getReg) };
 		else if (x.op=="goto") return {
 			...x, conditional: x.conditional==null ? null : getReg(x.conditional),
-			ref: typeof x.ref=="number" ? getNode(x.ref) : x.ref
+			ref: typeof x.ref=="number" ? getNode(x.ref)??"unset" : x.ref
 		};
 		else if (x.op=="inc" || x.op=="dec") return { ...x, lhs: getReg(x.lhs) };
 		else if (x.op=="add" || x.op=="sub" || x.op=="access" || x.op=="set") return {
@@ -318,14 +318,13 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 		return v;
 	};
 	
-	const compute = (op: "add"|"sub"|"set", l: RegisterRef, r: RegisterRef) => {
-		const swap = typeof l=="number" && typeof r=="string";
+	const compute = (op: "add"|"sub", l: RegisterRef, r: RegisterRef) => {
+		const swap = typeof l.current=="number" && typeof r.current=="string";
 		if (swap) [r,l]=[l,r];
 		
 		const mod = (a: number, b: number) => {
 			if (op=="add") return a+b;
-			else if (op=="sub") return a-b;
-			return b;
+			return a-b;
 		};
 
 		let out: string|number;
@@ -380,7 +379,9 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 	};
 
 	let next = last.i+1;
-	if (x.op=="add" || x.op=="sub" || x.op=="set") {
+	if (x.op=="set") {
+		get(x.lhs).current = get(x.rhs).current;
+	} else if (x.op=="add" || x.op=="sub") {
 		compute(x.op, get(x.lhs), get(x.rhs));
 	} else if (x.op=="inc" || x.op=="dec") {
 		compute(x.op=="inc" ? "add" : "sub", get(x.lhs), { current: 1 });
@@ -393,8 +394,8 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 		next=last.i; // increment on pop frame to record current node accurately
 	} else if (x.op=="goto") {
 		let to: number|undefined;
-		if (x.ref==undefined) to=lastProc.nodeList.length;
-		else to = lastProc.nodeList.indexOf(x.ref as number); // 🤡 do i optimize? everything is so slow
+		if (x.ref=="end") to=lastProc.nodeList.length;
+		else if (x.ref!="unset") to = lastProc.nodeList.indexOf(x.ref); // 🤡 do i optimize? everything is so slow
 
 		if (to==-1 || to==undefined) throw new InterpreterError({ type: "noNodeToGoto" });
 

@@ -3,13 +3,14 @@
 
 import { ComponentChildren } from "preact";
 import { data } from "../shared/data";
-import { Message, Messages, StoryParagraph } from "./story";
+import { StoryParagraph } from "./story";
 import { AsciiArt } from "./asciiart";
 
 type ExtraData = Readonly<{ [K in typeof data[number]["key"]]:
 	Readonly<(((typeof data)[number]&{key: K})["type"] extends "story" ? {
 		para: ComponentChildren[]
 	} : {
+		extraDesc?: ComponentChildren,
 		solveBlurb?: ComponentChildren
 	})&{
 		blurb: ComponentChildren
@@ -21,8 +22,10 @@ export type Message = {
 	minStageKey: (typeof data)[number]["key"],
 	expectedMinutes: number,
 	from: ComponentChildren,
+	to?: ComponentChildren,
 	subject: ComponentChildren,
-	content: ComponentChildren
+	content: ComponentChildren,
+	replyTo?: string
 };
 
 export const extraData: ExtraData = {
@@ -731,10 +734,33 @@ export const extraData: ExtraData = {
 
 export const messages = [
 	{
-		key: "intro-message",
+		key: "welcome",
 		minStageKey: "intro",
-		expectedMinutes: 2,
-		from: "me", subject: "abc",
-		content: "hi there"
+		expectedMinutes: 4,
+		from: "Karen", subject: "welcome to subrose",
+		content: <>
+			<p>just wanted to extend a warm welcome</p>
+			<p>we have free employee lunches every day at noon. you're doing a great job, already on top of your work. keep it up!</p>
+		</>
+	},
+	{
+		key: "random1",
+		minStageKey: "intro",
+		expectedMinutes: 20,
+		from: "Josh Brown", subject: "Why do I deserve this?",
+		content: <>
+			<p>
+				That's it. I'm quitting. It's been a long time coming. I think this message should shine a light on how distorted our company's values are.
+			</p>
+			<p>
+				The first coffee machine was absolute shit. Stupid brand new top of the line Keurig that pissed literal gray water you lowlife swine call coffee. I honestly can't work with any employee who drinks this fucking... <i>instant</i> coffee without throwing up. I filed a complaint on my first day.
+			</p>
+			<p>
+				The high of my life arrived with the next machine, a classic Gaggia. My hopes in this shithole were fully restored. Every hour, I would arrive at the break room with excitement and anticipation of my next fix. My cold metal beauty, the love of my life, was kept in amazing shape by a dedicated maintenance crew. Only the finest beans were sourced at my suggestion.
+			</p>
+			<p>
+				Until a certain top-level exec (You Know Who) came along, saw our coffee setup, and appropriated it for himself. After all my investment in my team's collective productivity, this blow was too much to take. I asked for it back, I asked for another one, I asked for the fucking Keurig machine after one too many non-late nights. Denied, probably to save money to fund <i>his</i> stolen fucking setup and spite someone who knows his coffee better. I want to hurt this asshole. I'm done.
+			</p>
+		</>
 	}
 ] as const satisfies Message[];

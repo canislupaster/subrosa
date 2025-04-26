@@ -34,7 +34,7 @@ const register = z.object({
 
 const node = z.union([
 	z.object({ op: z.enum(["inc", "dec"]), lhs: z.number() }),
-	z.object({ op: z.literal("goto"), conditional: z.number().nullable(), ref: z.union([z.number(), z.literal("unset"), z.null()]) }),
+	z.object({ op: z.literal("goto"), conditional: z.number().nullable(), ref: z.union([z.number(), z.literal("unset"), z.literal("end")]) }),
 	z.object({ op: z.literal("call"), procRef: z.number(), params: z.array(z.number()) }),
 	z.object({ op: z.enum(["add", "sub", "set", "access"]), lhs: z.number(), rhs: z.number() }),
 	z.object({ op: z.literal("setIdx"), lhs: z.number(), rhs: z.number(), idx: z.number() }),

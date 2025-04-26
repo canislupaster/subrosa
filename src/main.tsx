@@ -1,5 +1,5 @@
 import "disposablestack/auto";
-import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Input, Loading, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useDisposable, useFnRef, useMd } from "./ui";
+import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Input, Loading, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useMd } from "./ui";
 import { ComponentChildren, ComponentProps, createContext, render, JSX } from "preact";
 import { useCallback, useContext, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
 import { Editor, makeProc } from "./editor";
@@ -45,7 +45,7 @@ export function FadeRoute({className, ...props}: JSX.IntrinsicElements["div"]&{
     };
   }, [ctx]);
 
-  return <div {...props} className={twMerge("animate-fade-in", className)} ref={ref} />;
+  return <div {...props} className={twMerge("animate-fade-in w-full", className)} ref={ref} />;
 }
 
 function Footer() {
@@ -148,12 +148,12 @@ function Menu() {
           (LocalStorage[k as keyof LocalStorage] as unknown) = save.localStorage[k as keyof LocalStorage] as unknown;
         }
         
-        procStorage.setUserProcs(save.procs);
+        procStorage.setProcs(save.procs);
         setCompleted(getCompleted());
         setImporting(false);
       }} className="flex flex-col gap-2" >
         <Text>Paste an export below:</Text>
-        <Input value={importData} valueChange={setImportData} />
+        <Input value={importData} valueChange={setImportData} autofocus />
         <Button>Import data</Button>
       </form>
     </Modal>
@@ -194,7 +194,7 @@ function Menu() {
       <Anchor onClick={()=>{
         const txt = stringifyExtra({
           localStorage: LocalStorage,
-          procs: procStorage.getUserProcs()
+          procs: procStorage.getAllProcs()
         } satisfies Save);
 
         void window.navigator.clipboard.writeText(txt);
@@ -209,25 +209,27 @@ function Menu() {
 
 const procStorage = {
   savedProcs: new Map<number, Procedure>(),
-
   getProc(i: number): Procedure|null {
     return parseExtra(localStorage.getItem(`proc${i}`)) as Procedure|null;
   },
-  
   getUserProcs() {
     return (LocalStorage.userProcs ?? [])
       .map((i): [number,Procedure]=>[i, this.getProc(i)!]);
   },
-
+  getAllProcs() {
+    return [
+      ...LocalStorage.userProcs ?? [],
+      ...[...LocalStorage.puzzleProcs?.values() ?? []]
+        .filter((x: unknown): x is number => typeof x=="number")
+    ].map((i): [number,Procedure]=>[i, this.getProc(i)!]);
+  },
   setProc(i: number, proc: Procedure) {
     if (this.savedProcs.get(i)==proc) return;
     this.savedProcs.set(i, proc);
     localStorage.setItem(`proc${i}`, stringifyExtra(proc));
   },
-
-  setUserProcs(procs: [number, Procedure][]) {
+  setProcs(procs: [number, Procedure][]) {
     for (const [i,x] of procs) this.setProc(i,x);
-    LocalStorage.userProcs = procs.map(([x])=>x);
   }
 };
 
@@ -274,14 +276,12 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
 
     throttleSave.current?.call(()=>{
       LocalStorage.stepsPerS = ns.stepsPerS;
-      procStorage.setUserProcs(
-        [...ns.procs.entries()]
-          .map(([k,v]): [number, Procedure]=>[k,v])
-          .filter(([k])=>k!=ns.entryProc)
+      procStorage.setProcs(
+        [...ns.procs.entries()].map(([k,v]): [number, Procedure]=>[k,v])
       );
 
       LocalStorage.maxProc = ns.maxProc;
-      procStorage.setProc(ns.entryProc, ns.procs.get(ns.entryProc)!);
+      LocalStorage.userProcs = [...ns.procs.keys()].filter(x=>x!=ns.entryProc);
       LocalStorage.puzzleProcs = mapWith(LocalStorage.puzzleProcs ?? null, stage.key, ns.entryProc);
     });
 
@@ -350,13 +350,13 @@ function InnerApp() {
   if (err!=undefined) return <ErrorPage err={err} reset={resetErr} />;
 
   if (!md && route.path!="/") {
-    return <div className="flex flex-col items-center justify-center gap-2 p-4 h-dvh" >
+    return <FadeRoute className="flex flex-col items-center justify-center gap-2 p-4 h-dvh" >
       <IconDeviceDesktopFilled size={128} />
       <Text v="bold" >This experience functions best on a desktop-size display.</Text>
       <Text>Please switch to a larger display or rotate your screen.</Text>
       
       <Logo className="mt-8" />
-    </div>;    
+    </FadeRoute>;    
   }
 
   const { withDone, activeStages } = getCompleted();

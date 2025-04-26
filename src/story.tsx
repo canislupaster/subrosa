@@ -1,10 +1,10 @@
 import { ComponentChildren, createContext, Fragment } from "preact";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, textColor, AppTooltip, IconButton, setWith, borderColor, mapWith } from "./ui";
+import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, textColor, IconButton, borderColor, mapWith, Modal } from "./ui";
 import clsx from "clsx";
 import { data } from "../shared/data";
 import { extraData, Message, messages } from "./data";
-import { IconCircleFilled, IconMailFilled } from "@tabler/icons-preact";
+import { IconMailFilled, IconUserCircle } from "@tabler/icons-preact";
 
 export function useStoryState<T=string>(key: string) {
 	const [x, setX] = useState<T>();
@@ -264,13 +264,59 @@ export const stages: ReadonlyArray<Stage> = data.map(d=>({
 const keyMessages = new Map<string, Message>(messages.map(x=>[x.key, x]));
 const today = new Date();
 
-export function Messages({ stage }: {stage: Stage}) {
-	const [messageList, setMessages] = useState<{
-		message: Message, read: boolean, time: Date
-	}[]>(()=>[...LocalStorage.seenMessages?.entries() ?? []].map(([x, t])=>({
-		message: keyMessages.get(x), read: true, time: new Date(t)
-	})).filter((x): x is {message: Message, read: boolean, time: Date}=>x.message!=undefined));
+const formatTime = (x: Date)=>
+	x.getDate()==today.getDate() && x.getMonth()==today.getMonth()
+		? x.toLocaleTimeString(undefined, { hour: "numeric", minute: "numeric" })
+		: x.toLocaleString(undefined, { hour: "numeric", minute: "numeric", day: "numeric", month: "numeric" });
+		
+type MessageProps = {
+	message: Message, read: boolean, time: Date,
+	reply: MessageProps|null
+};
 
+function MessageView({ message, time, reply, inReply }: MessageProps&{inReply?: boolean}) {
+	return <div className={clsx(inReply!=true && "py-3 pb-10 grow overflow-y-auto")} >
+		<div className="flex flex-col gap-2 items-stretch px-3" >
+			<div className="flex flex-row justify-between" >
+				<Text v="md" > {message.subject} </Text>
+				<Text v="dim" >{formatTime(time)}</Text>
+			</div>
+			<Text v="sm" className="flex flex-row gap-1 items-center -ml-0.5" >
+				{message.to!=undefined && <Text v="dim" >From:</Text>}
+				<IconUserCircle /> {message.from}
+				{message.to!=undefined && <>
+					<Text v="dim" >To:</Text>
+					<IconUserCircle /> {message.to}
+				</>}
+			</Text>
+		</div>
+		<Divider />
+		<div className="px-3 flex flex-col gap-2" >
+			{message.content}
+			{reply && <div className={clsx("pl-1 border-l-2", borderColor.blue)} >
+				<MessageView {...reply} inReply={true} />
+			</div>}
+		</div>
+	</div>;
+}
+
+const getMessage = (x: string): MessageProps|null=>{
+	const v = keyMessages.get(x);
+	const t = LocalStorage.seenMessages?.get(x);
+	const rep = v?.replyTo==undefined ? null : getMessage(v.replyTo);
+	if (!v || t==undefined) return null;
+	return {
+		message: v, read: true, time: new Date(t), reply: rep
+	};
+};
+
+export function Messages({ stage }: { stage: Stage }) {
+	const [messageList, setMessages] = useState<MessageProps[]>(()=>{
+		return [...LocalStorage.seenMessages?.keys() ?? []].map(getMessage)
+			.filter((x): x is MessageProps=>x!=null);
+	});
+
+	const initCheck = useRef(false);
 	const [activeMessage, setActiveMessage] = useState<(typeof messageList)[number]|null>(null);
 	const numUnread = useMemo(()=>messageList.reduce((a,b)=>a+(b.read ? 0 : 1),0), [messageList]);
 	
@@ -278,9 +324,9 @@ export function Messages({ stage }: {stage: Stage}) {
 		const keyToStageI = new Map(data.map((x,i)=>[x.key, i]));
 		const curI = keyToStageI.get(stage.key)!;
 		const curMessages = new Set(messageList.map(x=>x.message.key));
-		const available = messages.filter(msg=>{
+		const available: Message[] = messages.filter(msg=>{
 			const si = keyToStageI.get(msg.minStageKey);
-			return si!=null && si>=curI && !curMessages.has(msg.key);
+			return si!=null && curI>=si && !curMessages.has(msg.key);
 		});
 		
 		const check = ()=>{
@@ -288,59 +334,57 @@ export function Messages({ stage }: {stage: Stage}) {
 			for (const msg of available) {
 				const p = msg.expectedMinutes<=1e-4 ? 1 : 1-Math.exp(-1/msg.expectedMinutes);
 				if (Math.random()<p) {
-					setMessages(msgs=>[...msgs, {message: msg, read: false, time: t}]);
 					LocalStorage.seenMessages = mapWith(LocalStorage.seenMessages??null, msg.key, t.getTime());
+					const msgProps = getMessage(msg.key);
+					if (msgProps) setMessages(msgs=>[msgProps, ...msgs]);
+				} else {
+					break; // messages arrive in order
 				}
 			}
 		};
 
-		check();
+		if (!initCheck.current) { check(); initCheck.current=true; }
 		const int = setInterval(check, 60*1000);
 		return ()=>clearInterval(int);
 	}, [messageList, stage.key]);
 
-	const formatTime = (x: Date)=>
-		x.getDate()==today.getDate() && x.getMonth()==today.getMonth()
-			? x.toLocaleTimeString() : x.toLocaleString();
+	const [open, setOpen] = useState(false);
 	
-	return <AppTooltip content={
-		<div className="flex flex-row" >
-			<div className="flex flex-col gap-2" >
-				{messageList.map(msg=><button key={msg.message.key} className={clsx("flex flex-row gap-1 border-b-1", borderColor.default)} onClick={()=>{
-					setActiveMessage(msg);
-				}} >
-					{!msg.read && <div className={clsx("animate-pulse rounded-full w-4 aspect-square", bgColor.sky)} />}
-					<div className="flex flex-col gap-1 items-start" >
-						{msg.message.subject}
-						{msg.message.from}
-					</div>
-					<Text v="dim" >{formatTime(msg.time)}</Text>
-				</button>)}
-			</div>
-
-			<Divider />
-			
-			{activeMessage ? <div>
-				<div className="flex flex-col gap-1 items-start" >
-					{activeMessage.message.subject}
-					{activeMessage.message.from}
-					<Text v="dim" >{formatTime(activeMessage.time)}</Text>
+	return <>
+		<Modal open={open} onClose={()=>setOpen(false)} title="Mail" className="pb-0" >
+			<div className="flex flex-row items-stretch -mt-2 -mx-6 min-h-0" >
+				<div className="flex flex-col basis-1/3 min-h-20 overflow-y-auto shrink-0 items-stretch" >
+					{messageList.map((msg,i)=><button key={msg.message.key} className={clsx("flex flex-row gap-3 border-b-1 p-4 items-start justify-stretch", borderColor.default, msg==activeMessage ? bgColor.secondary : bgColor.hover)} disabled={msg==activeMessage} onClick={()=>{
+						const nmsg = {...msg, read: true};
+						setMessages(messageList.toSpliced(i, 1, nmsg));
+						setActiveMessage(nmsg);
+					}} >
+						{!msg.read && <div className={clsx("animate-pulse rounded-full mt-2 h-4 w-4 aspect-square", bgColor.sky)} />}
+						<div className="flex flex-col gap-1 text-left grow items-stretch" >
+							<Text v="lg" >{msg.message.subject}</Text>
+							<Text v="sm" className="flex flex-row gap-1 items-center mt-1 ml-1" >
+								<IconUserCircle /> {msg.message.from}
+								<Text v="dim" className="pt-1 ml-auto" >{formatTime(msg.time)}</Text>
+							</Text>
+						</div>
+					</button>)}
 				</div>
 
-				<Divider />
+				<Divider className="w-px h-auto my-0" />
+				
+				{activeMessage ? <MessageView {...activeMessage} />
+					: <div className="flex place-content-center p-4 grow" >
+						<Text v="dim" >No message selected</Text>
+					</div>}
+			</div>
+		</Modal>
 
-				{activeMessage.message.content}
-			</div> : <div className="flex place-content-center p-4" >
-				<Text v="dim" >No message selected</Text>
-			</div>}
-		</div>
-	} >
-		<div>
-			<IconButton icon={<IconMailFilled />} className="relative" >
-				<Text v="smbold" className={clsx("absolute -top-2 -right-2 rounded-full", bgColor.red)} >{numUnread}</Text>
-			</IconButton>
-		</div>
-	</AppTooltip>;
+		<IconButton icon={<IconMailFilled />} className="relative" onClick={()=>{
+			setOpen(true);
+		}} >
+			{numUnread>0 && <Text v="sm" className={clsx("absolute -top-1 -right-4 place-content-center rounded-full h-6 w-6 animate-bounce", bgColor.red)} >{numUnread}</Text>}
+		</IconButton>
+	</>;
 }
 
 export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>void}) {

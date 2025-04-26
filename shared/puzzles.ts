@@ -41,9 +41,11 @@ const alphaLen: number = 26;
 // abcdefghijklmnopqrstuvwxyz
 export const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i)); 
 // const alpha = charMap.map(x=>x[0]);
-const defaultGenLen: number = 10;
 // Uniform random int
-export const defaultGen = (seed?: number)=>new RNG(seed).nextString(alpha, defaultGenLen); // Don't generate spaces
+export const defaultGen = (seed?: number)=>{
+	const rng = new RNG(seed);
+	return rng.nextString(alpha, rng.nextRange(5,50));
+};
 
 // Adds ct to c[0], wrapping around both directions
 // Skips space
@@ -103,7 +105,7 @@ export const puzzles = [
 		key: "implementation-challenge",
 		generator(seed?: number) {
 			const rng = new RNG(seed);
-			return fill(defaultGenLen, ()=>(rng.nextRange(0,9)>=8 ? "x" : rng.nextString(alpha, 1))).join("");
+			return fill(rng.nextRange(5,50), ()=>(rng.nextRange(0,9)>=8 ? "x" : rng.nextString(alpha, 1))).join("");
 		},
 		encode(inp) {
 			let result = "";
