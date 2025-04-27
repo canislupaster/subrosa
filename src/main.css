@@ -175,17 +175,17 @@ dialog::backdrop {
 	}
 	100% {
 		opacity: 1;
-		transform: scale(1) scaleX(0.8) translateX(-140%);
+		transform: scale(1) scaleX(0.8) translateX(-170%);
 	}
 }
 
 svg.logo * {
 	transform-box: fill-box;
 	transform-origin: center;
-	animation-duration: 0.6s;
-	animation-timing-function: ease-in-out;
+	animation-duration: 0.5s;
+	animation-timing-function: cubic-bezier(0.8, 0, 0.2, 1);
 	animation-play-state: paused;
-  animation-fill-mode: both;
+	animation-fill-mode: both;
 }
 svg.logo .arrow-big { animation-name: arrow-big; }
 svg.logo .subrose-text { animation-name: subrose-text; }
