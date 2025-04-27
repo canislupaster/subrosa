@@ -1,9 +1,9 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 import { Procedure, ProgramStats, test, Verdict } from "../shared/eval";
 import { Stage } from "./story";
 import { API, COUNT_PLAY_INTERVAL_SECONDS, parseExtra, ServerResponse, StageStatsResponse, stringifyExtra, toPrecStat, validUsernameRe } from "../shared/util";
 import Tester from "../shared/worker?worker";
-import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor } from "./ui";
+import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor, ThemeSpinner } from "./ui";
 import { StageData, stageUrl } from "../shared/data";
 import { blankStyle } from "./editor";
 import clsx from "clsx";
@@ -159,13 +159,22 @@ function Leaderboard({submission: s, puzzle}: {
 }
 
 export function Submission({
-	submission: s, setSolved, nextStage, setLoading, puzzle
+	submission, setSolved, nextStage, puzzle
 }: { 
-	submission: Submission|null, setLoading: (x: boolean)=>void,
+	submission: Submission,
 	puzzle: Stage&{type: "puzzle"},
 	setSolved: ()=>void, nextStage: ()=>void
 }) {
+	const [alreadySolved, setAlreadySolved] = useState(false);
+	useEffect(()=>{
+		setAlreadySolved(LocalStorage.solvedPuzzles?.has(puzzle.key)??false);
+	}, [puzzle.key]);
+
+	const [s, setS] = useState<Submission|null>(null);
+	const [loading, setLoading] = useState(false);
+
 	const [status, setStatus] = useState<SubmissionStatus>(null);
+
 	useEffect(()=>{
 		setLoading(status?.type=="judging");
 	}, [setLoading, status]);
@@ -208,7 +217,7 @@ export function Submission({
 	}, [s]);
 
 	let inner = <></>;
-	if (status?.type=="done" && status.verdict.type=="AC") {
+	if ((status?.type=="done" && status.verdict.type=="AC") || (!status && alreadySolved)) {
 		inner=<>
 			<Alert className={bgColor.green} title="You passed" txt={<>
 				{puzzle.solveBlurb ?? "Congratulations. Onwards!"}
@@ -226,6 +235,12 @@ export function Submission({
 	}
 
 	return <>
+		<Button onClick={()=>{
+			setS(submission);
+		}} disabled={loading} icon={ loading && <ThemeSpinner size="sm" /> } >
+			{s!=null || alreadySolved ? "Res" : "S"}ubmit solution
+		</Button>
+
 		{inner}
 		<AlertErrorBoundary>
 			<Leaderboard

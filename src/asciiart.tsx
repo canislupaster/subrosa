@@ -98,7 +98,7 @@ async function loadImage({
 		}
 
 		out+=bestChar[Math.round(x[2]*x[2]*100)];
-		if (++wi==w) {out+=`</span>\n<span>`; wi=0;}
+		if (++wi==w) {out+=`\n`; wi=0;}
 	}
 	out+="</span>";
 	

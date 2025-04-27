@@ -261,11 +261,15 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
         maxRegister: 1
       };
     }
-    
     return {
-      procs: new Map([...userProcs, [entryProcI, entryProc]]),
+      // occasionally, very rarely, hopefully never, maybe once
+      // stupid fucking drag and drop library didnt call perform transfer
+      // and it polluted my node list
+      procs: new Map(([...userProcs, [entryProcI, entryProc]] as const).map(
+        ([k,v])=>[k, {...v, nodeList: v.nodeList.filter(x=>typeof x=="number")}]
+      )),
       userProcList: userProcs.map(([i])=>i),
-      maxProc, entryProc: entryProcI, active: entryProcI,
+      maxProc, entryProc: entryProcI,
       decoded: "", stepsPerS: LocalStorage.stepsPerS ?? 5,
       solved: LocalStorage.solvedPuzzles?.has(stage.key) ?? false,
       undoHistory: [], procHistory: [], curNumUndo: 0
@@ -278,7 +282,7 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
     throttleSave.current?.call(()=>{
       LocalStorage.stepsPerS = ns.stepsPerS;
       procStorage.setProcs(
-        [...ns.procs.entries()].map(([k,v]): [number, Procedure]=>[k,v])
+        [...ns.procs.entries()].map(([k,v]): [number, Procedure]=>[k, v])
       );
 
       LocalStorage.maxProc = ns.maxProc;

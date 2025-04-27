@@ -1,5 +1,5 @@
 import { ComponentChildren } from "preact";
-import { useState } from "preact/hooks";
+import { useCallback, useState } from "preact/hooks";
 import { anchorStyle, bgColor, Divider, IconButton, LocalStorage, Modal, Select, Text, textColor, transparentNoHover } from "./ui";
 import { IconBookFilled, IconChevronLeft, IconChevronRight, IconX } from "@tabler/icons-preact";
 import clsx from "clsx";
@@ -104,10 +104,15 @@ const referencePages = [
 ] as const satisfies ReferencePage[];
 
 export function Reference() {
-	const [page, setPage] = useState(()=>{
+	const [page, setPage2] = useState(()=>{
 		const i = referencePages.findIndex(x=>x.key==LocalStorage.referencePage);
 		return i==-1 ? 0 : i;
 	});
+
+	const setPage = (x: number)=>{
+		LocalStorage.referencePage = referencePages[x].key;
+		setPage2(x);
+	};
 
 	const [seen, setSeen] = useState(()=>LocalStorage.seenReference ?? false);
 	const [referenceOpen, setReferenceOpen] = useState(false);
@@ -123,7 +128,7 @@ export function Reference() {
 						icon={<IconChevronLeft size={32} />} />
 					<Select options={referencePages.map((page,i)=>({
 						label: page.title, value: i
-					}))} searchable value={page} >
+					}))} searchable value={page} setValue={setPage} >
 						<Text v="big" style={{ textAlign: "center" }} className={anchorStyle} >{activePage.title}</Text>
 					</Select>
 					<div className="flex flex-row gap-2" >
@@ -144,7 +149,7 @@ export function Reference() {
 			setReferenceOpen(true);
 			setSeen(true);
 			LocalStorage.seenReference = true;
-		}} className={clsx(!seen && "relative scale-150 translate-y-2 -translate-x-2", "transition-transform")} >
+		}} className={clsx("transition-transform relative", !seen && "scale-140 -translate-x-1 translate-y-1")} >
 			{!seen && <div className={clsx("animate-ping w-full h-full absolute rounded-md opacity-50", bgColor.highlight)} />}
 		</IconButton>
 	</>;

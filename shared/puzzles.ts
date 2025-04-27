@@ -71,6 +71,15 @@ export const puzzles = [
 		}
 	},
 	{
+		// Atbash
+		name: "bash",
+		key: "shell",
+		generator: defaultGen,
+		encode(inp) {
+			return fill(inp.length, i=>numToChar[alphaLen-1-charToNum[inp.charAt(i)]]).join("");
+		}
+	},
+	{
 		// Reverse
 		name: "How much do they pay me, exactly?",
 		key: "elzzup",
@@ -148,25 +157,19 @@ export const puzzles = [
 		}
 	},
 	{
-		// Atbash
-		name: "bash",
-		key: "shell",
-		generator: defaultGen,
-		encode(inp) {
-			return fill(inp.length, i=>numToChar[alphaLen-1-charToNum[inp.charAt(i)]]).join("");
-		}
-	},
-	{
 		// Base 13
 		name: "Rot 13",
 		key: "rot-13",
-		generator: defaultGen,
+		generator: (seed?: number)=>{
+			const r = new RNG(seed);
+			return r.nextString(alpha, r.nextRange(7,10));
+		},
 		encode(inp) {
 			let sum = 0;
 			const base = 13;
 			for (let i = inp.length-1; i >= 0; --i) {
-				sum *= alphaLen;
-				sum += charToNum[inp.charAt(i)];
+				sum *= alphaLen+1;
+				sum += charToNum[inp.charAt(i)]+1;
 			}
 
 			const res: string[] = [];

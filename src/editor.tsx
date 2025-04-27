@@ -1,6 +1,6 @@
 import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection } from "../shared/eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, textColor, ThemeSpinner, throttle, toSearchString, useFnRef, useToast } from "./ui";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, textColor, throttle, toSearchString, useFnRef, useToast } from "./ui";
 import { twMerge } from "tailwind-merge";
 import { IconArrowRight, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref } from "preact";
@@ -80,12 +80,15 @@ type EditData = {
 
 const regLabel = (i: number, v: Register)=>`#${i+1}${v.name!=undefined ? `: ${v.name}` : ""}`;
 
-function RegisterPicker({p, x, setX, desc}: {
-	p: EditData, x: number, setX?: (x: number)=>void, desc?: string
+function RegisterPicker<Create extends boolean = false>({p, x, setX, desc, create}: {
+	p: EditData, x: Create extends true ? number|"create" : number,
+	setX?: (x: Create extends true ? number|"create" : number)=>void,
+	desc?: string, create?: Create
 }) {
 	return <div className="flex flex-col" >
 		{desc!=undefined && <Text v="sm" >{desc}</Text>}
 		<Select options={[
+				...create==true ? [{ label: "(create)", value: "create" as unknown as number }] : [],
 				{ label: "(unset)", value: -1 },
 				...p.proc.registerList.map((r,i)=>{
 					const v = p.proc.registers.get(r)!;
@@ -150,7 +153,7 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 			lastParams=params;
 
 			if (a.y > b.y) [a,b] = [b,a];
-			const depth = 0.7*(2*(b.y - a.y)/parent.scrollHeight + ((123.3234*nodeI)%1.1324)*0.9);
+			const depth = 0.7*(2.4*(b.y - a.y)/parent.scrollHeight + ((123.3234*nodeI)%1.1324)*1.1);
 			const obj = {
 				top: `${a.y + a.height/2 - c.top + yo}px`,
 				bottom: `${c.bottom - (b.y + b.height/2) - yo}px`,
@@ -240,9 +243,9 @@ function CallInner({
 	return v==undefined
 		? <Alert bad title="Unknown procedure" txt="This procedure has been deleted." />
 		: <>
-			<div className="flex flex-col gap-1" >
+			<div className="flex flex-col gap-0.5" >
 				<Text v="sm" >{v.name}</Text>
-				<Button onClick={()=>openProc(node.procRef)} >Open</Button>
+				<Button className="py-1" onClick={()=>openProc(node.procRef)} >Open</Button>
 			</div>
 			<div className="flex flex-row flex-wrap gap-1.5" >
 				{params.map((param, i)=>
@@ -441,8 +444,8 @@ function RegisterEditor({p, reg, setReg}: {
 }
 
 type ProcRunState = {
-	activeNode?: number,
-	breakpointNode?: number,
+	activeNode: number|null,
+	scrollNode: number|null,
 	registers: ReadonlyMap<number, RegisterRefClone>
 };
 
@@ -541,14 +544,12 @@ function ProcEditor({
 			},
 			performTransfer({ initialParent, targetParent, draggedNodes, targetNodes }) {
 				remapNodes(initialParent.el);
-				remapNodes(targetParent.el, true);
 
 				const newData = updateFromDrag(draggedNodes.map(v=>v.data.value as unknown as DragNode));
 				draggedNodes.forEach((v,i)=>{ v.data.value=newData[i]; });
 
 				const idx = targetNodes.length ? targetNodes[0].data.index : targetParent.data.enabledNodes.length;
-				const vs = parentValues(targetParent.el, targetParent.data);
-				const up = vs.toSpliced(idx, 0, ...draggedNodes.map(v=>v.data.value));
+				const up = proc.nodeList.toSpliced(idx, 0, ...draggedNodes.map(v=>v.data.value));
 				setParentValues(targetParent.el, targetParent.data, up);
 			},
 			...dragOpts,
@@ -597,14 +598,14 @@ function ProcEditor({
 	
 	const registerList = useRef<HTMLUListElement>(null);
 	useEffect(()=>{
-		dragAndDrop<HTMLUListElement, number>({
+		dragAndDrop<HTMLUListElement, {type: "register", i: number}>({
 			parent: registerList.current,
 			dropZone: false,
 			state: [
-				proc.registerList as number[], // mutability
-				(
-					(registerList: number[])=>setProc(p=>({...p, registerList}))
-				) as Dispatch<SetStateAction<number[]>>
+				proc.registerList.map(i=>({type: "register", i})), // mutability
+				((vs: {type: "register", i: number}[])=>
+					setProc(p=>({...p, registerList: vs.map(v=>v.i)}))
+				) as Dispatch<SetStateAction<{type: "register", i: number}[]>>
 			],
 			...dragOpts
 		});
@@ -621,24 +622,13 @@ function ProcEditor({
 	
 	const [confirmClear, setConfirmClear] = useState(false);
 	
-	// bypass effect dep linting
-	// scroll to active node only on procedure change
-	// (e.g. when switching frames while debugging)
-	// dont overwrite scroll otherwise
-	// (unless in breakpoint)
-	const initialActiveNode = useRef(runState?.activeNode);
 	useEffect(()=>{
-		const active = runState?.breakpointNode ?? initialActiveNode.current;
+		const active = runState?.scrollNode;
 		if (active==undefined) return;
-		const ref = nodeRefs.current.get(active);
 
-		if (runState?.breakpointNode==undefined) {
-			ref?.scrollIntoView({ behavior: "smooth", block: "center" });
-		} else {
-			ref?.scrollIntoView({ behavior: "instant", block: "center" });		
-			initialActiveNode.current=undefined;
-		}
-	}, [runState?.breakpointNode]);
+		const ref = nodeRefs.current.get(active);
+		ref?.scrollIntoView({ behavior: "smooth", block: "center" });
+	}, [runState?.scrollNode]);
 	
 	// i have no idea why this library is so buggy, im just going
 	// to have to work around this trash
@@ -661,43 +651,54 @@ function ProcEditor({
 	}, []);
 	
 	const [selection, setSelection] = useState<ReadonlySet<number>>(new Set<number>());
-	const [remappingClipboard, setRemappingClipboard] = useState<{
-		sel: NodeSelection, open: boolean
-	}>(()=>({sel: {nodes: [], registers: [], procRegisters: new Map()}, open: false}));
-	const remapClipboardProc = remappingClipboard.sel.procRegisters.get(procI)
-		?? fill(remappingClipboard.sel.registers.length, i=>{
-			return i>=proc.registerList.length ? -1 : proc.registerList[i];
-		});
-	const setRemap = (remap: number[])=>{
-		setRemappingClipboard(v=>({...v, sel: {
-			...v.sel, procRegisters: mapWith(v.sel.procRegisters, procI, remap)
-		}}));
+	type RemapClipboard = {
+		sel: NodeSelection, open: boolean, remap: ("create"|number)[]
 	};
+
+	const noRemap = ()=>({
+		sel: {nodes: [], registers: [], procRegisters: new Map()}, open: false, remap: []
+	});
+
+	const [remappingClipboard, setRemappingClipboard] = useState<RemapClipboard>(noRemap);
+
+	useEffect(()=>{
+		setSelection(new Set());
+		setRemappingClipboard(noRemap());
+		setSelectingGoto(null);
+	}, [procI]);
 	
-	const pasteSel = useCallback((sel: NodeSelection, regMap: number[])=>{
+	const pasteSel = useCallback((sel: NodeSelection, regMap: (number|"create")[])=>{
 		setProc(p=>{
 			let insBegin = proc.nodeList.findLastIndex(i=>selection.has(i));
 			if (insBegin==-1) insBegin=proc.nodeList.length; else insBegin++;
 
-			const newNodes = fromSelection(sel, fill(sel.nodes.length, i=>proc.maxNode+i), regMap);
+			const newRegisters = regMap.flatMap((x,i)=>{
+				if (x=="create") return [sel.registers[i]];
+				return [];
+			}).map((reg,i)=>[p.maxRegister+i, reg] as const);
+
+			let createI=0;
+			const regMap2 = regMap.map(v=>v=="create" ? newRegisters[createI++][0] : v);
+			const newNodes = fromSelection(sel, fill(sel.nodes.length, i=>proc.maxNode+i), regMap2);
+
+			LocalStorage.clipboard = {
+				...sel, procRegisters: mapWith(sel.procRegisters, procI, regMap2)
+			};
+
 			const nlist = proc.nodeList.toSpliced(insBegin, 0, ...newNodes.map(([i])=>i));
 			return {
-				...p, maxNode: p.maxNode+sel.nodes.length,
-				nodeList: nlist, nodes: new Map([
-					...p.nodes.entries(), ...newNodes
-				])
+				...p,
+				maxRegister: p.maxRegister+newRegisters.length,
+				registerList: [...p.registerList, ...newRegisters.map(([i])=>i)],
+				registers: new Map([ ...p.registers.entries(), ...newRegisters ]),
+				maxNode: p.maxNode+sel.nodes.length,
+				nodeList: nlist,
+				nodes: new Map([ ...p.nodes.entries(), ...newNodes ])
 			};
 		});
 
 		setSelection(new Set());
 		setRemappingClipboard(v=>({...v, open: false}));
-
-		// if register mapping wasn't changed, proc may not be in map.
-		// kind of dumb
-		LocalStorage.clipboard = {
-			...sel,
-			procRegisters: mapWith(sel.procRegisters, procI, regMap)
-		};
 	}, [proc.maxNode, proc.nodeList, procI, selection, setProc]);
 
 	const toast = useToast();
@@ -756,11 +757,18 @@ function ProcEditor({
 				const data = LocalStorage.clipboard;
 				if (!data || remappingClipboard.open) return;
 				const regMap = data.registers.length==0 ? [] : data.procRegisters.get(procI);
-				if (regMap==null) setRemappingClipboard({ sel: data, open: true });
-				else {
+				if (regMap==null) {
+					setRemappingClipboard({
+						sel: data, open: true, remap: fill(data.registers.length, i=>{
+							return i>=proc.registerList.length ? "create" as const : proc.registerList[i];
+						})
+					});
+				} else {
 					pasteSel(data, regMap);
 					toast("Pasted");
 				}
+			} else if (ev.key=="a") {
+				setSelection(new Set(proc.nodeList));
 			} else {
 				return;
 			}
@@ -800,8 +808,11 @@ function ProcEditor({
 						
 						<IconArrowRight />
 						
-						<RegisterPicker p={data} x={remapClipboardProc[i]} setX={(nx)=>{
-							setRemap(remapClipboardProc.toSpliced(i, 0, nx));
+						<RegisterPicker create p={data} x={remappingClipboard.remap[i]} setX={(nx)=>{
+							setRemappingClipboard({
+								...remappingClipboard,
+								remap: remappingClipboard.remap.toSpliced(i, 1, nx)
+							});
 						}} />
 					</div>
 				)}
@@ -809,14 +820,14 @@ function ProcEditor({
 			
 			<div className="flex flex-row gap-2" >
 				<Button className={bgColor.sky} autofocus onClick={()=>{
-					pasteSel(remappingClipboard.sel, remapClipboardProc);
+					pasteSel(remappingClipboard.sel, remappingClipboard.remap);
 				}} >Paste</Button>
 				<Button onClick={()=>setRemappingClipboard(v=>({...v, open: false}))} >Cancel</Button>
 			</div>
 		</Modal>
 
 		<div className="flex flex-col items-stretch gap-1 editor-left min-h-0" >
-			<div className={clsx("mb-2 flex flex-row gap-2 items-end pl-1 shrink-0 h-11", !isUserProc && "pl-2")} >
+			<div className={clsx("mb-2 flex flex-row gap-2 items-end pl-2 shrink-0 h-11", !isUserProc && "pl-4")} >
 				{back && <Anchor className="items-center self-end mr-2" onClick={()=>openProc()} >
 					<IconChevronLeft size={32} />
 				</Anchor>}
@@ -824,7 +835,7 @@ function ProcEditor({
 				{!isUserProc ? <Text v="bold" >Procedure <Text v="code" >{proc.name}</Text></Text>
 				: <>
 					<Text v="bold" >Procedure</Text>
-					<HiddenInput {...procNameValidity} {...nameInputProps} className="w-fit" />
+					<HiddenInput {...procNameValidity} required {...nameInputProps} className="w-fit" />
 				</>}
 				
 				<Button className="ml-auto py-1" onClick={()=>{
@@ -843,7 +854,7 @@ function ProcEditor({
 				</>}
 			</div>
 			 
-			<ul ref={nodeListRef} className="pl-[50px] flex flex-col gap-1 items-stretch overflow-y-auto relative pb-20" >
+			<ul ref={nodeListRef} className="pl-[70px] flex flex-col gap-1 items-stretch overflow-y-auto relative pb-20" >
 				{proc.nodeList.flatMap((v,i)=>{
 					const node = proc.nodes.get(v)!;
 					return [
@@ -909,12 +920,12 @@ function ProcEditor({
 			</ul>
 		</div>
 		
-		<div className="flex flex-col gap-1 editor-right min-h-0" >
+		<div className="flex flex-col gap-1 editor-right min-h-0 pr-3" >
 			<Text v="bold" className="mt-2" >Registers</Text>
 			<ul className={clsx("flex flex-col gap-2 overflow-y-auto pb-5", stack!=undefined && "basis-1/3 shrink-0 grow max-h-fit")}
 				ref={registerList} >
 				{proc.registerList.map(r=>
-					<RegisterEditor key={r} p={data} reg={r} setReg={setReg} />
+					<RegisterEditor key={`${procI} ${r}`} p={data} reg={r} setReg={setReg} />
 				)}
 
 				<Button className={blankStyle} onClick={()=>{
@@ -939,13 +950,13 @@ export const makeProc = (name: string): Procedure => ({
 	nodeList: [], nodes: new Map(), maxNode: 0, maxRegister: 0,
 });
 
-export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStage}: {
+export function PuzzleInput({puzzle, input, active, procs, output, setInput, setSolved, nextStage}: {
 	puzzle: Stage&{type: "puzzle"},
-	edit: EditorState, output: string|null,
+	input: string, procs: EditorState["procs"],
+	active: number, output: string|null,
 	setInput: (x: string)=>void,
 	setSolved: ()=>void, nextStage: ()=>void
 }) {
-	const input = edit.decoded;
 	const [input2, setInput2] = useState(input);
 	useEffect(()=>setInput2(input), [input]);
 	const [err, setErr] = useState(false);
@@ -958,9 +969,6 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStag
 	}, [setInput]);
 	
 	const encoded = useMemo(()=>puzzle.encode(input), [input, puzzle]);
-
-	const [submission, setSubmission] = useState<Submission|null>(null);
-	const [loading, setLoading] = useState(false);
 
 	return <div className="flex flex-col items-stretch gap-2" >
 		<Text className="mb-1" >{puzzle.blurb}</Text>
@@ -1006,15 +1014,9 @@ export function PuzzleInput({puzzle, edit, output, setInput, setSolved, nextStag
 		<Text v="sm" >
 			Submit when you're ready for your solution to be judged against a random testcase. You will need to match the plaintext exactly to pass this level.
 		</Text>
-
-		<Button onClick={()=>{
-			setSubmission({ active: edit.active, procs: edit.procs });
-		}} disabled={loading} icon={ loading && <ThemeSpinner size="sm" /> } >
-			{submission!=null ? "Res" : "S"}ubmit solution
-		</Button>
 		
-		<Submission submission={submission} setLoading={setLoading}
-			setSolved={setSolved} nextStage={nextStage} puzzle={puzzle} />
+		<Submission submission={{ procs, active }} setSolved={setSolved}
+			nextStage={nextStage} puzzle={puzzle} />
 	</div>;
 }
 
@@ -1029,27 +1031,30 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	const [runError, setRunError] = useState<InterpreterError|null>(null);
 	const [output, setOutput] = useState<string|null>(null);
 
+	const [procHistory, setProcHistory] = useState<number[]>([]);
+	const [active, setActive] = useState(edit.entryProc);
+
 	const toast = useToast();
-	const activeProc = edit.procs.get(edit.active);
+	const activeProc = edit.procs.get(active);
 	useEffect(()=>{
-		if (!activeProc) setEdit(v=>({...v, active: v.entryProc}));
-	}, [activeProc, setEdit]);
+		if (!activeProc) setActive(edit.entryProc);
+	}, [activeProc, edit.entryProc]);
 
 	const setProc = useCallback((n: (x: Procedure)=>Procedure)=>{
 		setEdit(v=>{
 			const newUndo = [
 				...v.undoHistory.slice(0,v.curNumUndo==0 ? v.undoHistory.length : -v.curNumUndo),
-				[edit.active, v.procs.get(edit.active)!] as const
+				[active, v.procs.get(active)!] as const
 			];
 
 			if (newUndo.length>MAX_UNDO_STEPS) newUndo.shift();
 
 			return {
-				...v, procs: mapWith(v.procs, edit.active, n(v.procs.get(edit.active)!)),
+				...v, procs: mapWith(v.procs, active, n(v.procs.get(active)!)),
 				undoHistory: newUndo, curNumUndo: 0
 			};
 		});
-	}, [edit.active, setEdit]);
+	}, [active, setEdit]);
 	
 	const undo = useCallback((redo: boolean)=>setEdit(v=>{
 		if ((!redo && v.curNumUndo >= v.undoHistory.length)
@@ -1060,9 +1065,11 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 
 		const idx = redo ? v.undoHistory.length-v.curNumUndo : v.undoHistory.length-1-v.curNumUndo
 		const step = v.undoHistory[idx];
+
+		setActive(step[0]);
 		return {
 			...v,
-			active: step[0], procs: mapWith(v.procs, step[0], step[1]),
+			procs: mapWith(v.procs, step[0], step[1]),
 			curNumUndo: redo ? v.curNumUndo-1 : v.curNumUndo+1,
 			undoHistory: v.undoHistory.toSpliced(idx, 1, [step[0], v.procs.get(step[0])!])
 		};
@@ -1072,27 +1079,55 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		setEdit(v=>({ ...v, userProcList: vs }));
 	}, [setEdit])
 	
-	const inBreakpoint = runStatus.type=="paused" && runStatus.breakpoint!=undefined && runState
-		&& runState.stack.length>0 ? runState.stack[runState.stack.length-1].proc : null;
+	const [frameI, setFrameI] = useState<number|null>(null);
+	const [frameScrollNode, setFrameScrollNode] = useState<number|null>(null);
+	const frame = frameI==null ? undefined : runState?.stack[frameI];
+	
 	useEffect(()=>{
-		if (inBreakpoint!=null) {
-			toast("Breakpoint hit");
-			setEdit(e=>({...e, active: inBreakpoint}));
+		if (runState && frame && frameI==runState.stack.length-1 && runStatus.type=="paused") {
+			const p = edit.procs.get(frame.proc);
+			setFrameScrollNode(p?.nodeList[runState.stack[frameI].i] ?? null);
+		} else {
+			setFrameScrollNode(null);
 		}
-	}, [inBreakpoint, setEdit, toast]);
+	}, [edit.procs, frame, frameI, runState, runStatus.type]);
+
+	// changing active procedure should sync frame
+	// and set active node
+	useEffect(()=>{
+		if (runState==null) { setFrameI(null); return; }
+		if (frame?.proc==active) return;
+		const last = runState.stack.findLastIndex(x=>x.proc==active);
+		setFrameI(last==-1 ? null : last);
+	}, [active, frame?.proc, runState]);
+
+	const openFrame = useCallback((fi: number, proc: number) => {
+		setFrameI(fi);
+		setActive(proc);
+	}, []);
+
+	useEffect(()=>{
+		const inBreakpoint = runStatus.type=="paused" && runStatus.breakpoint!=undefined && runState
+			&& runState.stack.length>0 ? runState.stack.length-1 : null;
+
+		if (inBreakpoint!=null) {
+			console.log(inBreakpoint, runStatus, runState);
+			console.log(inBreakpoint);
+			toast("Breakpoint hit");
+			openFrame(inBreakpoint, runState!.stack[inBreakpoint].proc);
+		}
+	}, [openFrame, runState, runStatus, setEdit, toast]);
 	
 	const [newProc, setNewProc] = useState({open: false, name: ""});
 	const activeProcRunState = useMemo((): ProcRunState|null => {
 		if (!activeProc) return null;
-		const frame = runState?.stack.find(x=>x.proc==edit.active);
 
-		return frame==undefined ? null : {
-			activeNode: activeProc.nodeList[frame.i],
+		return frame==null ? null : {
+			activeNode: activeProc.nodeList[frame.i] ?? null,
 			registers: frame.registers,
-			breakpointNode: inBreakpoint==edit.active && runStatus.type=="paused"
-				? runStatus.breakpoint : undefined
+			scrollNode: frameScrollNode
 		};
-	}, [activeProc, edit.active, inBreakpoint, runState?.stack, runStatus]);
+	}, [activeProc, frame, frameScrollNode]);
 	
 	const [confirmDelete, setConfirmDelete] = useState<{proc: Procedure|null, open: boolean}>({
 		open: false, proc: null
@@ -1150,11 +1185,11 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			const xd = handle(()=>{
 				const ret = step(v);
 				if (ret=="breakpoint") {
+					cont=false;
 					const top = v.stack[v.stack.length-1];
 					// needs to be computed here since modifying
 					const breakNode = edit.procs.get(top.proc)?.nodeList[top.i];
 					setRunStatus({ type: "paused", breakpoint: breakNode });
-					setRunState(clone(v));
 				} else if (ret==false) {
 					cont=false;
 					setOutput(v.outputRegister.current.toString());
@@ -1180,20 +1215,22 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		// wtf, i like defining stuff before they are used
 		// eslint-disable-next-line prefer-const
 		let int: number|undefined;
+		let end = ()=>{
+			clearInterval(int);
+			rl[Symbol.dispose]();
+			setRunState(clone(v));
+		};
+
 		const cb = ()=>{
 			doStep();
 			rl.call(()=>setRunState(clone(v)));
-			if (!cont) clearInterval(int);
+			if (!cont) { end(); end=()=>{}; }
 		};
 		
 		cb();
 		int = setInterval(cb, 1000/edit.stepsPerS);
 
-		return ()=>{
-			clearInterval(int);
-			rl[Symbol.dispose]();
-			setRunState(clone(v));
-		};
+		return ()=>end();
 	}, [edit.entryProc, puzzle, edit.decoded, edit.procs, edit.stepsPerS, ignoreBreakpoint, runStatus, toast]);
 	
 	const mod = (m: number) => setEdit(v=>({
@@ -1215,18 +1252,19 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	useEffect(()=>setOutput(null), [edit.decoded, setOutput]);
 	const goto = useGoto();
 
-	const openProc = useCallback((i?: number)=>setEdit(v=>{
-		const newProcHistory = [...v.procHistory];
+	const openProc = (i?: number)=>{
+		const newProcHistory = [...procHistory];
 		if (i!=null) {
-			if (i!=v.active) newProcHistory.push(v.active);
+			if (i!=active) newProcHistory.push(active);
 		} else {
-			while (i==null || !v.procs.has(i)) {
-				i = newProcHistory.pop() ?? v.entryProc;
+			while (i==null || !edit.procs.has(i)) {
+				i = newProcHistory.pop() ?? edit.entryProc;
 			}
 		}
 
-		return {...v, active: i, procHistory: newProcHistory};
-	}), [setEdit]);
+		setActive(i);
+		setProcHistory(newProcHistory);
+	};
 
 	const stack = runStatus.type=="stopped" ? undefined : <div className="flex flex-col editor-right-down gap-2 min-h-0 pb-4" >
 		<Divider className="mb-0" />
@@ -1240,9 +1278,9 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			{runState.stack.flat().map((v,i)=>{
 				const p = edit.procs.get(v.proc);
 				return <button key={i}
-					className={clsx("w-full py-0.5 px-1 not-last:border-b-1", bgColor.default, borderColor.default, bgColor.hover, !p || edit.active==v.proc && "dark:bg-zinc-700!")}
-					disabled={!p || edit.active==v.proc}
-					onClick={()=>setEdit(e=>({...e, active: v.proc}))} >
+					className={clsx("w-full py-0.5 px-1 not-last:border-b-1", bgColor.default, borderColor.default, bgColor.hover, !p || i==frameI && "dark:bg-zinc-700!")}
+					disabled={!p || i==frameI}
+					onClick={()=>openFrame(i, v.proc)} >
 					{p?.name ?? "(deleted)"}: {"#"}{v.i+1}
 				</button>;
 			}).reverse()}
@@ -1257,8 +1295,8 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		<IconButton disabled={runState==null} icon={<IconChartBar />} />
 	</div></AppTooltip>;
 	
-	return <div className="grid h-dvh gap-x-4 pl-3 px-5 w-full editor" >
-		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center" >
+	return <div className="grid h-dvh gap-x-4 w-full editor" >
+		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center px-4" >
 			<div className="flex flex-row gap-2 items-center h-full" >
 				{stats}
 				<IconButton icon={<IconPlayerStopFilled className="fill-red-500" />}
@@ -1331,7 +1369,8 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		</div>
 		
 		{puzzle && <Modal open={open} onClose={()=>setOpen(false)} title={puzzle.name} >
-			<PuzzleInput puzzle={puzzle} edit={edit} output={output}
+			<PuzzleInput key={puzzle.key} puzzle={puzzle} output={output}
+				input={edit.decoded} procs={edit.procs} active={active}
 				setInput={setInput} setSolved={markSolved} nextStage={()=>{
 					nextStage(); setOpen(false);
 				}} />
@@ -1343,8 +1382,8 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			msg={`Are you sure you want to delete ${confirmDelete.proc?.name}?`}
 			confirm={()=>{
 			setEdit(v=>({
-				...v, procs: mapWith(v.procs, edit.active, undefined),
-				userProcList: v.userProcList.filter(x=>x!=edit.active)
+				...v, procs: mapWith(v.procs, active, undefined),
+				userProcList: v.userProcList.filter(x=>x!=active)
 			}));
 		}} />
 
@@ -1358,11 +1397,11 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 						maxProc: v.maxProc+1
 					}));
 
-					setNewProc({open: false, name: ""});
+					setNewProc({...newProc, open: false});
 				}
 			}} className="flex flex-col gap-2" >
 				<Text>Name</Text>
-				<Input {...nameInputProps} value={newProc.name} valueChange={(v)=>{
+				<Input autofocus {...nameInputProps} required value={newProc.name} valueChange={(v)=>{
 					setNewProc({...newProc, name: v});
 				}} />
 				<Button>Create</Button>
@@ -1374,16 +1413,15 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			// and stuff to initial values when proc changes
 			// this is clearly not ideal (and it leads to some visual jitter),
 			// but it is well worth it
-			key={edit.active}
 			proc={activeProc}
-			i={edit.active}
+			i={active}
 			setProc={setProc}
 			procs={edit.procs}
 			userProcList={edit.userProcList}
 			setProcList={setProcList} entryProc={edit.entryProc}
-			addProc={()=>setNewProc({...newProc, open: true})}
+			addProc={()=>setNewProc({name: "", open: true})}
 			delProc={()=>setConfirmDelete({proc: activeProc, open: true})}
-			openProc={openProc} back={edit.procHistory.length>0}
+			openProc={openProc} back={procHistory.length>0}
 			runState={activeProcRunState}
 			stack={stack} undo={undo} />}
 	</div>;

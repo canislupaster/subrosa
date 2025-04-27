@@ -94,11 +94,9 @@ export type EditorState = Readonly<{
 	curNumUndo: number,
 
 	userProcList: number[],
-	procHistory: number[],
 	maxProc: number,
 
 	entryProc: number,
-	active: number,
 	
 	decoded: string,
 	stepsPerS: number,
@@ -365,7 +363,7 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 			const s = castToStr(rhs);
 			let outS: string|null=null;
 			if (typeof l=="string" && i>=l.length) {
-				outS=[ ...l, fill(i-l.length, -1), s ].join("");
+				outS=[ ...l, " ".repeat(i-l.length), s ].join("");
 			} else if (typeof l=="string") {
 				outS=`${l.slice(0,i)}${s}${l.slice(i+1)}`;
 			} else {
