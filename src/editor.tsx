@@ -5,7 +5,7 @@ import { twMerge } from "tailwind-merge";
 import { IconArrowRight, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref } from "preact";
 import { dragAndDrop, useDragAndDrop } from "@formkit/drag-and-drop/react";
-import { animations, DragState, handleNodePointerdown, parentValues, remapNodes, setParentValues } from "@formkit/drag-and-drop";
+import { animations, DragState, handleNodePointerdown, remapNodes, setParentValues } from "@formkit/drag-and-drop";
 import clsx from "clsx";
 import { ChangeEvent, SetStateAction } from "preact/compat";
 import { fill, toPrecStat } from "../shared/util";
@@ -34,6 +34,13 @@ const builtinNodes: Node[] = [
 	{ op: "setIdx", lhs: -1, rhs: -1, idx: -1 },
 	{ op: "breakpoint", conditional: null }
 ];
+
+const nodeName: Record<Node["op"], string> = {
+	add: "Add", sub: "Subtract", set: "Assign",
+	access: "Access", inc: "Increment", dec: "Decrement",
+	goto: "Goto", setIdx: "Indexed assign", call: "Call",
+	breakpoint: "Breakpoint"
+};
 
 function useValidity(value: string, callback: (v: string)=>void): {
 	value: string,
@@ -95,7 +102,6 @@ function RegisterPicker<Create extends boolean = false>({p, x, setX, desc, creat
 					return { label: regLabel(i,v), value: r };
 				})
 			]}
-			className="w-full"
 			searchable
 			disabled={setX==undefined}
 			placeholder={"(unset)"}
@@ -103,9 +109,9 @@ function RegisterPicker<Create extends boolean = false>({p, x, setX, desc, creat
 	</div>;
 }
 
-function iconURL(x: Node) {
-	if (x.op=="goto" && x.conditional!=undefined) return "condgoto.svg";
-	return `${x.op.toLowerCase()}.svg`;
+function iconURL(x: {op: "goto", conditional: number|null}|{op: Exclude<Node["op"], "goto">}) {
+	if (x.op=="goto" && x.conditional!=undefined) return "/condgoto.svg";
+	return `/${x.op.toLowerCase()}.svg`;
 }
 
 function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, nodeI: number}) {
@@ -314,8 +320,8 @@ function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active, sel
 		return nodeHint[node.op];
 	}, [node, p.procs]);
 
-	return <div className={twMerge(nodeStyle, "transition-colors", (active ?? false) ? bgColor.highlight : (selected==true && bgColor.md), dropStyle)} >
-		<img src={`/${iconURL(node)}`} className="w-10 cursor-move draghandle mb-4" />
+	return <div className={twMerge(nodeStyle, "transition-colors animate-expand", (active ?? false) ? bgColor.highlight : (selected==true && bgColor.md), dropStyle)} >
+		<img src={iconURL(node)} className="w-10 cursor-move draghandle mb-4" />
 		{idx!=undefined && <Text v="dim" className="absolute left-1 bottom-1" >{idx}</Text>}
 		{inner}
 		{setNode ? <button onClick={()=>{ setNode(null); }}
@@ -786,6 +792,24 @@ function ProcEditor({
 			el.removeEventListener("click", docClick);
 		};
 	}, [data.nodeRefs, pasteSel, proc, proc.nodeList, procI, remappingClipboard.open, selection, setProc, undo, toast]);
+
+	const addNodeOptions: {
+		label: ComponentChildren, key: string|number, value: DragNode, search: string
+	}[] = useMemo(()=>[
+		...builtinNodes.map((x,i)=>({
+			label: <><img src={iconURL(x)} className="w-6" /> {nodeName[x.op]}</>,
+			key: x.op, value: { type: "builtin" as const, i },
+			search: nodeName[x.op]
+		})),
+		...userProcList.flatMap((proc,i)=>{
+			const p = procs.get(proc);
+			if (!p) return [];
+			return [{
+				label: <><img src={iconURL({op: "call"})} className="w-6" /> {p.name}</>, key: proc,
+				value: { type: "user" as const, i }, search: p.name
+			}];
+		})
+	], [procs, userProcList]);
 	
 	return <>
 		<ConfirmModal open={confirmClear} onClose={()=>setConfirmClear(false)} msg={
@@ -866,7 +890,15 @@ function ProcEditor({
 						...node.op=="goto" ? [
 							<GotoArrow key={`arrow${v}`} p={data} node={node} nodeI={v} />
 						] : [],
-						<IconChevronCompactDown className="self-center nodrag -mt-2 shrink-0" key={`sep${v}`} />
+						<Select key={`sep${v}`} options={addNodeOptions} searchable setValue={(v)=>{
+							const nv = updateFromDrag([v])[0];
+							setProc(p=>({...p, nodeList: p.nodeList.toSpliced(i+1,0,nv)}));
+						}} className="place-content-center flex w-full nodrag -mt-1 group" >
+							<button className="relative w-full" >
+								<IconChevronCompactDown className="mx-auto group-hover:opacity-0 transition-opacity" />
+								<IconPlus className="group-hover:opacity-100 opacity-0 transition-opacity absolute top-0.5 left-0 right-0 mx-auto" />
+							</button>
+						</Select>
 					];
 				})}
 			
@@ -892,7 +924,7 @@ function ProcEditor({
 				{builtinNodes.map(v=>
 					<AppTooltip key={v.op} placement="bottom" content={nodeHint[v.op]} >
 						<div className={twMerge(blankStyle, "py-2", bgColor.hover)} >
-							<img src={`/${iconURL(v)}`} className="w-10 cursor-move draghandle" />
+							<img src={iconURL(v)} className="w-10 cursor-move draghandle" />
 						</div>
 					</AppTooltip>
 				)}
@@ -909,7 +941,7 @@ function ProcEditor({
 			<ul className={clsx("flex flex-col overflow-y-auto gap-2 pb-5 shrink grow")} ref={userProcListRef} >
 
 				{userProcList.map(i=>{
-					if (!procs.has(i) || !showProcs.has(i)) return <div key={i} />;
+					if (!procs.has(i) || !showProcs.has(i)) return <div key={i} className="hidden" />;
 					return <ProcNode key={i} p={data} node={nodeForUserProc(i)} setNode={setNode} openProc={openProc} />;
 				})}
 
@@ -1227,9 +1259,8 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			if (!cont) { end(); end=()=>{}; }
 		};
 		
-		cb();
 		int = setInterval(cb, 1000/edit.stepsPerS);
-
+		cb();
 		return ()=>end();
 	}, [edit.entryProc, puzzle, edit.decoded, edit.procs, edit.stepsPerS, ignoreBreakpoint, runStatus, toast]);
 	

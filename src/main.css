@@ -43,12 +43,18 @@ button:not(:disabled) {
 }
 
 @theme {
+  --animate-expand: expand 0.2s ease-in-out forwards;
   --animate-fade-in: fade-in 1s ease-in-out forwards;
   --animate-fade-out: fade-out 1s ease-in-out forwards;
 
   @keyframes fade-in {
     0% { opacity: 0; }
     100% { opacity: 1; }
+  }
+
+  @keyframes expand {
+    0% { transform: scaleY(0.8) scaleX(0.9); }
+    100% { transform: scaleY(1) scaleX(1); }
   }
 
   @keyframes fade-out {
@@ -99,7 +105,7 @@ dialog::backdrop {
   background: none;
 }
 
-@keyframes expand {
+@keyframes bganim-expand {
   0% {  opacity: 0.5; color: var(--color-amber-300); }
   100% { color: inherit; }
 }
@@ -119,11 +125,11 @@ dialog::backdrop {
 }
 
 .bg-anim span.adding {
-  animation: expand 0.5s ease-in-out;
+  animation: bganim-expand 0.5s ease-in-out;
 }
 
 .bg-anim span.removing {
-  animation: expand 0.5s ease-in-out reverse both;
+  animation: bganim-expand 0.5s ease-in-out reverse both;
 }
 
 /* why did i do this */

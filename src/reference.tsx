@@ -1,5 +1,5 @@
 import { ComponentChildren } from "preact";
-import { useCallback, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
 import { anchorStyle, bgColor, Divider, IconButton, LocalStorage, Modal, Select, Text, textColor, transparentNoHover } from "./ui";
 import { IconBookFilled, IconChevronLeft, IconChevronRight, IconX } from "@tabler/icons-preact";
 import clsx from "clsx";

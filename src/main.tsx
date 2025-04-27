@@ -6,7 +6,7 @@ import { Editor, makeProc } from "./editor";
 import { Stage, stages, Story } from "./story";
 import { EditorState, Procedure, Register } from "../shared/eval";
 import { IconBrandGithubFilled, IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled } from "@tabler/icons-preact";
-import { LocationProvider, Route, Router, useLocation, useRoute } from "preact-iso";
+import { LocationProvider, Route, Router, useLocation } from "preact-iso";
 import { twMerge } from "tailwind-merge";
 import clsx from "clsx";
 import { parseExtra, stringifyExtra } from "../shared/util";
@@ -65,9 +65,9 @@ function Footer() {
 
 function Home() {
   const goto = useGoto();
-  return <><FadeRoute className="flex flex-col items-center pt-10 gap-2 max-w-lg px-5" >
+  return <><FadeRoute className="flex flex-col items-center pt-10 gap-2 max-w-xl px-5" >
     <img src="/big.svg" />
-    <Text v="md" className="italic" >Leading the world in cryptography</Text>
+    <Text v="md" className="text-center" >A story-based puzzle game blending inductive reasoning, cryptography and assembly programming.</Text>
       
     <Text className="mt-3" >
       <b>Ready to join our team?</b> Apply for a summer internship today! <i>Anyone</i> with strong problem solving skills will excel in our fast-paced growth-oriented environment.
@@ -350,11 +350,11 @@ function InnerApp() {
     console.error("app error boundary", err);
   }) as [unknown, ()=>void];
   const md = useMd();
-  const route = useRoute();
+  const loc = useLocation();
 
   if (err!=undefined) return <ErrorPage err={err} reset={resetErr} />;
 
-  if (!md && route.path!="/") {
+  if (!md && loc.path!="/") {
     return <FadeRoute className="flex flex-col items-center justify-center gap-2 p-4 h-dvh" >
       <IconDeviceDesktopFilled size={128} />
       <Text v="bold" >This experience functions best on a desktop-size display.</Text>

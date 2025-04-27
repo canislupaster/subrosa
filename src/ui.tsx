@@ -92,13 +92,15 @@ export type ButtonProps = JSX.IntrinsicElements["button"]&{
 	icon?: ComponentChildren, iconRight?: ComponentChildren, disabled?: boolean, className?: string
 };
 
-export function Button({className, disabled, icon, iconRight, ...props}: ButtonProps) {
-	return <button disabled={disabled} className={twMerge(clsx("flex flex-row justify-center gap-1.5 px-2 py-1.5 items-center group", interactiveContainerDefault), className)} {...props} >
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(({
+	className, disabled, icon, iconRight, ...props
+}, ref) => {
+	return <button ref={ref} disabled={disabled} className={twMerge(clsx("flex flex-row justify-center gap-1.5 px-2 py-1.5 items-center group", interactiveContainerDefault), className)} {...props} >
 		{icon}
 		{props.children}
 		{iconRight}
 	</button>;
-}
+});
 
 export const IconButton = ({className, children, icon, disabled, ...props}: {icon?: ComponentChildren, disabled?: boolean, className?: string}&JSX.IntrinsicElements["button"]) =>
 	<button className={twMerge(clsx("rounded-sm p-1.5 flex items-center justify-center h-fit aspect-square", interactiveContainerDefault, className))} disabled={disabled} {...props} >
@@ -514,7 +516,7 @@ export const AppTooltip = forwardRef(({
 				arrowClassName={borderClass}
 				arrowSize={7} arrowColor="" >
 				<Collapse className={twMerge(clsx(containerDefault, "p-2 py-1", className))}
-					onPointerEnter={interact} onPointerLeave={unInteract} open={isOpen} {...props} >
+					onPointerEnter={interact} onPointerLeave={unInteract} open={isOpen} tabIndex={0} {...props} >
 					{content}
 				</Collapse>
 			</ArrowContainer>;
@@ -530,7 +532,7 @@ export type DropdownPart = ({type: "txt", txt?: ComponentChildren}
 	| { type: "act", name?: ComponentChildren, act: ()=>void,
 			disabled?: boolean, active?: boolean })&{key?: string|number};
 
-export function Dropdown({parts, trigger, ...props}: {
+export function Dropdown({parts, trigger, className, onOpenChange, ...props}: {
 	trigger?: ComponentChildren, parts: DropdownPart[],
 }&Partial<ComponentProps<typeof AppTooltip>>) {
 	const [keySel, setKeySel] = useState<string|number|null>(null);
@@ -541,9 +543,30 @@ export function Dropdown({parts, trigger, ...props}: {
 
 	const [open, setOpen] = useState(false);
 	const ctx = useContext(PopupCountCtx);
+	
+	const keyCb = (ev: KeyboardEvent)=>{
+		if (!open) return;
+
+		if (ev.key=="ArrowDown" && acts.length) {
+			const nidx = idx==-1 ? 0 : (idx+1)%acts.length;
+			setKeySel(acts[nidx].key);
+			setFocusSel(true);
+		} else if (ev.key=="ArrowUp" && acts.length) {
+			const pidx = idx==-1 ? acts.length-1 : (idx+acts.length-1)%acts.length;
+			setKeySel(acts[pidx].key);
+			setFocusSel(true);
+		} else if (ev.key=="Escape") {
+			ctx.incCount();
+		} else {
+			return;
+		}
+
+		ev.preventDefault();
+	};
+
 	return <AppTooltip placement={["bottom", "top"]}
-		onOpenChange={setOpen}
-		className="px-0 py-0 max-w-60 overflow-y-auto justify-start max-h-[min(90dvh,30rem)]"
+		onOpenChange={(v)=>{ setOpen(v); onOpenChange?.(v); }}
+		className="px-0 py-0 max-w-60 overflow-y-auto justify-start max-h-[min(80dvh,20rem)]"
 		content={parts.map((x,i) => {
 			if (x.type=="act")
 				return <Button key={x.key ?? i} disabled={x.disabled}
@@ -551,7 +574,7 @@ export function Dropdown({parts, trigger, ...props}: {
 						x.active==true ? "dark:bg-zinc-950 bg-zinc-200" : ""
 					} ${outlineColor.default}`}
 					onBlur={(x.key??i)==keySel ? ()=>setFocusSel(false) : undefined}
-					ref={(el)=>{
+					ref={(el: HTMLButtonElement|null)=>{
 						if ((x.key??i)==keySel && el!=null && focusSel) {
 							el.focus();
 						}
@@ -568,23 +591,8 @@ export function Dropdown({parts, trigger, ...props}: {
 				className="flex flex-row justify-start gap-4 p-2 dark:bg-zinc-900 bg-zinc-100 items-center border m-0 dark:border-zinc-700 border-zinc-300 border-t-0 first:border-t rounded-none w-full" >
 				{x.txt}
 			</div>;
-		})} 
-		onKeyDown={(ev)=>{
-			if (acts.length==0 || !open) return;
-
-			if (ev.key=="ArrowDown") {
-				const nidx = idx==-1 ? 0 : (idx+1)%acts.length;
-				setKeySel(acts[nidx].key);
-				setFocusSel(true);
-				ev.preventDefault();
-			} else if (ev.key=="ArrowUp") {
-				const pidx = idx==-1 ? acts.length-1 : (idx+acts.length-1)%acts.length;
-				setKeySel(acts[pidx].key);
-				setFocusSel(true);
-				ev.preventDefault();
-			}
-		}} {...props} >
-		<div>{trigger}</div>
+		})} onKeyDown={keyCb} {...props} >
+		<div className={className} >{trigger}</div>
 	</AppTooltip>;
 }
 
@@ -611,7 +619,9 @@ function LazyAutoFocusSearch({search,setSearch,onSubmit}:{
 }
 
 export function Select<T>({ children, options, value, setValue, placeholder, className, disabled, searchable, ...props }: {
-	options: { label: ComponentChildren, value?: T, key?: string|number, disabled?: boolean }[],
+	options: {
+		label: ComponentChildren, search?: string, value?: T, key?: string|number, disabled?: boolean
+	}[],
 	value?: T, setValue?: (x: T)=>void,
 	placeholder?: ComponentChildren, searchable?: boolean,
 	className?: string, disabled?: boolean
@@ -621,7 +631,8 @@ export function Select<T>({ children, options, value, setValue, placeholder, cla
 	const parts: DropdownPart[] = useMemo(()=>{
 		const s = toSearchString(search);
 		return options.filter(v=>{
-			if (typeof v.label=="string") return toSearchString(v.label).includes(s);
+			const l = typeof v.label=="string" ? v.label : v.search;
+			if (l!=undefined) return toSearchString(l).includes(s);
 			return true;
 		}).map(opt=>{
 			const v=opt.value;
@@ -655,7 +666,10 @@ export function Select<T>({ children, options, value, setValue, placeholder, cla
 			key: "search"
 		} as const],
 		...parts
-	]} onOpenChange={()=>setSearch("")} {...props} />
+	]}
+		onOpenChange={()=>setSearch("")}
+		className={children!=undefined ? className : undefined}
+		{...props} />
 }
 
 export type Theme = "light"|"dark";
