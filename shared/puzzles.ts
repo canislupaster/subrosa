@@ -28,12 +28,29 @@ export class RNG {
 }
 
 // puzzle task is solve(generator) -> generated value
+export type PuzzleInputSchema = readonly Readonly<{type: "number"|"string", name: string, key: string}>[];
+export type PuzzleInput<T extends PuzzleInputSchema> = Readonly<{
+	[K in T[number]["key"]]: "number"|"string" extends (T[number]&{key: K})["type"] ? string|number
+		: (T[number]&{key: K})["type"] extends "string" ? string : number
+}>;
+
+type SimplePuzzle<T extends PuzzleInputSchema> = {
+	kind: "simple",
+	schema: T,
+	validator: (x: PuzzleInput<T>)=>string|null, // null for valid, otherwise error
+	generator: (seed?: number)=>PuzzleInput<T>,
+	solve: (x: PuzzleInput<T>)=>string|number
+};
+
 export type Puzzle = {
 	name: string,
-	key: string,
+	key: string
+}&({
+	kind: "decode",
 	generator: (seed?: number)=>string, // generate an input
+	validator: (x: string)=>string|null, // null for valid, otherwise error
 	encode: (inp: string)=>string, // encrypt an input
-};
+}|SimplePuzzle<PuzzleInputSchema>);
 	
 // Default generator
 
@@ -42,10 +59,15 @@ const alphaLen: number = 26;
 export const alpha = fill(alphaLen, i=>String.fromCharCode("a".charCodeAt(0) + i)); 
 // const alpha = charMap.map(x=>x[0]);
 // Uniform random int
-export const defaultGen = (seed?: number)=>{
+function defaultGen(seed?: number) {
 	const rng = new RNG(seed);
 	return rng.nextString(alpha, rng.nextRange(5,50));
-};
+}
+
+function defaultValidator(s: string) {
+	if (/^[a-z]+$/.test(s)) return null;
+	return "Plaintext should only consist of lowercase alphabetic characters.";
+}
 
 // Adds ct to c[0], wrapping around both directions
 // Skips space
@@ -58,12 +80,38 @@ function charAdd(c: string, ct: number) : string {
 	return numToChar[cc];
 }
 
+// relaxes puzzle by making validator/solve accept arbitrary records...
+function simple<T extends PuzzleInputSchema>(t: T, x: Omit<SimplePuzzle<T>, "schema"|"kind">): SimplePuzzle<PuzzleInputSchema> {
+	return {schema: t, kind: "simple", ...x} as const as unknown as SimplePuzzle<PuzzleInputSchema>;
+}
+
 export const puzzles = [
+	{
+		name: "“Team” puzzle",
+		key: "team",
+		...simple([
+			{type: "number", name: "x", key: "x"},
+			{type: "number", name: "y", key: "y"}
+		] as const, {
+			generator(seed) {
+				const r = new RNG(seed);
+				return { x: r.nextRange(1,20), y: r.nextRange(1,20) };
+			},
+			solve(inp) {
+				return inp.x*inp.y;
+			},
+			validator(inp) {
+				return null;
+			}
+		})
+	},
 	{
 		// Caesar
 		name: "Decrypting your password.",
 		key: "salad",
 		generator: defaultGen,
+		validator: defaultValidator,
+		kind: "decode",
 		encode(inp) {
 			const key: number = 2;
 			const len: number = inp.length;
@@ -75,24 +123,30 @@ export const puzzles = [
 		name: "bash",
 		key: "shell",
 		generator: defaultGen,
+		validator: defaultValidator,
+		kind: "decode",
 		encode(inp) {
 			return fill(inp.length, i=>numToChar[alphaLen-1-charToNum[inp.charAt(i)]]).join("");
 		}
 	},
 	{
 		// Reverse
-		name: "How much do they pay me, exactly?",
+		name: "naming",
 		key: "elzzup",
 		generator: defaultGen,
+		validator: defaultValidator,
+		kind: "decode",
 		encode(inp) {
 			return inp.split("").reverse().join("");
 		}
 	},
 	{
 		// Incremental Caesar
-		name: "Team Puzzles are Just the Thing You Need.",
+		name: "UHhh",
 		key: "olive-oil",
 		generator: defaultGen,
+		validator: defaultValidator,
+		kind: "decode",
 		encode(inp) {
 			const len: number = inp.length;
 			return fill(len, i=>charAdd(inp.charAt(i), i)).join("");
@@ -109,9 +163,23 @@ export const puzzles = [
 	// 	}
 	// },
 	{
+		// Vigenere
+		name: "Secret 2",
+		key: "vinegar",
+		generator: defaultGen,
+		validator: defaultValidator,
+		kind: "decode",
+		encode(inp) {
+			const key = "waas"; // change
+			return fill(inp.length, i=>charAdd(inp.charAt(i), charToNum[key.charAt(i % key.length)])).join("");
+		}
+	},
+	{
 		// Segment Reverse
 		name: "You gotta work for your promotions.",
 		key: "implementation-challenge",
+		validator: defaultValidator,
+		kind: "decode",
 		generator(seed?: number) {
 			const rng = new RNG(seed);
 			return fill(rng.nextRange(5,50), ()=>(rng.nextRange(0,9)>=8 ? "x" : rng.nextString(alpha, 1))).join("");
@@ -136,6 +204,8 @@ export const puzzles = [
 		name: "Can you handle the truth?",
 		key: "keyword",
 		generator: defaultGen,
+		validator: defaultValidator,
+		kind: "decode",
 		encode(inp) {
 			inp=[...inp].filter(x=>x!=" ").join("");
 
@@ -160,6 +230,8 @@ export const puzzles = [
 		// Base 13
 		name: "Rot 13",
 		key: "rot-13",
+		validator: defaultValidator,
+		kind: "decode",
 		generator: (seed?: number)=>{
 			const r = new RNG(seed);
 			return r.nextString(alpha, r.nextRange(7,10));
@@ -190,26 +262,26 @@ export const puzzles = [
 		name: "Tricky transposition",
 		key: "leaf",
 		generator: defaultGen,
+		validator: defaultValidator,
+		kind: "decode",
 		encode(inp) {
 			return fill(inp.length, i=>inp.charAt(i % 2 == 0 ? Math.floor(i / 2) : 
 				Math.floor(i / 2) + Math.floor((inp.length + 1) / 2))).join(""); // Start from halfway, rounded up if odd
 		}
 	},
 	{
-		// Vigenere
-		name: "Secret 2",
-		key: "vinegar",
-		generator: defaultGen,
-		encode(inp) {
-			const key = "waas"; // change
-			return fill(inp.length, i=>charAdd(inp.charAt(i), charToNum[key.charAt(i % key.length)])).join("");
-		}
-	},
-	{
 		// Alphabet Derangement
 		name: "ABCs",
-		key: "abcdfghijklmnopqrstuvwxyz",
-		generator: defaultGen,
+		key: "abcdefghijklmnopqrstuvwxyz",
+		kind: "decode",
+		generator(seed?: number) {
+			const rng = new RNG(seed);
+			return rng.nextString(alpha.filter(x=>x!="x"), rng.nextRange(5,50));
+		},
+		validator: s=>{
+			if (![...s].some(x=>x=="x" || !alpha.includes(x))) return null;
+			return "Plaintext should only consist of lowercase alphabetic characters, excluding x.";
+		},
 		encode(inp) {
 			const rng = new RNG(123); // fixed seed
 			const seg: string[] = [];

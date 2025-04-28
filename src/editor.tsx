@@ -1,19 +1,21 @@
 import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection } from "../shared/eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, textColor, throttle, toSearchString, useFnRef, useToast } from "./ui";
+import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection, makeProc } from "../shared/eval";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, interactiveContainerDefault, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, ThemeSpinner, toSearchString, useFnRef, useToast } from "./ui";
 import { twMerge } from "tailwind-merge";
-import { IconArrowRight, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconInfoCircle, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
+import { IconArrowsRightLeft, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconInfoCircle, IconPencil, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref } from "preact";
 import { dragAndDrop, useDragAndDrop } from "@formkit/drag-and-drop/react";
 import { animations, DragState, handleNodePointerdown, remapNodes, setParentValues } from "@formkit/drag-and-drop";
 import clsx from "clsx";
 import { ChangeEvent, SetStateAction } from "preact/compat";
-import { fill, toPrecStat } from "../shared/util";
+import { fill, strToInt, toPrecStat } from "../shared/util";
 import { Messages, Stage } from "./story";
-import { Submission } from "./api";
+import { Submission, useSubmission } from "./api";
 import { useGoto } from "./main";
 import { Reference } from "./reference";
 import { LogoBack } from "./logo";
+import { addFromText, toText } from "../shared/text";
+import { Puzzle } from "../shared/puzzles";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 export const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2 nodrag");
@@ -159,7 +161,7 @@ function GotoArrow({p, node, nodeI}: {p: EditData, node: Node&{op: "goto"}, node
 			lastParams=params;
 
 			if (a.y > b.y) [a,b] = [b,a];
-			const depth = 0.7*(2.4*(b.y - a.y)/parent.scrollHeight + ((123.3234*nodeI)%1.1324)*1.1);
+			const depth = 0.7*(2.4*(b.y - a.y)/parent.scrollHeight + ((127.8234*nodeI)%1.2324)*1.1);
 			const obj = {
 				top: `${a.y + a.height/2 - c.top + yo}px`,
 				bottom: `${c.bottom - (b.y + b.height/2) - yo}px`,
@@ -280,10 +282,12 @@ const nodeHint: Record<Node["op"], string> = {
 	breakpoint: "Pause execution for debugging, optionally conditional on whether the cond register contains a strictly positive value."
 };
 
-function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active, selected}: {
+function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, status, refSetter}: {
 	p: EditData, node: Node, nodeI?: number, idx?: number
 	setNode: (x: Node|null, i: number)=>void
-	openProc: (i: number)=>void, active?: boolean, selected?: boolean
+	openProc: (i: number)=>void,
+	refSetter?: (ref: HTMLDivElement|null)=>void,
+	status?: "active"|"selected"|"target"
 }) {
 	const setNode = nodeI==undefined ? undefined : (newNode: Node|null)=>setNode2(newNode, nodeI);
 
@@ -320,7 +324,9 @@ function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active, sel
 		return nodeHint[node.op];
 	}, [node, p.procs]);
 
-	return <div className={twMerge(nodeStyle, "transition-colors animate-expand", (active ?? false) ? bgColor.highlight : (selected==true && bgColor.md), dropStyle)} >
+	return <div className={twMerge(nodeStyle, "transition-colors animate-expand",
+			status=="active" ? bgColor.highlight : status=="selected" ? bgColor.highlight2
+				: status=="target" ? bgColor.md : null, dropStyle)} ref={refSetter} >
 		<img src={iconURL(node)} className="w-10 cursor-move draghandle mb-4" />
 		{idx!=undefined && <Text v="dim" className="absolute left-1 bottom-1" >{idx}</Text>}
 		{inner}
@@ -334,12 +340,6 @@ function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, active, sel
 
 type DragNode = { type: "proc"|"builtin"|"user", i: number};
 const SelectRegisterType = Select<"param"|"string"|"number">;
-
-const getNum = (s: string)=>{
-	const v = Number.parseInt(s,10);
-	if (!/^-?\d+$/.test(s) || isNaN(v)) return null;
-	return v;
-};
 
 function RegisterEditor({p, reg, setReg}: {
 	p: EditData, reg: number, setReg: (x: Register|null, i: number)=>void,
@@ -368,7 +368,7 @@ function RegisterEditor({p, reg, setReg}: {
 			}
 			else setReg({...emptyReg, value: newValue}, reg);
 		} else if (regTy=="number") {
-			const v = getNum(newValue);
+			const v = strToInt(newValue);
 			if (v==null) err="Invalid number";
 			else setReg({...emptyReg, value: v}, reg);
 		}
@@ -386,7 +386,7 @@ function RegisterEditor({p, reg, setReg}: {
 
 	const setRunV = (x: string)=>{
 		if (!regRef) return;
-		const newV = validTextRe.test(x) ? x : getNum(x);
+		const newV = validTextRe.test(x) ? x : strToInt(x);
 		setErr2(newV==null);
 		if (newV!=null) regRef.mutable.current=newV;
 		setRunValue(newV ?? x);
@@ -479,11 +479,11 @@ const MAX_UNDO_STEPS = 100;
 function ProcEditor({
 	proc, i: procI, setProc, procs, userProcList, entryProc,
 	addProc, setProcList, delProc, openProc, runState, stack,
-	back, undo
+	back, undo, input
 }: {
 	proc: Procedure, i: number, setProc: SetFn<Procedure>,
 	runState: ProcRunState|null, stack?: ComponentChildren,
-	undo: (redo: boolean)=>void
+	undo: (redo: boolean)=>void, input: ComponentChildren
 }&UserProcs) {
 	const isUserProc = entryProc!=procI; // whether proc is editable
 	const nodeRefs = useRef(new Map<number|"end",HTMLDivElement>());
@@ -657,6 +657,16 @@ function ProcEditor({
 	}, []);
 	
 	const [selection, setSelection] = useState<ReadonlySet<number>>(new Set<number>());
+
+	const highlightGotoSelection = useMemo(()=>
+		new Set(proc.nodes.entries().flatMap(([k,v])=>{
+			if (v.op=="goto" && typeof v.ref=="number" && (selection.has(k) || selection.has(v.ref)))
+				return [k, v.ref];
+			return [];
+		})),
+		[proc.nodes, selection]
+	);
+
 	type RemapClipboard = {
 		sel: NodeSelection, open: boolean, remap: ("create"|number)[]
 	};
@@ -782,14 +792,11 @@ function ProcEditor({
 			ev.preventDefault();
 		};
 		
-		const el = nodeListRef.current;
-		if (!el) return;
-
 		document.addEventListener("keydown", clipboardListener)
-		el.addEventListener("click", docClick);
+		document.addEventListener("click", docClick);
 		return ()=>{
 			document.removeEventListener("keydown", clipboardListener)
-			el.removeEventListener("click", docClick);
+			document.removeEventListener("click", docClick);
 		};
 	}, [data.nodeRefs, pasteSel, proc, proc.nodeList, procI, remappingClipboard.open, selection, setProc, undo, toast]);
 
@@ -801,16 +808,29 @@ function ProcEditor({
 			key: x.op, value: { type: "builtin" as const, i },
 			search: nodeName[x.op]
 		})),
-		...userProcList.flatMap((proc,i)=>{
+		...userProcList.flatMap((proc)=>{
 			const p = procs.get(proc);
 			if (!p) return [];
 			return [{
-				label: <><img src={iconURL({op: "call"})} className="w-6" /> {p.name}</>, key: proc,
-				value: { type: "user" as const, i }, search: p.name
+				label: <><img src={iconURL({op: "call"})} className="w-6" /> {p.name}</>,
+				key: proc, search: p.name,
+				value: { type: "user" as const, i: proc }
 			}];
 		})
 	], [procs, userProcList]);
 	
+	const nodeAdder = (i: number, v: number)=><Select key={`sep${v}`} options={addNodeOptions} searchable
+		setValue={(v)=>{
+			const nv = updateFromDrag([v])[0];
+			setProc(p=>({...p, nodeList: p.nodeList.toSpliced(i+1,0,nv)}));
+		}} className="place-content-center flex w-full nodrag -mt-1 group" >
+
+		<button className="relative w-full" >
+			<IconChevronCompactDown className="mx-auto group-hover:opacity-0 transition-opacity" />
+			<IconPlus className="group-hover:opacity-100 opacity-0 transition-opacity absolute top-0.5 left-0 right-0 mx-auto" />
+		</button>
+	</Select>;
+
 	return <>
 		<ConfirmModal open={confirmClear} onClose={()=>setConfirmClear(false)} msg={
 			"Are you sure you want to delete all nodes in this procedure?"
@@ -830,7 +850,7 @@ function ProcEditor({
 							<Text v="dim" >{reg.type=="value" ? (typeof reg.value=="string" ? "Text" : "Number") : "Parameter"}</Text>
 						</div>
 						
-						<IconArrowRight />
+						<IconArrowsRightLeft />
 						
 						<RegisterPicker create p={data} x={remappingClipboard.remap[i]} setX={(nx)=>{
 							setRemappingClipboard({
@@ -850,8 +870,8 @@ function ProcEditor({
 			</div>
 		</Modal>
 
-		<div className="flex flex-col items-stretch gap-1 editor-left min-h-0" >
-			<div className={clsx("mb-2 flex flex-row gap-2 items-end pl-2 shrink-0 h-11", !isUserProc && "pl-4")} >
+		<div className="flex flex-col items-stretch editor-left min-h-0" >
+			<div className={clsx("flex flex-row gap-2 items-end pl-2 shrink-0 h-11", !isUserProc && "pl-4")} >
 				{back && <Anchor className="items-center self-end mr-2" onClick={()=>openProc()} >
 					<IconChevronLeft size={32} />
 				</Anchor>}
@@ -879,26 +899,19 @@ function ProcEditor({
 			</div>
 			 
 			<ul ref={nodeListRef} className="pl-[70px] flex flex-col gap-1 items-stretch overflow-y-auto relative pb-20" >
+				{nodeAdder(-1,-1)}
 				{proc.nodeList.flatMap((v,i)=>{
 					const node = proc.nodes.get(v)!;
 					return [
-						<div key={v} ref={nodeRefSetter(v)} >
-							{node!=undefined && <ProcNode p={data} node={node} idx={i+1} setNode={setNode}
-								nodeI={v} openProc={openProc} active={runState?.activeNode==v}
-								selected={selection.has(v)} />}
-						</div>,
+						<ProcNode key={v} p={data} node={node} idx={i+1} setNode={setNode}
+							nodeI={v} openProc={openProc} refSetter={nodeRefSetter(v)}
+							status={runState?.activeNode==v ? "active"
+								: selection.has(v) ? "selected"
+								: highlightGotoSelection.has(v) ? "target" : undefined} />,
 						...node.op=="goto" ? [
 							<GotoArrow key={`arrow${v}`} p={data} node={node} nodeI={v} />
 						] : [],
-						<Select key={`sep${v}`} options={addNodeOptions} searchable setValue={(v)=>{
-							const nv = updateFromDrag([v])[0];
-							setProc(p=>({...p, nodeList: p.nodeList.toSpliced(i+1,0,nv)}));
-						}} className="place-content-center flex w-full nodrag -mt-1 group" >
-							<button className="relative w-full" >
-								<IconChevronCompactDown className="mx-auto group-hover:opacity-0 transition-opacity" />
-								<IconPlus className="group-hover:opacity-100 opacity-0 transition-opacity absolute top-0.5 left-0 right-0 mx-auto" />
-							</button>
-						</Select>
+						nodeAdder(i,v)
 					];
 				})}
 			
@@ -915,24 +928,29 @@ function ProcEditor({
 			</ul>
 		</div>
 		
-		<div className="flex flex-col gap-2 editor-mid min-h-0 max-h-full" >
-			<div className="flex flex-row justify-between gap-2 items-end mt-2" >
-				<Text v="bold" >Built-in</Text>
+		<div className="flex flex-col gap-1 editor-mid min-h-0 max-h-full" >
+			<div className="flex flex-col items-stretch gap-2" >
+				{input}
 			</div>
 
-			<ul className="flex flex-row flex-wrap gap-2 pb-1" ref={builtinRef} >
-				{builtinNodes.map(v=>
-					<AppTooltip key={v.op} placement="bottom" content={nodeHint[v.op]} >
-						<div className={twMerge(blankStyle, "py-2", bgColor.hover)} >
-							<img src={iconURL(v)} className="w-10 cursor-move draghandle" />
-						</div>
-					</AppTooltip>
-				)}
-			</ul>
+			<Divider className="my-1" />
+
+			<div className="flex flex-row gap-4 pb-1 items-center" >
+				<Text v="bold" >Builtins</Text>
+				<ul className="flex flex-row flex-wrap gap-2" ref={builtinRef} >
+					{builtinNodes.map(v=>
+						<AppTooltip key={v.op} placement="bottom" content={nodeHint[v.op]} >
+							<div className={twMerge(blankStyle, "py-1", bgColor.hover)} >
+								<img src={iconURL(v)} className="w-8 cursor-move draghandle" />
+							</div>
+						</AppTooltip>
+					)}
+				</ul>
+			</div>
 			
 			<Divider className="my-1" />
 
-			<div className="flex flex-row gap-2 items-center flex-wrap gap-y-0" >
+			<div className="flex flex-row gap-2 items-center flex-wrap gap-y-0 mb-0.5" >
 				<Text v="bold" >My procedures</Text>
 				<Button onClick={()=>openProc(entryProc)} className="ml-auto py-1" >Main</Button>
 				<Input value={procFilter} valueChange={setProcFilter} className="py-1 basis-1/2 border-1" placeholder={"Search"} />
@@ -977,94 +995,169 @@ function ProcEditor({
 	</>;
 }
 
-export const makeProc = (name: string): Procedure => ({
-	name, registerList: [], registers: new Map(),
-	nodeList: [], nodes: new Map(), maxNode: 0, maxRegister: 0,
-});
-
-export function PuzzleInput({puzzle, input, active, procs, output, setInput, setSolved, nextStage}: {
-	puzzle: Stage&{type: "puzzle"},
-	input: string, procs: EditorState["procs"],
-	active: number, output: string|null,
-	setInput: (x: string)=>void,
-	setSolved: ()=>void, nextStage: ()=>void
+export function TextEditor({edit, setEdit, back, value, setValue}: {
+	edit: EditorState, setEdit: SetFn<EditorState>,
+	value: string, setValue: (x: string)=>void,
+	back: ()=>void
 }) {
-	const [input2, setInput2] = useState(input);
-	useEffect(()=>setInput2(input), [input]);
-	const [err, setErr] = useState(false);
-
-	const up = useCallback((v: string) => {
-		const err=!validTextRe.test(v);
-		setErr(err);
-		if (!err) setInput(v);
-		setInput2(v);
-	}, [setInput]);
+	const ref = useRef<HTMLPreElement>(null);
+	// only set value on mount
+	useEffect(()=>{
+		ref.current!.innerText = value;
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 	
-	const encoded = useMemo(()=>puzzle.encode(input), [input, puzzle]);
+	const [err, setErr] = useState<string|null>(null);
 
-	return <div className="flex flex-col items-stretch gap-2" >
-		<Text className="mb-1" >{puzzle.blurb}</Text>
-		{puzzle.extraDesc!=undefined && <Text className="mb-1" >{puzzle.extraDesc}</Text>}
-		
-		<div className="flex flex-row gap-2 -mb-1" >
-			<Text v="dim" >
-				Plaintext
-				<Anchor onClick={()=>up(puzzle.generator())} className="ml-2" >(randomize)</Anchor>
-			</Text>
-		</div>
+	return <div className="flex flex-col gap-2" >
+		<Text v="err" >Warning: applying will overwrite procedures with names that appear below. It is recommended that you back things up beforehand, if you care about anything at all.</Text>
+		<pre contentEditable ref={ref} onInput={(ev)=>setValue(ev.currentTarget.innerText)}
+			className={twMerge(interactiveContainerDefault, borderColor.focus, "w-full p-2 border-2 transition duration-300 rounded-none")} />
+		{err!=null && <Alert title="Failed to convert from text" txt={err} bad />}
+		<div className="flex flex-row justify-between" >
+			<Button icon={<IconChevronLeft className="-ml-1" />} onClick={back} >Back</Button>
+			<Button onClick={()=>{
+				const res = addFromText(edit, value);
+				if (res.type=="error") return setErr(res.error);
 
-		<Input value={input2} valueChange={up} />
-		
-		{err && <Alert bad title="Invalid input"
-			txt="Your input should only contain lowercase alphabetical characters and spaces" />}
-		
-		<div className={clsx(blankStyle, "items-stretch px-8")} >
-			{input.length>0 ? <>
-				<div className="flex flex-row flex-wrap gap-4 items-center justify-center" >
-					<Text v="code" >{input}</Text>
-					<IconArrowRight />
-					<Text v="code" >{encoded}</Text>
-				</div>
-				
-				{output==input ? <Alert className={bgColor.green} title="Test passed"
-						txt="Your program output the same text." />
-					: output!=null && <Alert bad title="Test failed" txt={
-						<div className="flex flex-col gap-1" >
-							{output.length==0 ? "Your program didn't output anything!" : <>
-								Your program output:
-								<Text v="code" >{output}</Text>
-							</>}
-						</div>
-					} />}
-			</> : <>
-				<IconInfoCircle className="self-center" />
-				After generating or entering a plaintext above, you will see the ciphertext here.
-				<b>Your objective is to decrypt the ciphertext (i.e. perform the reverse operation).</b>
-			</>}
+				setErr(null);
+				setEdit(()=>res.value);
+			}} >Apply</Button>
 		</div>
-		
-		<Text v="sm" >
-			Submit when you're ready for your solution to be judged against a random testcase. You will need to match the plaintext exactly to pass this level.
-		</Text>
-		
-		<Submission submission={{ procs, active }} setSolved={setSolved}
-			nextStage={nextStage} puzzle={puzzle} />
 	</div>;
+}
+
+type PuzzleIOState = Readonly<({
+	type: "decode",
+	puzzle: Puzzle&{kind: "decode"},
+	decoded: string, decodedDirty: string,
+	encoded: string
+} | {
+	type: "simple",
+	puzzle: Puzzle&{kind: "simple"},
+	input: readonly (string|number)[],
+	dirtyInput: readonly string[],
+	output: string|number
+})&{
+	err: string|null,
+	programInput: readonly (number|string)[],
+}>;
+
+type PuzzleIO = PuzzleIOState&({
+	type: "simple",
+	inputs: (({type: "string", value: string}|{type: "number", value: string})&{name: string})[],
+	setInput: (x: string, i: number)=>void
+}|{
+	type: "decode",
+	setDecoded: (x: string)=>void
+})&{
+	randomize: ()=>void,
+	programInputRef: React.RefObject<readonly (number|string)[]>,
+	programOutput: number|string
+};
+
+function usePuzzleIO(puzzle: Puzzle): PuzzleIO {
+	const stateFromPuzzle = (random?: boolean): PuzzleIOState=>{
+		if (puzzle.kind=="decode") {
+			if (random!=true) return {
+				type: "decode", puzzle, decoded: "",
+				decodedDirty: "", encoded: "", err: null,
+				programInput: [""]
+			};
+
+			const decoded = puzzle.generator(), encoded=puzzle.encode(decoded);
+			return {
+				type: "decode", puzzle, decoded,
+				decodedDirty: decoded, encoded,
+				err: null, programInput: [encoded]
+			};
+		}
+
+		const obj = puzzle.generator();
+		const input = puzzle.schema.map(v=>obj[v.key]);
+		return {
+			type: "simple", puzzle, input,
+			dirtyInput: input.map(x=>x?.toString()),
+			output: puzzle.solve(obj), err: null,
+			programInput: input
+		}
+	};
+
+	const [state, setState] = useState<PuzzleIOState>(stateFromPuzzle);
+	const upState = (s: PuzzleIOState)=>{
+		let err: string|null=null;
+		if (s.type=="decode") {
+			err = s.puzzle.validator(s.decodedDirty)
+			if (err==null) {
+				const encoded = s.puzzle.encode(s.decodedDirty);
+				s={ ...s, decoded: s.decodedDirty, encoded, programInput: [encoded] };
+			}
+		} else {
+			const toNumStr = s.dirtyInput.map(x=>{
+				const v = strToInt(x);
+				return v==null ? x : v;
+			});
+
+			for (const [x,i] of toNumStr.map((x,i)=>[x,i] as const)) {
+				if (typeof x=="string" && !validTextRe.test(x)) {
+					err=`Input ${s.puzzle.schema[i].name} should be a valid register value (text should be lowercase alphabetic, all numbers must be integers)`;
+					break;
+				}
+
+				if (typeof x!=s.puzzle.schema[i].type) {
+					err=`Input ${s.puzzle.schema[i].name} has mismatched type ${typeof x=="string" ? "text" : "number"} instead of ${s.puzzle.schema[i].type=="string" ? "text" : "number"}`;
+					break;
+				}
+			}
+
+			const obj = Object.fromEntries(s.puzzle.schema.map((x,i)=>[x.key, toNumStr[i]]));
+			err ??= s.puzzle.validator(obj);
+			if (err==null) s={
+				...s, input: toNumStr, programInput: toNumStr, output: s.puzzle.solve(obj)
+			};
+		}
+
+		setState({...s, err});
+	};
+	
+	// to be used from effect without updating (i.e. only when run starts)
+	const programInputRef = useRef<readonly(string|number)[]>([]);
+	useEffect(()=>{ programInputRef.current = state.programInput; }, [state.programInput]);
+
+	return {
+		...state.type=="decode" ? {
+			...state,
+			type: "decode", programOutput: state.decoded,
+			setDecoded: v=>upState({...state, decodedDirty: v})
+		} : {
+			...state,
+			type: "simple",
+			inputs: state.puzzle.schema.map((v,i)=>({
+				name: v.name, type: v.type, value: state.dirtyInput[i]
+			} as (PuzzleIO&{type: "simple"})["inputs"][number])),
+			setInput(v,i) {
+				upState({...state, dirtyInput: state.dirtyInput.toSpliced(i,1,v)});
+			},
+			programOutput: state.output
+		},
+		programInputRef, randomize: ()=>setState(stateFromPuzzle(true))
+	};
 }
 
 export function Editor({edit, setEdit, nextStage, puzzle}: {
 	edit: EditorState, setEdit: SetFn<EditorState>,
-	puzzle: Stage&{type: "puzzle"}|null, nextStage: ()=>void
+	puzzle: Stage&{type: "puzzle"}, nextStage: ()=>void
 }) {
 	const [runState, setRunState] = useState<ReturnType<typeof clone>|null>();
 	const [runStatus, setRunStatus] = useState<{ type: "done"|"stopped" }
 		|{ type: "paused", breakpoint?: number }
 		|{ type: "running", step: boolean, restart: boolean }>({type: "stopped"});
 	const [runError, setRunError] = useState<InterpreterError|null>(null);
-	const [output, setOutput] = useState<string|null>(null);
+	const [output, setOutput] = useState<[readonly(string|number)[]|null, string|number]>([null, ""]);
 
 	const [procHistory, setProcHistory] = useState<number[]>([]);
 	const [active, setActive] = useState(edit.entryProc);
+	const io = usePuzzleIO(puzzle);
 
 	const toast = useToast();
 	const activeProc = edit.procs.get(active);
@@ -1166,6 +1259,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	});
 
 	const runStateRef = useRef<ProgramState|null>(null);
+	const originalInput = useRef<readonly(string|number)[]|null>(null);
 	const [ignoreBreakpoint, setIgnoreBreakpoint] = useState(false);
 	
 	useEffect(()=>{
@@ -1198,9 +1292,10 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		let initV = runStateRef.current;
 		const doPush = initV==null || runStatus.restart;
 		if (doPush) {
+			originalInput.current = io.programInputRef.current;
 			if (!handle(()=>{
 				runStateRef.current=initV=makeState({
-					input: puzzle ? puzzle.encode(edit.decoded) : "",
+					input: originalInput.current ?? [],
 					entry: edit.entryProc, procs: edit.procs
 				});
 			})) return;
@@ -1224,7 +1319,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 					setRunStatus({ type: "paused", breakpoint: breakNode });
 				} else if (ret==false) {
 					cont=false;
-					setOutput(v.outputRegister.current.toString());
+					setOutput([originalInput.current, v.outputRegister.current]);
 					setRunStatus({type: "done"});
 				}
 			});
@@ -1242,45 +1337,55 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			return;
 		}
 		
-		const rl = throttle(200);
-
 		// wtf, i like defining stuff before they are used
 		// eslint-disable-next-line prefer-const
-		let int: number|undefined;
-		let end = ()=>{
-			clearInterval(int);
-			rl[Symbol.dispose]();
-			setRunState(clone(v));
-		};
+		let int: number|null;
 
+		const intervalDelay = Math.max(200, 1000/edit.stepsPerS);
+		const stepsPerInterval = edit.stepsPerS / (1000/intervalDelay);
+		const end = ()=>{ if (int!=null) clearInterval(int); int=null; };
+		let nstep = 0;
 		const cb = ()=>{
-			doStep();
-			rl.call(()=>setRunState(clone(v)));
-			if (!cont) { end(); end=()=>{}; }
+			for (nstep+=stepsPerInterval; nstep>0 && cont; nstep--)
+				doStep();
+			setRunState(clone(v));
+			if (!cont) end();
 		};
 		
-		int = setInterval(cb, 1000/edit.stepsPerS);
+		int = setInterval(cb, intervalDelay);
 		cb();
 		return ()=>end();
-	}, [edit.entryProc, puzzle, edit.decoded, edit.procs, edit.stepsPerS, ignoreBreakpoint, runStatus, toast]);
+	}, [edit.entryProc, edit.procs, edit.stepsPerS, ignoreBreakpoint, io.programInputRef, runStatus]);
 	
 	const mod = (m: number) => setEdit(v=>({
 		...v,
-		stepsPerS: Math.max(0.1, Math.min(1000, v.stepsPerS*m))
+		stepsPerS: Math.max(0.1, Math.min(5000, v.stepsPerS*m))
 	}));
 
 	const play = (opt: {step?: boolean, restart?: boolean})=>{
 		setRunStatus({type: "running", step: opt.step ?? false, restart: opt.restart ?? false});
 	};
 	
-	const [open, setOpen] = useState(true);
+	const [referenceOpen, setReferenceOpen] = useState(false);
+	const [open, setOpen] = useState<{panel: "text"|"dashboard", open: boolean}>({panel: "dashboard", open: true});
+	const doOpen = ()=>setOpen({panel: "dashboard", open: true});
+	const [value, setValue] = useState("");
+	useEffect(()=>{
+		const txt = toText({ procs: edit.procs, entry: edit.entryProc })
+		setValue(txt);
+	}, [edit.entryProc, edit.procs, setValue]);
 
-	const setInput = useCallback((inp: string)=>{
-		setEdit(e=>({...e, decoded: inp}))
-	}, [setEdit]);
+	useEffect(()=>{
+		if (LocalStorage.seenReference!=true) {
+			setReferenceOpen(true);
+			LocalStorage.seenReference=true;
+		} else {
+			doOpen();
+		}
+	}, []);
 
-	const markSolved = useCallback(()=>setEdit(e=>({...e, solved: true})), [setEdit]);
-	useEffect(()=>setOutput(null), [edit.decoded, setOutput]);
+	const setSolved = useCallback(()=>setEdit(e=>({...e, solved: true})), [setEdit]);
+
 	const goto = useGoto();
 
 	const openProc = (i?: number)=>{
@@ -1325,10 +1430,75 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	</>} disabled={runState==null} ><div>
 		<IconButton disabled={runState==null} icon={<IconChartBar />} />
 	</div></AppTooltip>;
-	
+
+	const inputSection = <>
+		{io.type=="decode" ? <Input value={io.decodedDirty} valueChange={io.setDecoded} />
+		: <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 items-center justify-stretch" >
+			{io.inputs.map((inp,i)=><div key={i} className="contents" >
+				{inp.name}: <Input value={inp.value} valueChange={(newV)=>io.setInput(newV, i)} />
+			</div>)}
+		</div>}
+		
+		{io.err!=null && <Alert bad title="Invalid input" txt={io.err} />}
+		
+		{io.type=="decode" && <div className={clsx(blankStyle, "items-stretch px-8")} >
+			{io.decoded.length>0 ? <div className="flex flex-row flex-wrap gap-4 gap-y-1 items-center justify-center" >
+					<Text v="code" >{io.decoded}</Text>
+					<IconArrowsRightLeft />
+					<Text v="code" >{io.encoded}</Text>
+				</div>
+			: <>
+				<IconInfoCircle className="self-center" />
+				After generating or entering a plaintext above, you will see the ciphertext here.
+				<b>Your objective is to decrypt the ciphertext (i.e. perform the reverse operation).</b>
+			</>}
+		</div>}
+				
+		{output[0]==io.programInput && (
+			output[1]==io.programOutput ? <Alert className={bgColor.green} title="Test passed"
+				txt={<p>Your program correctly output: <Text v="code" >{output[1].toString()}</Text></p>} />
+			: <Alert bad title="Test failed" txt={
+				<div className="flex flex-col gap-1" >
+					<p>{output[1]=="" ? "Your program didn't output anything!" : <>
+						Your program output:{" "}
+						<Text v="code" >{output[1].toString()}</Text>
+					</>}</p>
+					<p>Expected: <Text v="code" >{io.programOutput.toString()}</Text></p>
+				</div>
+			} />
+		)}
+	</>;
+
+	const sub = useSubmission({ setSolved, puzzle, nextStage });
+	const submitButton = (sm: boolean)=><Button onClick={()=>{
+		sub.setSubmission({ procs: edit.procs, active });
+		doOpen();
+	}} className={clsx(sm && "py-1")}
+		disabled={sub.loading} icon={ sub.loading && <ThemeSpinner size="sm" /> } >
+		{sub.resubmitting ? "Res" : "S"}ubmit{sm ? "" : " solution"}
+	</Button>;
+				
+	const procInput = <>
+		<div className="flex flex-row justify-between gap-2 items-end mt-2 -mb-1" >
+			<Text v="bold" >Plaintext</Text>
+			<div className="flex flex-row gap-1" >
+				<Button className="py-1" onClick={io.randomize} >Random</Button>
+				{submitButton(true)}
+			</div>
+		</div>
+		{inputSection}
+	</>;
+
 	return <div className="grid h-dvh gap-x-4 w-full editor" >
-		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center px-4" >
+		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center pl-4" >
 			<div className="flex flex-row gap-2 items-center h-full" >
+				<button onClick={()=>goto("/menu")}
+					className={twMerge("flex flex-row hover:scale-105 transition-transform h-full")} >
+					<LogoBack />
+				</button>
+
+				<span className="w-2" />
+
 				{stats}
 				<IconButton icon={<IconPlayerStopFilled className="fill-red-500" />}
 					disabled={runStatus.type=="stopped"}
@@ -1367,7 +1537,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 					Speed: {edit.stepsPerS.toFixed(2)}
 				</Button>
 				
-				<IconButton disabled={edit.stepsPerS>500} icon={<IconPlayerTrackNextFilled />}
+				<IconButton disabled={edit.stepsPerS>2500} icon={<IconPlayerTrackNextFilled />}
 					onClick={()=>mod(2)} />
 				<span className="w-2" />
 
@@ -1378,34 +1548,48 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				</Text>
 
 				<span className="w-2" />
-				<Reference />
-				{puzzle && <Messages stage={puzzle} />}
+				<Reference referenceOpen={referenceOpen} setReferenceOpen={setReferenceOpen} />
+				<Messages stage={puzzle} />
 			</div>
 
-			{puzzle ? <button className={twMerge(anchorStyle, "flex flex-row p-1 grow items-center justify-center gap-4")}
-				onClick={()=>setOpen(true)} >
+			<button className={twMerge(anchorStyle, "flex flex-row p-1 grow items-center justify-center gap-4", open.open && bgColor.md)}
+				onClick={()=>setOpen(o=>({...o, open: true}))} >
 				<div className="flex flex-col items-center" >
 					<Text v="md" >{puzzle.name}</Text>
-					<Text v="dim" >Puzzle info and input</Text>
+					<Text v="dim" >Open puzzle dashboard</Text>
 				</div>
 				{edit.solved && <IconCircleCheckFilled className="fill-green-400" size={32} />}
-			</button> : <Text v="md" className={textColor.dim} >
-				No puzzle
-			</Text>}
-			
-			<button onClick={()=>goto("/menu")}
-				className={twMerge("flex flex-row hover:scale-105 transition-transform h-full")} >
-				<LogoBack />
 			</button>
 		</div>
 		
-		{puzzle && <Modal open={open} onClose={()=>setOpen(false)} title={puzzle.name} >
-			<PuzzleInput key={puzzle.key} puzzle={puzzle} output={output}
-				input={edit.decoded} procs={edit.procs} active={active}
-				setInput={setInput} setSolved={markSolved} nextStage={()=>{
-					nextStage(); setOpen(false);
-				}} />
-		</Modal>}
+		<Modal open={open.open} onClose={()=>setOpen({panel: open.panel, open: false})}
+			title={open.panel=="dashboard" ? puzzle.name : "Text editor"} >
+			{open.panel=="dashboard" ? <div className="flex flex-col items-stretch gap-2" >
+				<Text className="mb-1" >{puzzle.blurb}</Text>
+				{puzzle.extraDesc!=undefined && <Text className="mb-1" >{puzzle.extraDesc}</Text>}
+				
+				<div className="flex flex-row gap-2 -mb-1" >
+					<Text v="dim" >
+						Plaintext
+						<Anchor onClick={io.randomize} className="ml-2" >(randomize)</Anchor>
+					</Text>
+				</div>
+
+				{inputSection}
+				
+				<Text v="sm" >
+					Submit when you're ready for your solution to be judged against a random testcase. You will need to match the plaintext exactly to pass this level.
+				</Text>
+						
+				{submitButton(false)}
+
+				<Submission sub={sub} />
+				
+				<Button icon={<IconPencil />} className="self-end"
+					onClick={()=>setOpen({open: true, panel: "text"})} >Text editor</Button>
+			</div> : <TextEditor value={value} setValue={setValue}
+				edit={edit} setEdit={setEdit} back={()=>doOpen()} />}
+		</Modal>
 		
 		<ConfirmModal open={confirmDelete.open}
 			onClose={()=>setConfirmDelete(v=>({...v, open: false}))}
@@ -1440,11 +1624,8 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		</Modal>
 
 		{activeProc && <ProcEditor
-			// um it is not worth it for me to clear all my deep states
-			// and stuff to initial values when proc changes
-			// this is clearly not ideal (and it leads to some visual jitter),
-			// but it is well worth it
 			proc={activeProc}
+			input={procInput}
 			i={active}
 			setProc={setProc}
 			procs={edit.procs}

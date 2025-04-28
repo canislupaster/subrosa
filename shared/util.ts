@@ -57,5 +57,11 @@ export type ServerResponse<K extends keyof API> = {
 	type: "ok", data: API[K] extends {response: unknown} ? API[K]["response"] : null
 };
 
+export const strToInt = (s: string)=>{
+	const v = Number.parseInt(s,10);
+	if (!/^-?\d+$/.test(s) || isNaN(v)) return null;
+	return v;
+};
+
 export const toPrecStat = (x: number, y?: string) =>
 	`${x>1e5 ? x.toPrecision(2) : x}${y!=undefined ? ` ${y}${x==1 ? "" : "s"}` : ""}`;

@@ -1,4 +1,5 @@
 import { data, StageData } from "./data.ts";
+import { Puzzle } from "./puzzles.ts";
 import { fill, stringifyExtra } from "./util.ts";
 
 export type Register = Readonly<({
@@ -9,18 +10,25 @@ export type Register = Readonly<({
 	name: string|null
 }>;
 
-export type Procedure = Readonly<{
+export type WritableProcedure = {
 	name: string,
 	// similarly, guaranteed to exist in node map
-	nodeList: readonly number[],
+	nodeList: number[],
 	maxNode: number,
 	// initial state of registers, which may be mapped to parameters
 	// guaranteed to exist in register map
-	registerList: readonly number[]
+	registerList: number[]
 	maxRegister: number,
 	
 	comment?: string,
 
+	registers: Map<number,Register>,
+	nodes: Map<number,Node>
+};
+
+export type Procedure = Readonly<WritableProcedure&{
+	nodeList: readonly number[],
+	registerList: readonly number[],
 	registers: ReadonlyMap<number,Register>,
 	nodes: ReadonlyMap<number,Node>
 }>;
@@ -71,20 +79,25 @@ export type ProgramState = {
 	}[];
 };
 
+export const makeProc = (name: string): Procedure => ({
+	name, registerList: [], registers: new Map(),
+	nodeList: [], nodes: new Map(), maxNode: 0, maxRegister: 0,
+});
+
 export function makeState({input, procs, entry, stopOnBreakpoint}: {
-	input: string,
+	input: readonly (string|number)[],
 	procs: ReadonlyMap<number, Procedure>,
 	entry: number,
 	stopOnBreakpoint?: boolean
 }): ProgramState {
 	const pstate: ProgramState = {
-		procs, outputRegister: {current: input}, stack: [],
+		procs, outputRegister: {current: input[0]}, stack: [],
 		visitedNodes: new Map(), activeRegisters: new Set(),
 		stats: { nodes: 0, time: 0, registers: 0 },
 		stopOnBreakpoint: stopOnBreakpoint==true
 	};
 
-	push(pstate, entry, [pstate.outputRegister]);
+	push(pstate, entry, [pstate.outputRegister, ...input.slice(1).map(v=>({current: v}))]);
 	return pstate;
 }
 
@@ -92,17 +105,29 @@ export type EditorState = Readonly<{
 	procs: ReadonlyMap<number, Procedure>,
 	undoHistory: readonly (readonly [number, Procedure])[],
 	curNumUndo: number,
-
 	userProcList: number[],
 	maxProc: number,
-
 	entryProc: number,
-	
-	decoded: string,
 	stepsPerS: number,
-
 	solved: boolean
 }>;
+
+export function makeEntryProc(puzzle: Puzzle): Procedure {
+	const regs = fill(puzzle.kind=="decode" ? 1 : puzzle.schema.length, i=>{
+		const inpName = puzzle.kind=="decode" ? "Input" : puzzle.schema[i].name;
+		return [i, {
+			name: i==0 ? `${inpName} and output` : inpName,
+			type: "param"
+		} satisfies Register] as const;
+	});
+
+	return {
+		...makeProc("Main"),
+		registerList: regs.map(([i])=>i),
+		registers: new Map(regs),
+		maxRegister: regs.length
+	};
+}
 
 export type NodeSelection = Readonly<{
 	nodes: Node[],
@@ -456,17 +481,26 @@ export async function test({ puzzle, proc, procs }: TestParams): Promise<Verdict
 		for (let i=0; i<numTests; i++) {
 			const stage = data.find(x=>x.key==puzzle) as StageData&{type: "puzzle"};
 
-			const plaintxt = stage.generator(seed++);
-			const encoded = stage.encode(plaintxt);
+			let input: (string|number)[];
+			let output: string|number;
+			if (stage.kind=="decode") {
+				const plaintxt = stage.generator(seed++);
+				input = [stage.encode(plaintxt)];
+				output = plaintxt;
+			} else {
+				const obj = stage.generator(seed++);
+				input = stage.schema.map(v=>obj[v.key]);
+				output = stage.solve(obj);
+			}
 
-			const pstate = makeState({ input: encoded, procs, entry: proc });
+			const pstate = makeState({ input, procs, entry: proc });
 			pstateStats.push(pstate.stats);
 
 			while (step(pstate)==true) {
 				if (pstate.stats.time >= timeLimit) return {type: "TLE", ...getStats()};
 			}
 
-			if (pstate.outputRegister.current!=plaintxt) return {type: "WA", ...getStats()};
+			if (pstate.outputRegister.current!=output) return {type: "WA", ...getStats()};
 		}
 
 		return {type: "AC", ...getStats()};

@@ -3,7 +3,7 @@ import { Procedure, ProgramStats, test, Verdict } from "../shared/eval";
 import { Stage } from "./story";
 import { API, COUNT_PLAY_INTERVAL_SECONDS, parseExtra, ServerResponse, StageStatsResponse, stringifyExtra, toPrecStat, validUsernameRe } from "../shared/util";
 import Tester from "../shared/worker?worker";
-import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor, ThemeSpinner } from "./ui";
+import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor } from "./ui";
 import { StageData, stageUrl } from "../shared/data";
 import { blankStyle } from "./editor";
 import clsx from "clsx";
@@ -158,13 +158,20 @@ function Leaderboard({submission: s, puzzle}: {
 	</div>;
 }
 
-export function Submission({
-	submission, setSolved, nextStage, puzzle
+export function useSubmission({
+	setSolved, nextStage, puzzle
 }: { 
-	submission: Submission,
 	puzzle: Stage&{type: "puzzle"},
 	setSolved: ()=>void, nextStage: ()=>void
-}) {
+}): {
+	resubmitting: boolean,
+	setSubmission: (x: Submission)=>void,
+	alreadySolved: boolean,
+	acSubmission: Submission|null,
+	status: SubmissionStatus,
+	puzzle: Stage&{type: "puzzle"},
+	loading: boolean, nextStage: ()=>void
+} {
 	const [alreadySolved, setAlreadySolved] = useState(false);
 	useEffect(()=>{
 		setAlreadySolved(LocalStorage.solvedPuzzles?.has(puzzle.key)??false);
@@ -216,6 +223,16 @@ export function Submission({
 		}
 	}, [s]);
 
+	return {
+		acSubmission: status?.type=="done" && status.verdict.type=="AC" ? s : null,
+		status, loading, resubmitting: s!=null || alreadySolved, alreadySolved, puzzle,
+		nextStage, setSubmission: setS
+	};
+}
+
+export function Submission({
+	sub: {status, puzzle, nextStage, alreadySolved, acSubmission}
+}: {sub: ReturnType<typeof useSubmission>}) {
 	let inner = <></>;
 	if ((status?.type=="done" && status.verdict.type=="AC") || (!status && alreadySolved)) {
 		inner=<>
@@ -235,17 +252,9 @@ export function Submission({
 	}
 
 	return <>
-		<Button onClick={()=>{
-			setS(submission);
-		}} disabled={loading} icon={ loading && <ThemeSpinner size="sm" /> } >
-			{s!=null || alreadySolved ? "Res" : "S"}ubmit solution
-		</Button>
-
 		{inner}
 		<AlertErrorBoundary>
-			<Leaderboard
-				submission={status?.type=="done" && status.verdict.type=="AC" ? s : null}
-				puzzle={puzzle} />
+			<Leaderboard submission={acSubmission} puzzle={puzzle} />
 		</AlertErrorBoundary>
 	</>;
 }

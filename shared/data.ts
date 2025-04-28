@@ -44,4 +44,5 @@ export const data = [
 	{ type: "puzzle", ...puzzles[7] },
 	{ type: "puzzle", ...puzzles[8] },
 	{ type: "puzzle", ...puzzles[9] },
+	{ type: "puzzle", ...puzzles[10] },
 ] as const satisfies StageData[];

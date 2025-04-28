@@ -163,9 +163,11 @@ class TerminalEffect {
 	}
 }
 
-const StoryContext = createContext(undefined as unknown as {
+const StoryContext = createContext(undefined as {
 	active: boolean, last: "end"|"chapter"|"next", next: ()=>void
-});
+}|undefined);
+
+export const useDisableStoryAnimation = ()=>useContext(StoryContext)?.active==false;
 
 export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 	children?: ComponentChildren,
@@ -181,7 +183,7 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 	const src = useRef<HTMLDivElement>(null);
 	const [done, setDone] = useState(noCursor==true);
 	const [choice, setChoice] = useState<string|null>(null);
-	const ctx = useContext(StoryContext);
+	const ctx = useContext(StoryContext)!;
 
 	const [skip, setSkip] = useState(false);
 	const isActive = ctx.active && !skip;
@@ -209,7 +211,7 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 	
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	useEffect(()=>{
-		buttonRef.current?.focus();
+		buttonRef.current?.focus({preventScroll: true});
 	}, [done, choice]);
 
 	return <>
@@ -379,7 +381,7 @@ export function Messages({ stage }: { stage: Stage }) {
 			</div>
 		</Modal>
 
-		<IconButton icon={<IconMailFilled />} className="relative" onClick={()=>{
+		<IconButton icon={<IconMailFilled />} className={clsx("relative", open && bgColor.highlight2)} onClick={()=>{
 			setOpen(true);
 		}} >
 			{numUnread>0 && <Text v="sm" className={clsx("absolute -top-1 -right-4 place-content-center rounded-full h-6 w-6 animate-bounce", bgColor.red)} >{numUnread}</Text>}
@@ -421,7 +423,8 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 					: Math.max(0,lastChild.offsetTop + lastChild.clientHeight/2 - scroll.clientHeight/2);
 
 				const d = targetScrollTop-scroll.scrollTop;
-				scroll.scrollTop = scroll.scrollTop + (Math.abs(d)<5 ? d : d*dt*3/1000);
+				const ntop = Math.max(1,scroll.scrollTop + (Math.abs(d)<2 ? d : d*dt*3/1000));
+				scroll.scrollTo({top: ntop, behavior: "instant"});
 				setScrollTo = scroll.scrollTop;
 			}
 
@@ -435,7 +438,7 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 		const tm = setTimeout(()=>{ignoreScrollEvent=false;}, 250);
 
 		const cb = ()=>{
-			if (!ignoreScrollEvent && scroll!=null && scroll.scrollTop!=setScrollTo) {
+			if (!ignoreScrollEvent && scroll!=null && Math.abs(scroll.scrollTop-setScrollTo)>2) {
 				scrollLocked = scroll.scrollTop > scroll.scrollHeight - scroll.clientHeight - 75;
 			}
 		};

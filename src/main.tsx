@@ -2,9 +2,9 @@ import "disposablestack/auto";
 import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Input, Loading, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useMd } from "./ui";
 import { ComponentChildren, ComponentProps, createContext, render, JSX } from "preact";
 import { useCallback, useContext, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
-import { Editor, makeProc } from "./editor";
+import { Editor } from "./editor";
 import { Stage, stages, Story } from "./story";
-import { EditorState, Procedure, Register } from "../shared/eval";
+import { EditorState, makeEntryProc, Procedure } from "../shared/eval";
 import { IconBrandGithubFilled, IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled } from "@tabler/icons-preact";
 import { LocationProvider, Route, Router, useLocation } from "preact-iso";
 import { twMerge } from "tailwind-merge";
@@ -50,9 +50,10 @@ export function FadeRoute({className, ...props}: JSX.IntrinsicElements["div"]&{
 }
 
 function Footer() {
-  return <div className={`mt-20 ${textColor.dim} mb-10 flex flex-col items-center gap-2`} >
+  return <div className={`mt-5 ${textColor.dim} pl-3 mb-10 flex flex-col items-center gap-2`} >
     <p>
-      A game by <Anchor href="https://thomasqm.com" target="_blank" >Thomas Marlowe</Anchor>,
+      <span className="-ml-6" />
+      A game by <Anchor href="https://thomasqm.com" target="_blank" >Thomas Marlowe</Anchor>,<br />
       {" "}<Anchor href="https://github.com/kartva" target="_blank" >Kartavya Vashishtha</Anchor>,
       {" "}and <Anchor href="https://linkedin.com/in/peterjin25/" target="_blank" >Peter Jin</Anchor>.
     </p>
@@ -67,7 +68,8 @@ function Home() {
   const goto = useGoto();
   return <><FadeRoute className="flex flex-col items-center pt-10 gap-2 max-w-xl px-5" >
     <img src="/big.svg" />
-    <Text v="md" className="text-center" >A story-based puzzle game blending inductive reasoning, cryptography and assembly programming.</Text>
+    <Text v="big" className="text-center" >A story-based puzzle game</Text>
+    <Text v="md" className="text-center -mt-2" >blending inductive reasoning, cryptography,<br /> and assembly programming.</Text>
       
     <Text className="mt-3" >
       <b>Ready to join our team?</b> Apply for a summer internship today! <i>Anyone</i> with strong problem solving skills will excel in our fast-paced growth-oriented environment.
@@ -251,15 +253,7 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
       entryProcI = maxProc++;
     } else {
       entryProcI = maxProc++;
-      entryProc = {
-        ...makeProc("Main"),
-        registerList: [0], registers: new Map([
-          [0, {
-            name: "Input and output", type: "param"
-          } satisfies Register]
-        ]),
-        maxRegister: 1
-      };
+      entryProc = makeEntryProc(stage);
     }
     return {
       // occasionally, very rarely, hopefully never, maybe once
@@ -270,7 +264,7 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
       )),
       userProcList: userProcs.map(([i])=>i),
       maxProc, entryProc: entryProcI,
-      decoded: "", stepsPerS: LocalStorage.stepsPerS ?? 5,
+      stepsPerS: LocalStorage.stepsPerS ?? 5,
       solved: LocalStorage.solvedPuzzles?.has(stage.key) ?? false,
       undoHistory: [], procHistory: [], curNumUndo: 0
     };

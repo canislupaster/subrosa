@@ -33,6 +33,7 @@ export const bgColor = {
 	red: "dark:enabled:bg-red-800 enabled:bg-red-300",
 	rose: "dark:enabled:bg-rose-900 enabled:bg-rose-300",
 	highlight: "dark:bg-yellow-800 bg-amber-200",
+	highlight2: "dark:bg-teal-900 bg-cyan-200",
 	restriction: "dark:bg-amber-900 bg-amber-100",
 	divider: "dark:bg-zinc-500 bg-zinc-400",
 	contrast: "dark:bg-white bg-black"
@@ -95,7 +96,7 @@ export type ButtonProps = JSX.IntrinsicElements["button"]&{
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(({
 	className, disabled, icon, iconRight, ...props
 }, ref) => {
-	return <button ref={ref} disabled={disabled} className={twMerge(clsx("flex flex-row justify-center gap-1.5 px-2 py-1.5 items-center group", interactiveContainerDefault), className)} {...props} >
+	return <button ref={ref} disabled={disabled} className={twMerge(clsx("flex flex-row justify-center gap-1 px-2 py-1.5 items-center group", interactiveContainerDefault), className)} {...props} >
 		{icon}
 		{props.children}
 		{iconRight}
@@ -379,7 +380,7 @@ export function Text({className, children, v, ...props}:
 		case "lg": return <h3 className={twMerge(clsx("text-xl font-display font-extrabold", textColor.contrast, className))} {...props} >{children}</h3>;
 		case "dim": return <span className={twMerge(clsx("text-sm text-gray-500 dark:text-gray-400", className))} {...props} >{children}</span>;
 		case "sm": return <p className={twMerge(clsx("text-sm text-gray-800 dark:text-gray-200", className))} {...props} >{children}</p>;
-		case "code": return <code className={twMerge(clsx("break-all text-gray-800 dark:text-gray-200 font-semibold rounded-sm p-0.5", bgColor.md, className))} {...props} >{children}</code>;
+		case "code": return <code className={twMerge(clsx("break-all text-gray-800 dark:text-gray-200 font-semibold rounded-sm p-0.5 whitespace-pre-wrap", bgColor.md, className))} {...props} >{children}</code>;
 		case "err": return <span className={twMerge(clsx("text-red-500", className))} {...props} >{children}</span>;
 		default: return <p className={className} {...props} >{children}</p>;
 	}
@@ -609,7 +610,7 @@ function LazyAutoFocusSearch({search,setSearch,onSubmit}:{
 		return ()=>clearTimeout(t);
 	}, []);
 
-	return <form onSubmit={(ev)=>{
+	return <form className="w-full" onSubmit={(ev)=>{
 		onSubmit?.(); ev.preventDefault();
 	}} >
 		<Input placeholder="Search..." ref={ref}
@@ -659,7 +660,7 @@ export function Select<T>({ children, options, value, setValue, placeholder, cla
 		...searchable!=true ? [] : [{
 			type: "txt",
 			txt: <LazyAutoFocusSearch search={search} setSearch={setSearch} onSubmit={()=>{
-				if (parts.length==1 && parts[0].type=="act") {
+				if (parts.length>0 && parts[0].type=="act") {
 					parts[0].act(); ctx.incCount();
 				}
 			}} />,

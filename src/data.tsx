@@ -179,6 +179,9 @@ export const extraData: ExtraData = {
 			// </StoryParagraph>
 		]
 	},
+	team: {
+		blurb: "welcome aboard"
+	},
 	salad: {
 		blurb: "Company cultures are weird.",
 		solveBlurb: "How did Caesar, a military genius, ever believe his cipher was secure?"
@@ -727,7 +730,7 @@ export const extraData: ExtraData = {
 	vinegar: {
 		blurb: "Since you love secret keywords so much, here's another...",
 	},
-	abcdfghijklmnopqrstuvwxyz: {
+	abcdefghijklmnopqrstuvwxyz: {
 		blurb: "aeHv fnu!",
 	}
 } as const;
