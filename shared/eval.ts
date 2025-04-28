@@ -266,9 +266,9 @@ export const charMap = [
 export const charToNum = Object.fromEntries(charMap);
 export const numToChar = Object.fromEntries(charMap.map(([a,b])=>[b,a])) as Record<number,string>;
 
-export const stackLimit = 1024;
+const stackLimit = 1024;
 export const strLenLimit = 1024;
-export const timeLimit = 64*stackLimit;
+const timeLimit = 64*stackLimit;
 
 export function step(prog: ProgramState): "breakpoint"|boolean {
 	if (prog.stack.length==0) return false;
@@ -347,8 +347,9 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 		if (swap) [r,l]=[l,r];
 		
 		const mod = (a: number, b: number) => {
-			if (op=="add") return a+b;
-			return a-b;
+			// truncate to 32 bit signed (no infinities)
+			if (op=="add") return (a+b)|0;
+			return (a-b)|0;
 		};
 
 		let out: string|number;

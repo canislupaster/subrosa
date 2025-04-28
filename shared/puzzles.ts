@@ -100,7 +100,7 @@ export const puzzles = [
 			solve(inp) {
 				return inp.x*inp.y;
 			},
-			validator(inp) {
+			validator() {
 				return null;
 			}
 		})
