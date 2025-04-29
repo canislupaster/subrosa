@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "preact/hooks"
 import { alpha, RNG } from "../shared/puzzles";
 import { GotoContext } from "./main";
-import clsx from "clsx";
+import { twJoin } from "tailwind-merge";
 
 class BgAnim extends DisposableStack {
 	frame: number|null=null;
@@ -173,5 +173,5 @@ export function BgAnimComponent() {
 		};
 	}, [gotoCtx]);
 
-	return <pre ref={ref} className={clsx("overflow-hidden flex flex-row flex-wrap items-start fixed left-0 right-0 top-0 max-h-dvh w-[calc(100%+5rem)] transition-colors text-xl -z-10 duration-1000", unwriting ? "text-zinc-300" : "text-gray-600/10")} />;
+	return <pre ref={ref} className={twJoin("overflow-hidden flex flex-row flex-wrap items-start fixed left-0 right-0 top-0 max-h-dvh w-[calc(100%+5rem)] transition-colors text-xl -z-10 duration-1000", unwriting ? "text-zinc-300" : "text-gray-600/10")} />;
 }

@@ -6,8 +6,7 @@ import Tester from "../shared/worker?worker";
 import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor } from "./ui";
 import { StageData, stageUrl } from "../shared/data";
 import { blankStyle } from "./editor";
-import clsx from "clsx";
-import { twMerge } from "tailwind-merge";
+import { twMerge, twJoin } from "tailwind-merge";
 import { IconChevronDown } from "@tabler/icons-preact";
 import { Fragment } from "preact";
 
@@ -130,8 +129,8 @@ function Leaderboard({submission: s, puzzle}: {
 
 		<div className="max-h-60 overflow-y-auto self-stretch grid grid-cols-[auto_auto_1fr_1fr_1fr] items-stretch justify-stretch border-collapse gap-0" >
 			<div className="contents" >
-				<Text v="smbold" className={clsx(borderColor.default, "p-2 border-1")} >{"#"}</Text>
-				<Text v="smbold" className={clsx(borderColor.default, "p-2 border-1")} >Username</Text>
+				<Text v="smbold" className={twJoin(borderColor.default, "p-2 border-1")} >{"#"}</Text>
+				<Text v="smbold" className={twJoin(borderColor.default, "p-2 border-1")} >Username</Text>
 				{(["time", "nodes", "registers"] as const).map(x=>
 					<Button key={x} onClick={()=>{
 						setSort(x);
@@ -148,7 +147,7 @@ function Leaderboard({submission: s, puzzle}: {
 					toPrecStat(v.nodes),
 					toPrecStat(v.registers)
 				].map((cell,j)=>{
-					return <span key={j} className={clsx(
+					return <span key={j} className={twJoin(
 						data.tokenId.id==v.id ? bgColor.highlight : (i%2==0 ? bgColor.secondary : bgColor.md),
 						"p-2", borderColor.default, "border-1"
 					)} >{cell}</span>

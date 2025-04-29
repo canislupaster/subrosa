@@ -361,12 +361,7 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 				];
 			}
 		} else if (typeof l.current=="string" && typeof r.current=="string") {
-			out="";
-			for (let i=0; i<Math.min(l.current.length, r.current.length); i++) {
-				out+=numToChar[
-					(charMod+mod(charToNum[l.current[i]]??0, charToNum[r.current[i]]??0)%charMod)%charMod
-				];
-			}
+			out=l.current+r.current;
 		} else if (typeof l.current=="number" && typeof r.current=="number") {
 			out=mod(l.current, r.current);
 		}	else {
@@ -374,8 +369,7 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 		}
 
 		if (typeof out=="string") out=out.trimEnd();
-		if (swap) r.current=out;
-		else l.current=out;
+		if (swap) r.current=out; else l.current=out;
 	};
 
 	const arrOp = (idx: number, lhs: number, rhs?: number) => {
@@ -406,6 +400,7 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 	let next = last.i+1;
 	if (x.op=="breakpoint" && prog.stopOnBreakpoint
 		&& (x.conditional==null || castToNum(x.conditional)>0)) {
+
 		return "breakpoint";
 	} else if (x.op=="set") {
 		get(x.lhs).current = get(x.rhs).current;
@@ -423,14 +418,12 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 	} else if (x.op=="goto") {
 		let to: number|undefined;
 		if (x.ref=="end") to=lastProc.nodeList.length;
-		else if (x.ref!="unset") to = lastProc.nodeList.indexOf(x.ref); // 🤡 do i optimize? everything is so slow
+		// 🤡 do i optimize? everything is so slow
+		else if (x.ref!="unset") to = lastProc.nodeList.indexOf(x.ref);
 
 		if (to==-1 || to==undefined) throw new InterpreterError({ type: "noNodeToGoto" });
 
-		if (x.conditional!=null) {
-			const num = castToNum(x.conditional);
-			if (num>0) next=to;
-		} else {
+		if (x.conditional==null || castToNum(x.conditional)>0) {
 			next=to;
 		}
 	}

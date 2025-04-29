@@ -2,7 +2,7 @@ import { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { anchorStyle, bgColor, Divider, IconButton, LocalStorage, Modal, Select, Text, textColor, transparentNoHover } from "./ui";
 import { IconBookFilled, IconChevronLeft, IconChevronRight, IconX } from "@tabler/icons-preact";
-import clsx from "clsx";
+import { twJoin } from "tailwind-merge";
 
 type ReferencePage = {
 	key: string,
@@ -121,8 +121,8 @@ export function Reference({ referenceOpen, setReferenceOpen }: {
 	return <>
 		<Modal open={referenceOpen} onClose={()=>setReferenceOpen(false)} closeButton={false} >
 			<div className="flex flex-col gap-2 items-stretch" >
-				<div className={clsx("flex flex-row gap-2 justify-between", textColor.default)} >
-					<IconButton className={clsx("transition-transform enabled:hover:-translate-x-1", transparentNoHover)}
+				<div className={twJoin("flex flex-row gap-2 justify-between", textColor.default)} >
+					<IconButton className={twJoin("transition-transform enabled:hover:-translate-x-1", transparentNoHover)}
 						disabled={page==0} onClick={()=>setPage(page-1)} 
 						icon={<IconChevronLeft size={32} />} />
 					<Select options={referencePages.map((page,i)=>({
@@ -131,7 +131,7 @@ export function Reference({ referenceOpen, setReferenceOpen }: {
 						<Text v="big" className={anchorStyle} >{activePage.title}</Text>
 					</Select>
 					<div className="flex flex-row gap-2" >
-						<IconButton className={clsx("transition-transform enabled:hover:translate-x-1", transparentNoHover)}
+						<IconButton className={twJoin("transition-transform enabled:hover:translate-x-1", transparentNoHover)}
 							disabled={page==referencePages.length-1}
 							onClick={()=>setPage(page+1)} icon={<IconChevronRight size={32} />} />
 						<IconButton className={transparentNoHover} onClick={()=>setReferenceOpen(false)} icon={<IconX size={32} />} />
@@ -145,6 +145,6 @@ export function Reference({ referenceOpen, setReferenceOpen }: {
 			</div>
 		</Modal>
 		<IconButton icon={<IconBookFilled />} onClick={()=>setReferenceOpen(true)}
-			className={clsx(referenceOpen && bgColor.highlight2)} />
+			className={twJoin(referenceOpen && bgColor.highlight2)} />
 	</>;
 }

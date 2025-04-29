@@ -33,7 +33,12 @@ export const extraData: ExtraData = {
 		blurb: "Slowly, then all at once.",
 		para: [
 			<StoryParagraph asciiArt={<AsciiArt src="/img/belltower.png" />} />,
-			<StoryParagraph>
+			<StoryParagraph end={{
+				type: "choice", key: "testChoice", choices: [
+					{label: "hi", value: "1"},
+					{label: "bye", value: "2"}
+				]
+			}}>
 				<p>
 				Just {"[pause] "}like most things in life, it happened slowly, then all at once.
 				It was sunny April; yet your summer prospects were chilly. Lawson Commons buzzed with Amazon, Meta, and, for the insufferably ambitious: [pause]

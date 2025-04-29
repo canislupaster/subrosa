@@ -1,5 +1,5 @@
 import "disposablestack/auto";
-import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Input, Loading, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useMd } from "./ui";
+import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useMd } from "./ui";
 import { ComponentChildren, ComponentProps, createContext, render, JSX } from "preact";
 import { useCallback, useContext, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
 import { Editor } from "./editor";
@@ -7,8 +7,7 @@ import { Stage, stages, Story } from "./story";
 import { EditorState, makeEntryProc, Procedure } from "../shared/eval";
 import { IconBrandGithubFilled, IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled } from "@tabler/icons-preact";
 import { LocationProvider, Route, Router, useLocation } from "preact-iso";
-import { twMerge } from "tailwind-merge";
-import clsx from "clsx";
+import { twMerge, twJoin } from "tailwind-merge";
 import { parseExtra, stringifyExtra } from "../shared/util";
 import { stageUrl } from "../shared/data";
 import { useStageCount } from "./api";
@@ -57,7 +56,7 @@ function Footer() {
       {" "}<Anchor href="https://github.com/kartva" target="_blank" >Kartavya Vashishtha</Anchor>,
       {" "}and <Anchor href="https://linkedin.com/in/peterjin25/" target="_blank" >Peter Jin</Anchor>.
     </p>
-    <p><Anchor href="https://github.com/canislupaster/subrose" className={clsx("items-center", textColor.dim)}
+    <p><Anchor href="https://github.com/canislupaster/subrose" className={twJoin("items-center", textColor.dim)}
       target="_blank" >
       <IconBrandGithubFilled /> GitHub
     </Anchor></p>
@@ -108,6 +107,35 @@ type Save = {
   procs: [number, Procedure][]
 };
 
+class ProcStorage {
+  savedProcs = new Map<number, Procedure|null>();
+  constructor() {}
+  getProc(i: number): Procedure|null {
+    const proc = parseExtra(localStorage.getItem(`proc${i}`)) as Procedure|null;
+    this.savedProcs.set(i, proc);
+    return proc;
+  }
+  getUserProcs() {
+    return (LocalStorage.userProcs ?? [])
+      .map((i): [number,Procedure]=>[i, this.getProc(i)!]);
+  }
+  getAllProcs() {
+    return [
+      ...LocalStorage.userProcs ?? [],
+      ...[...LocalStorage.puzzleProcs?.values() ?? []]
+        .filter((x: unknown): x is number => typeof x=="number")
+    ].map((i): [number,Procedure]=>[i, this.getProc(i)!]);
+  }
+  setProc(i: number, proc: Procedure) {
+    if (this.savedProcs.get(i)==proc) return;
+    this.savedProcs.set(i, proc);
+    localStorage.setItem(`proc${i}`, stringifyExtra(proc));
+  }
+  setProcs(procs: [number, Procedure][]) {
+    for (const [i,x] of procs) this.setProc(i,x);
+  }
+}
+
 function getCompleted() {
   const story =  LocalStorage.readStory ?? new Set();
   const puzzle =  LocalStorage.solvedPuzzles ?? new Set();
@@ -151,7 +179,7 @@ function Menu() {
           (LocalStorage[k as keyof LocalStorage] as unknown) = save.localStorage[k as keyof LocalStorage] as unknown;
         }
         
-        procStorage.setProcs(save.procs);
+        new ProcStorage().setProcs(save.procs);
         setCompleted(getCompleted());
         setImporting(false);
       }} className="flex flex-col gap-2" >
@@ -168,9 +196,9 @@ function Menu() {
     <Logo />
     <Text v="big" >Table of contents</Text>
 
-    <div className={clsx(bgColor.default, "w-full py-2 px-2 relative -my-2 overflow-hidden")} >
+    <div className={twJoin(bgColor.default, "w-full py-2 px-2 relative -my-2 overflow-hidden")} >
       <Text v="md" className="relative z-20" >{activeStages}/{stages.length} ({percentProgress})</Text>
-      <div className={clsx(bgColor.green, "absolute rounded-r-md top-0 bottom-0 left-0 z-10")} style={{width: percentProgress}} />
+      <div className={twJoin(bgColor.green, "absolute rounded-r-md top-0 bottom-0 left-0 z-10")} style={{width: percentProgress}} />
     </div>
 
     {withDone.flat().map(stage=>{
@@ -182,11 +210,11 @@ function Menu() {
         } : undefined} >
         <div className="flex flex-row gap-2 items-center" >
           {stage.done ? <IconCircleCheckFilled /> : stage.i<=activeStages && <IconCircleDashedCheck />}
-          <Text v="bold" className={clsx(a ? anchorUnderline : textColor.dim)} >{stage.name}</Text>
+          <Text v="bold" className={twJoin(a ? anchorUnderline : textColor.dim)} >{stage.name}</Text>
           {stage.type=="puzzle" && <IconPuzzleFilled />}
         </div>
         {stage.i<=activeStages && <IconChevronRight size={36} className="transition-transform group-hover:translate-x-4 absolute top-2 right-4" />}
-        <Text v="sm" className={clsx(!a && textColor.dim)} >{stage.blurb}</Text>
+        <Text v="sm" className={twJoin(!a && textColor.dim)} >{stage.blurb}</Text>
       </div>
     })}
 
@@ -197,7 +225,7 @@ function Menu() {
       <Anchor onClick={()=>{
         const txt = stringifyExtra({
           localStorage: LocalStorage,
-          procs: procStorage.getAllProcs()
+          procs: new ProcStorage().getAllProcs()
         } satisfies Save);
 
         void window.navigator.clipboard.writeText(txt);
@@ -210,44 +238,22 @@ function Menu() {
   </FadeRoute><BgAnimComponent /></>;
 }
 
-const procStorage = {
-  savedProcs: new Map<number, Procedure>(),
-  getProc(i: number): Procedure|null {
-    return parseExtra(localStorage.getItem(`proc${i}`)) as Procedure|null;
-  },
-  getUserProcs() {
-    return (LocalStorage.userProcs ?? [])
-      .map((i): [number,Procedure]=>[i, this.getProc(i)!]);
-  },
-  getAllProcs() {
-    return [
-      ...LocalStorage.userProcs ?? [],
-      ...[...LocalStorage.puzzleProcs?.values() ?? []]
-        .filter((x: unknown): x is number => typeof x=="number")
-    ].map((i): [number,Procedure]=>[i, this.getProc(i)!]);
-  },
-  setProc(i: number, proc: Procedure) {
-    if (this.savedProcs.get(i)==proc) return;
-    this.savedProcs.set(i, proc);
-    localStorage.setItem(`proc${i}`, stringifyExtra(proc));
-  },
-  setProcs(procs: [number, Procedure][]) {
-    for (const [i,x] of procs) this.setProc(i,x);
-  }
-};
-
 function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
   const throttleSave = useFnRef(()=>throttle(2000, true), []);
   useStageCount(stage);
+  const procStorage = useRef<ProcStorage>(null);
+  useEffect(()=>{ procStorage.current = new ProcStorage(); }, []);
 
-  const [edit, setEdit] = useState<EditorState>(()=>{
-    const userProcs = procStorage.getUserProcs();
+  const [edit, setEdit] = useState<EditorState|null>(null);
+
+  useEffect(()=>{
+    const userProcs = procStorage.current!.getUserProcs();
     // backwards compat for like 2 people
     let maxProc = LocalStorage.maxProc ?? Math.max(0, ...userProcs.map(([i])=>i+1));
     let entryProcI = LocalStorage.puzzleProcs?.get(stage.key);
     let entryProc: Procedure;
     if (typeof entryProcI=="number") {
-      entryProc = procStorage.getProc(entryProcI)!;
+      entryProc = procStorage.current!.getProc(entryProcI)!;
     } else if (entryProcI && typeof entryProcI=="object") {
       entryProc = entryProcI;
       entryProcI = maxProc++;
@@ -255,7 +261,8 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
       entryProcI = maxProc++;
       entryProc = makeEntryProc(stage);
     }
-    return {
+
+    setEdit({
       // occasionally, very rarely, hopefully never, maybe once
       // stupid fucking drag and drop library didnt call perform transfer
       // and it polluted my node list
@@ -266,16 +273,16 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
       maxProc, entryProc: entryProcI,
       stepsPerS: LocalStorage.stepsPerS ?? 5,
       solved: LocalStorage.solvedPuzzles?.has(stage.key) ?? false,
-      undoHistory: [], procHistory: [], curNumUndo: 0
-    };
-  });
+      undoHistory: [], curNumUndo: 0
+    });
+  }, [stage]);
   
   const setEdit2 = useCallback((cb: (old: EditorState)=>EditorState)=>setEdit(old=>{
-    const ns = cb(old);
+    const ns = cb(old!);
 
     throttleSave.current?.call(()=>{
       LocalStorage.stepsPerS = ns.stepsPerS;
-      procStorage.setProcs(
+      procStorage.current!.setProcs(
         [...ns.procs.entries()].map(([k,v]): [number, Procedure]=>[k, v])
       );
 
@@ -288,9 +295,11 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
   }), [stage.key, throttleSave]);
 
   const goto = useGoto();
-  return <FadeRoute><Editor edit={edit} setEdit={setEdit2} puzzle={stage} nextStage={()=>{
-    goto(stageUrl(stages[i+1]));
-  }} /></FadeRoute>;
+  return edit && <FadeRoute>
+    <Editor edit={edit} setEdit={setEdit2} puzzle={stage} nextStage={()=>{
+      goto(stageUrl(stages[i+1]));
+    }} />
+  </FadeRoute>;
 }
 
 function PuzzleStageWrap(props: ComponentProps<typeof PuzzleStage>) {
@@ -314,7 +323,7 @@ function PuzzleStageWrap(props: ComponentProps<typeof PuzzleStage>) {
     };
   }, []);
   
-  if (editingElsewhere==null) return <Loading />;
+  if (editingElsewhere==null) return <></>;
   if (editingElsewhere) return <ErrorPage errName="Don't open up multiple tabs!" >
     You might impinge on the spatial-temporal consistency of your programs! Your progress might be nuked! I didn't design for this! What kind of game syncs progress between multiple windows?!
   </ErrorPage>;

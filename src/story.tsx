@@ -1,10 +1,10 @@
 import { ComponentChildren, createContext, Fragment } from "preact";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, textColor, IconButton, borderColor, mapWith, Modal } from "./ui";
-import clsx from "clsx";
 import { data } from "../shared/data";
 import { extraData, Message, messages } from "./data";
 import { IconMailFilled, IconUserCircle } from "@tabler/icons-preact";
+import { twJoin } from "tailwind-merge";
 
 export function useStoryState<T=string>(key: string) {
 	const [x, setX] = useState<T>();
@@ -182,7 +182,11 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 	const ref = useRef<HTMLDivElement>(null);
 	const src = useRef<HTMLDivElement>(null);
 	const [done, setDone] = useState(noCursor==true);
-	const [choice, setChoice] = useState<string|null>(null);
+	const [choice, setChoice] = useState<string|null>(()=>{
+		if (end?.key==null) return null;
+		return LocalStorage.storyState?.[end?.key] as string|undefined ?? null;
+	});
+
 	const ctx = useContext(StoryContext)!;
 
 	const [skip, setSkip] = useState(false);
@@ -215,24 +219,26 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 	}, [done, choice]);
 
 	return <>
-		{asciiArt!=undefined && <pre className={clsx("self-center text-[10px] text-center", !ctx.active && "dark:text-zinc-200")} >
+		{asciiArt!=undefined && <pre className={twJoin("self-center text-[10px] text-center", !ctx.active && "dark:text-zinc-200")} >
 			{asciiArt}
 		</pre>}
 
 		{noCursor!=true && children!=undefined && <div hidden ref={src} >{children}</div>}
-		{children!=undefined && <div key={noCursor} ref={ref} className={clsx(!ctx.active && "dark:text-zinc-200", "main-text w-full", ctx.active && !skip && "animate-fade-in")} >
+		{children!=undefined && <div key={noCursor} ref={ref} className={twJoin(!ctx.active && "dark:text-zinc-200", "main-text w-full", ctx.active && !skip && "animate-fade-in")} >
 			{noCursor==true && children}
 		</div>}
 
-		{done && end?.choices && <div className="flex flex-row gap-2 flex-wrap" >
+		{done && end?.choices && <div className="flex flex-row gap-2 flex-wrap -mb-2" >
 			{end.choices.map(v=>
 				<Button key={v.value} onClick={()=>setChoice(v.value)} className={
-					v.value==choice ? clsx(bgColor.secondary, "dark:hover:border-green-400 dark:border-green-400 dark:disabled:bg-zinc-900") : `theme:bg-transparent`
+					v.value==choice ? twJoin(
+						bgColor.md, "dark:hover:border-green-400 dark:border-green-400 theme:disabled:text-inherit"
+					) : `bg-transparent!`
 				} disabled={!ctx.active} >{v.label}</Button>
 			)}
 		</div>}
 		
-		{done && (end?.type!="choice" || choice!=null) && <div className={clsx("ignore-scroll w-full py-2 flex flex-row justify-center gap-4 items-center", ctx.active && "animate-fade-in")} >
+		{done && (end?.type!="choice" || choice!=null) && <div className={twJoin("ignore-scroll w-full py-2 flex flex-row justify-center gap-4 items-center", ctx.active && "animate-fade-in")} >
 			<Divider className="w-auto grow" />
 			{ctx.active && (ctx.last=="end" ? <>
 				<Text v="md" >The End</Text>
@@ -277,7 +283,7 @@ type MessageProps = {
 };
 
 function MessageView({ message, time, reply, inReply }: MessageProps&{inReply?: boolean}) {
-	return <div className={clsx(inReply!=true && "py-3 pb-10 grow overflow-y-auto")} >
+	return <div className={twJoin(inReply!=true && "py-3 pb-10 grow overflow-y-auto")} >
 		<div className="flex flex-col gap-2 items-stretch px-3" >
 			<div className="flex flex-row justify-between" >
 				<Text v="md" > {message.subject} </Text>
@@ -295,7 +301,7 @@ function MessageView({ message, time, reply, inReply }: MessageProps&{inReply?: 
 		<Divider />
 		<div className="px-3 flex flex-col gap-2" >
 			{message.content}
-			{reply && <div className={clsx("pl-1 border-l-2", borderColor.blue)} >
+			{reply && <div className={twJoin("pl-1 border-l-2", borderColor.blue)} >
 				<MessageView {...reply} inReply={true} />
 			</div>}
 		</div>
@@ -356,12 +362,12 @@ export function Messages({ stage }: { stage: Stage }) {
 		<Modal open={open} onClose={()=>setOpen(false)} title="Mail" className="pb-0" >
 			<div className="flex flex-row items-stretch -mt-2 -mx-6 min-h-0" >
 				<div className="flex flex-col basis-1/3 min-h-20 overflow-y-auto shrink-0 items-stretch pb-5" >
-					{messageList.map((msg,i)=><button key={msg.message.key} className={clsx("flex flex-row gap-3 border-b-1 p-4 items-start justify-stretch", borderColor.default, msg==activeMessage ? bgColor.secondary : bgColor.hover)} disabled={msg==activeMessage} onClick={()=>{
+					{messageList.map((msg,i)=><button key={msg.message.key} className={twJoin("flex flex-row gap-3 border-b-1 p-4 items-start justify-stretch", borderColor.default, msg==activeMessage ? bgColor.secondary : bgColor.hover)} disabled={msg==activeMessage} onClick={()=>{
 						const nmsg = {...msg, read: true};
 						setMessages(messageList.toSpliced(i, 1, nmsg));
 						setActiveMessage(nmsg);
 					}} >
-						{!msg.read && <div className={clsx("animate-pulse rounded-full mt-2 h-4 w-4 aspect-square", bgColor.sky)} />}
+						{!msg.read && <div className={twJoin("animate-pulse rounded-full mt-2 h-4 w-4 aspect-square", bgColor.sky)} />}
 						<div className="flex flex-col gap-1 text-left grow items-stretch" >
 							<Text v="lg" >{msg.message.subject}</Text>
 							<Text v="sm" className="flex flex-row gap-1 items-center mt-1 ml-1" >
@@ -381,10 +387,10 @@ export function Messages({ stage }: { stage: Stage }) {
 			</div>
 		</Modal>
 
-		<IconButton icon={<IconMailFilled />} className={clsx("relative", open && bgColor.highlight2)} onClick={()=>{
+		<IconButton icon={<IconMailFilled />} className={twJoin("relative", open && bgColor.highlight2)} onClick={()=>{
 			setOpen(true);
 		}} >
-			{numUnread>0 && <Text v="sm" className={clsx("absolute -top-1 -right-4 place-content-center rounded-full h-6 w-6 animate-bounce", bgColor.red)} >{numUnread}</Text>}
+			{numUnread>0 && <Text v="sm" className={twJoin("absolute -top-1 -right-4 place-content-center rounded-full h-6 w-6 animate-bounce", bgColor.red)} >{numUnread}</Text>}
 		</IconButton>
 	</>;
 }

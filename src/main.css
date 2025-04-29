@@ -65,15 +65,16 @@ button:not(:disabled) {
 
 .editor {
 	grid-template:
-		"a a a" 3.5rem
-		"b c d" 1fr
-		"b c d" 1.8fr / 1.2fr 1fr 0.7fr;
+		"a a a a" 3.5rem
+		"b c d e" 1fr
+    "b c d e" 1.8fr / 1.2fr auto 1fr 0.7fr;
 }
 
 .editor-top { grid-area: a; }
+.editor-nodebar { grid-area: c; }
 .editor-left { grid-area: b; }
-.editor-right { grid-area: d; }
-.editor-mid { grid-area: c; }
+.editor-right { grid-area: e; }
+.editor-mid { grid-area: d; }
 
 .main-text p {
   text-indent: 1rem;
