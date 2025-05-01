@@ -419,7 +419,7 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 		let animFrame: number;
 		let lt = performance.now();
 		const animateScroll = ()=>requestAnimationFrame((t: number)=>{
-			const dt = t-lt;
+			const dt = Math.min(t-lt, 50);
 			const lastChild = [...container.children]
 				.findLast(x=>!x.classList.contains("ignore-scroll")) as HTMLElement|null;
 
@@ -458,14 +458,17 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 		};
 	}, []);
 
-	return <div className="flex flex-col gap-2 justify-start items-start max-w-2xl grow story-container"
+	return <div className="mt-5 flex flex-col gap-2 justify-start items-start max-w-2xl grow story-container"
 		ref={containerRef} >
 
 		<div className="flex flex-row self-stretch justify-between gap-2 items-center" >
 			<Text v="big" className="my-4" >{stage.name}</Text>
-			<div className="flex flex-col gap-1 items-end" >
+			<div className="flex flex-row gap-2 items-end" >
 				<Anchor className={textColor.dim} onClick={()=>setIndex(stage.para.length)} >Skip chapter</Anchor>
-				{index>0 && <Anchor className={textColor.dim} onClick={()=>setIndex(0)} >Reset chapter</Anchor>}
+				{index>0 && <>
+					<Divider vert />
+					<Anchor className={textColor.dim} onClick={()=>setIndex(0)} >Reset chapter</Anchor>
+				</>}
 			</div>
 		</div>
 

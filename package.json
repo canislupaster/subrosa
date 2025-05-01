@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@formkit/auto-animate": "^0.8.2",
     "@formkit/drag-and-drop": "^0.4.2",
     "@tabler/icons-preact": "^3",
     "disposablestack": "^1",

@@ -77,7 +77,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>((
 });
 
 export function HiddenInput({className, ...props}: JSX.InputHTMLAttributes<HTMLInputElement>&{className?: string}) {
-	return <input className={twMerge(twJoin("bg-transparent border-0 outline-none border-b-2 focus:outline-none focus:theme:border-blue-500 transition duration-300 px-1 py-px pb-0.5 h-fit", borderColor.default, className))}
+	return <input className={twMerge("bg-transparent border-0 outline-none border-b-2 focus:outline-none focus:theme:border-blue-500 transition duration-300 px-1 py-px pb-0.5 h-fit", borderColor.default, className)}
 		{...props} />;
 }
 
@@ -177,8 +177,8 @@ export const Alert = ({title, txt, bad, className}: {
 		</div>
 	</div>;
 
-export const Divider = ({className, contrast}: {className?: string, contrast?: boolean}) =>
-	<span className={twMerge(twJoin("w-full h-px shrink-0 block", contrast??false ? "dark:bg-zinc-400 bg-zinc-500" : "dark:bg-zinc-600 bg-zinc-300", "my-2", className))} />;
+export const Divider = ({className, contrast, vert}: {className?: string, contrast?: boolean, vert?: boolean}) =>
+	<span className={twMerge(twJoin("shrink-0 block", vert==true ? "w-px h-5 self-center pb-1" : "w-full h-px my-2", contrast??false ? "dark:bg-gray-400 bg-gray-500" : "dark:bg-gray-600 bg-zinc-300", className))} />;
 
 export const Card = ({className, children, ...props}:
 	JSX.HTMLAttributes<HTMLDivElement>&{className?: string}
@@ -256,8 +256,9 @@ export const ShowTransition = forwardRef<HTMLElement, ShowTransitionProps>(({
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open, show]);
 
+	const cloneRef = useCloneRef(ref, myRef);
 	if (children==undefined || !show) return <></>;
-	return cloneElement(children as VNode, { ref: cloneRef(ref, myRef) });
+	return cloneElement(children as VNode, { ref: cloneRef });
 });
 
 // init=true -> dont animate expanding initially
@@ -312,7 +313,7 @@ export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&
 		};
 	}, [open, speed]);
 
-	return <div ref={cloneRef(ref, myRef)} className={twMerge("overflow-hidden", className as string)}
+	return <div ref={useCloneRef(ref, myRef)} className={twMerge("overflow-hidden", className as string)}
 		style={{height: 0, ...style as JSX.CSSProperties}} {...props} >
 		<div ref={innerRef} >
 			{showInner && children}
@@ -425,13 +426,15 @@ export function Modal({bad, open, onClose, closeButton, title, children, classNa
 
 const PopupCountCtx = createContext({count: 0, incCount(this: void): number {return 0;}});
 
-export function cloneRef<T>(...refs: (Ref<T>|undefined)[]): (x: T|null)=>void {
-	return x=>{
+// number of args shouldn't change
+export function useCloneRef<T>(...refs: (Ref<T>|undefined)[]): (x: T|null)=>void {
+	return useCallback(x=>{
 		for (const r of refs) {
 			if (typeof r == "function") r(x);
 			else if (r!=null) r.current=x;
 		}
-	};
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [...refs]);
 }
 
 //opens in modal if already in tooltip...
@@ -494,7 +497,7 @@ export const AppTooltip = forwardRef(({
 	}, [incCount, interact, isOpen, noClick, noHover, reallyOpen, unInteract]);
 
 	return <Popover
-		ref={cloneRef(targetRef, ref)}
+		ref={useCloneRef(targetRef, ref)}
 		onClickOutside={()=>incCount()}
 		positions={placement ?? ['top', 'right', 'left', 'bottom']}
 		containerStyle={{ zIndex: "100000" }}
@@ -893,9 +896,10 @@ export function debounce(ms: number) {
 			if (ts!=null) clearTimeout(ts);
 			ts=setTimeout(()=>f(), ms);
 		},
-		[Symbol.dispose]() {
-			if (ts!=null) clearTimeout(ts);
-		}
+		cancel() {
+			if (ts!=null) { clearTimeout(ts); ts=null; }
+		},
+		[Symbol.dispose]() { this.cancel(); }
 	} as const;
 }
 

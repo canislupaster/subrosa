@@ -1,10 +1,11 @@
 // arrays of paragraphs are keyed in Story
 /* eslint-disable react/jsx-key */
 
-import { ComponentChildren } from "preact";
+import { cloneElement, ComponentChild, ComponentChildren, createElement, FunctionComponent, VNode } from "preact";
 import { data } from "../shared/data";
 import { StoryParagraph } from "./story";
 import { AsciiArt } from "./asciiart";
+import ch1 from "./content/ch1.md?raw";
 
 type ExtraData = Readonly<{ [K in typeof data[number]["key"]]:
 	Readonly<(((typeof data)[number]&{key: K})["type"] extends "story" ? {
@@ -28,165 +29,80 @@ export type Message = {
 	replyTo?: string
 };
 
+function parse(src: string): ComponentChildren[] {
+	const componentMap = { StoryParagraph, AsciiArt };
+	// i love regex (note this only works for some escapes)
+	const esc = "(?<![^\\\\]\\\\\\\\\\\\|[^\\\\]\\\\)";
+	const unesc = (x: string)=>x.split("\\\\").map(x=>x.replaceAll("\\","")).join("\\");
+	const attrRe = `(?<attr>\\w+)(?:\\s*=\\s*(?<attrv>${esc}".+${esc}"|[\\d.]+|null))?`;
+	const substitutions: [string, (match: RegExpExecArray)=>ComponentChildren][] = [
+		[`${esc}<(?<tag>\\w+)(?<attrs>\\s${attrRe})*\\s*(?:\\/>|>(?<inner>.*?)${esc}<\\/\\s*\\1\\s*>)`, (match)=>{
+			const tag = match.groups!["tag"];
+			const props = Object.fromEntries((match.groups?.["attrs"] ?? "")
+				.matchAll(new RegExp(attrRe, "g")).map(v=>{
+					const name = v.groups!["attr"], val = v.groups?.["attrv"];
+					return [
+						name,
+						val==undefined ? true
+							: val.startsWith("\"") ? unesc(val.slice(1,val.length-1))
+							: val=="null" ? null : Number.parseFloat(val)
+					];
+				}));
+
+			return createElement(componentMap[tag as keyof typeof componentMap] as unknown as FunctionComponent<{children?: ComponentChildren}> ?? tag, {
+				...props, children: match.groups?.["inner"]
+			});
+		}],
+		[`${esc}${"`"}(.+?)${esc}${"`"}`, (match) => <code>{match[1]}</code>],
+		[`(?:^|\\n)(#{1,6}) (.+)`, (match) => createElement(`h${match[1].length}`, { children: match[2] })],
+		[`${esc}\\*\\*(.+?)${esc}\\*\\*`, (match)=><b>{match[1]}</b>],
+		[`${esc}\\*(.+?)${esc}\\*`, (match)=><i>{match[1]}</i>]
+	];
+
+	const substitutionsRe = substitutions.map(([k,v])=>[new RegExp(k,"g"), v] as const);
+	
+	const replaceRec = (x: ComponentChildren): ComponentChildren => {
+		if (Array.isArray(x)) return x.map(v=>replaceRec(v as ComponentChild));
+		else if (x!=null && typeof x=="object" && "children" in x) {
+			const y = x as VNode<unknown>;
+			return cloneElement(y, { children: replaceRec(y.props.children) });
+		} else if (x==null || x==false || typeof x=="object") {
+			return "";
+		}
+
+		const str = x.toString();
+		const out: ComponentChildren[] = [];
+		let curI = 0;
+
+		for (const [reg, sub] of substitutionsRe) {
+			reg.lastIndex=curI;
+			const match = reg.exec(str);
+
+			if (match) {
+				out.push(str.slice(curI, match.index), sub(match));
+				curI = reg.lastIndex;
+			}
+		}
+
+		out.push(str.slice(curI).split(/\n\s*\n/g).map(v=><p>{unesc(v)}</p>));
+
+		if (out.length==1) return out;
+		return replaceRec(out.filter(v=>v!=null && v!=""));
+	};
+	
+	const ret = replaceRec(src);
+	if (Array.isArray(ret)) return ret;
+	return [ret];
+}
+
 export const extraData: ExtraData = {
 	intro: {
 		blurb: "Slowly, then all at once.",
-		para: [
-			<StoryParagraph asciiArt={<AsciiArt src="/img/belltower.png" />} />,
-			<StoryParagraph end={{
-				type: "choice", key: "testChoice", choices: [
-					{label: "hi", value: "1"},
-					{label: "bye", value: "2"}
-				]
-			}}>
-				<p>
-				Just {"[pause] "}like most things in life, it happened slowly, then all at once.
-				It was sunny April; yet your summer prospects were chilly. Lawson Commons buzzed with Amazon, Meta, and, for the insufferably ambitious: [pause]
-				“unemployment in San Francisco.”
-				</p>
-				<p>
-				Scrolling on the latest iPhone® bought with money better spent on next semester’s tuition, you weren’t hoping for much.
-				Perhaps another fifteen-second TikTok would unlock the secret to eternal happiness.
-				</p>
-			</StoryParagraph>,
-			<StoryParagraph>
-				<p>
-				 “Ding!” goes your inbox, a noise so unfamiliar you think it’s part of the Top Ten Skateboard Tricks Doctors Didn’t Want You To Know.
-				 </p>
-				 <p>
-				 Mikah actually came through with his referral. “Interview Request from Subrose Systems.”
-				 You don’t know what they do. Neither does their website, coincidentally.
-				 The interviews pass in a haze.
-				 HR gently weeps with joy as you accept an offer without negotiating once,
-					at the same time as you gently weep your own joyful tears on affording the rest of your education <i>and</i> a car.
-				</p>
-			</StoryParagraph>,
-			<StoryParagraph noCursor={true} asciiArt={`:---------------------------------------- 
-::*#+##     *##*+++==#+:---=++++++++++++- 
-:.+=:  =####*=---:  #%#:===--=++++*++*++- 
-:::**+=:=+++==@%@@@- -%@@%%@#==+     =+=- 
-::=+ :+++ .:-:-:.#@@*@#@@-------+*****++- 
-:.:.:==+=--@@@@@@.@@:@*@----*#*=--=+=++=- 
-::+++==--:**+  --@@%##@@-.@%@@@%---===++- 
-:.=====-#%@@@@@%*+:@+#@+@@**@=#%##-===+=- 
-:.=====:@#=::.-=##-%@@@#++--.----*======: 
-:.====::-- @@%%-==--:+@#+@@@@@----:--===: 
-: ------:#%%%%@@@@--.+*@%@@@%%###*=----=: 
-: ==---####= :::--@@@@@.-:.=##########--: 
-: ---%@*-------=%#%@+@-+@@@-------==###:  
-:   #.       #%#*=@  @  :#@@%#---------=  
-: -        #@@+   .. @ .. *##=:::::-----: 
-:   :---=:@%@@.:-  ..@.. .-+@--:---:..::  
-: =- .    -%@:  ::   +..=.   .:-:-.-----. 
-: -=+****+-@.:..:. ..@@.:--::-:::-::::::  
-: ..::::.    :===+*+ %% =-----::::::::--  
-: ::...::::....::.:::#*.:--::-:--:::-:::  
-: ..:.::...::....::-.%@.:::::::::::--..:  
-: ---..:-::::--:::.::#%.:-------====:::=  
-:                    +=              @    
-:-@@@@@@@@@@@@@@@@@@+*@#%%%%@@%@@@@@#@%@- 
-::====-==-=-==-::.--.#*::-*-.--::.......  
-:    ::::-:--:---==- @*:-:.   .....       
-: %%%#*+==:...::... .@........:::::::---  
-:   .......::::..:..-@+  .@@@...:::-....  
-: +-+===---::.......%@@%*@ ..=    .....:  
-: :.....:.--.@@@@@@@@. .+=#%@@@@@@=#**=:  
-: .-::::-...:. .-%@#@@@@@@#@*--++::...--  
-: -:.::-:::::...                  ......  
-:   ..                                    
-:@@+ - @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 
-:@@@@@@ @@@@@@@@@@@@@@@@@@@@@@@@#*#*#**@@     
-`} />,
-			<StoryParagraph>
-				<p>
-				Sunny California is a welcome respite from bitter midwest winds.
-				All the Hawaiian shirts in North America have seemingly found their home in this particular district of the Bay.
-				You show up to a hair dresser’s shop instead of the sleek glass pyramid you’d expect.
-				An awkward Korean exchange with the hairdresser (complicated by the fact you don’t speak Korean),
-					you climb the stairs to the second floor. You’re in the right place –
-						only a tech firm without a branding team would have lawn grass in a pot at reception.
-				</p>
-				[pause]
-				<p>
-				As you speak to the receptionist who’s name you vow to remember and immediately forget,
-					you’re taking in the little details. It feels like WeWork has risen again from the dead,
-					and this is their comeback attempt.
-				There are more beanbags than office chairs and every desk has more than the correct amount of chairs (one).
-				You can tell that attempts to browse r/dnd on company time will be met with a
-					swift barrage of “Ohmygosh you should join our Dungeons ‘n Dragons lunch group!”.
-				</p>
-			</StoryParagraph>,
-			<StoryParagraph noCursor={true} asciiArt={`::.::::---------:::::::::----------------------------: 
-:::--------------------------------------------------- 
-:-:--------------------------------------------------- 
-:----------------------------------------------------- 
-:-------:--------------------------:------------------ 
-:---------:=-----:-----------------.------------------ 
-:-:---------:---=-:----:----------=:------------------ 
-:--:::-----:-:--+-.--:-.----::---.---.----::---------- 
-:---:--..-.-:-=:%-.-=-.=:---:.--:-=--=---=.----------- 
-::------::-=---:#-:-.-+@:--=-.=----==.-.:--:---------- 
-::---------:+:--%-:@.-:=---.+:=-.==:--*#-------------- 
-:::..:::---=:-+--@.-@@.+=.==-+%*.+..#%-+--=:---------- 
-::---+:+-=:+--:-:*@.:#-#%.:@:*.*+#=-*+-.=-:=::--::---- 
-::::----+:==:@:@+.++%*..@-:@:%#@=+-@-.::=::-=-=------- 
-:----.+:--=%.@-=%*+@-@%.*@-@.@.@*=*.=-%-%--:..:------- 
-:-::--:-+#=@:@@@@@@--@-@.@#@-@.@=.*-@#.:-:=----------- 
-:------:.-:::*+-..*=:@@@:@@.*.@++%+=.-:*=------------- 
-:--::-----------%@@=@*%-@:@.#+@*-%+#*----------------- 
-:----------------@@:@-*@#@@.-@:-#@+----::------------- 
-:---------------- @@@@@@@@@@@+@@% -------------------- 
-:----------------#                -------------------- 
-:--:-------------#:.......   .   .-------------------- 
-:::::::----------#-  ...     .   --------------------- 
-:----------------%-....      .   --------------------- 
-: +++==+++++++**=*+.....         *=+==---===+=-------- 
-: :.............: #.  .....  .   =............:....... 
-: :.:::---------=:#:.......     ==--::::::::.........: 
-: .:............::*-......      =......     . .        
-: =====++*****###*@@-::.....   .-..........:::--:----: 
-: .:..::::......:::=*##*=-::::.........::-:.   .       
-: =--==---===+++-:..  ::---::. .....       ....:-.==++ 
-:.---::----==--=::::-:........::::------==-:...  ..... 
-:   .             ::::::.:----.::....     .:---=-:...  
-:...     .      .. ..........                 .       
-`} />,
-			<StoryParagraph>
-				<p>
-				Your attention snaps back just as the receptionist stops speaking about unimportant things like fire evacuation plans.
-				She reaches underneath her desk, pulling out a little slip of paper whose very texture feels rich and slimy.
-				The font is a mixture of neo-brutalism, constructivism, and a few other isms.
-				Their design team is clearly existent and thriving (unlike their branding team). The paper reads:
-				</p>
-				<p>
-					"Welcome to the family! Here at…” Your inner voice blurs into TV static as your long-email comprehension neurons engage.
-				</p>
-			</StoryParagraph>,
-			<StoryParagraph>
-				<p>
-				You find your desk among a sea of lookalikes.
-				You put up a violently colorful poster as a simultaneous protest and cry for attention.
-				The sleek black void of the Apple Studio Display® on your desk gazes back into you.
-				You attempt to log in, only to realize you’re entering an encrypted password. You look for more instructions on the card.
-				</p>
-				<p>
-				"This is your first assignment. Consider it a rite of passage."
-				</p>
-			</StoryParagraph>,
-			// <StoryParagraph end={{
-			//     type: "choice",
-			//     key: "intro_choice",
-			//     choices: [
-			//         { value: "accept", label: "Accept the challenge" },
-			//         { value: "decline", label: "Walk away" }
-			//     ]
-			// }}>
-			// </StoryParagraph>
-		]
+		para: parse(ch1)
 	},
-	team: {
-		blurb: "welcome aboard"
-	},
+	// team: {
+	// 	blurb: "welcome aboard"
+	// },
 	salad: {
 		blurb: "Company cultures are weird.",
 		solveBlurb: "How did Caesar, a military genius, ever believe his cipher was secure?"

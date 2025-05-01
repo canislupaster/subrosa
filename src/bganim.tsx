@@ -67,7 +67,7 @@ class BgAnim extends DisposableStack {
 	update(t: number) {
 		if (this.stop) { this.frame=null; return; }
 		if (this.cursor!=null) { this.cursor.remove(); this.cursor=null; }
-		const dt = (t-(this.pt??t))/1000;
+		const dt = Math.min(0.1, (t-(this.pt??t))/1000);
 		this.pt=t;
 
 		for (const x of this.toWrite) {

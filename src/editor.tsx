@@ -1,11 +1,11 @@
 import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection, makeProc } from "../shared/eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, interactiveContainerDefault, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, ThemeSpinner, toSearchString, useFnRef, useToast } from "./ui";
+import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection, makeProc, numTests } from "../shared/eval";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, interactiveContainerDefault, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, ThemeSpinner, toSearchString, useCloneRef, useFnRef, useToast } from "./ui";
 import { twMerge, twJoin } from "tailwind-merge";
 import { IconArrowsRightLeft, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconInfoCircle, IconPencil, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
-import { ComponentChild, ComponentChildren, Ref, RefObject } from "preact";
-import { dragAndDrop, useDragAndDrop } from "@formkit/drag-and-drop/react";
-import { animations, DragState, handleNodePointerdown, remapNodes, setParentValues } from "@formkit/drag-and-drop";
+import { ComponentChild, ComponentChildren, Ref, RefCallback, RefObject } from "preact";
+import { dragAndDrop, ReactDragAndDropConfig, useDragAndDrop } from "@formkit/drag-and-drop/react";
+import { animations, DragState, handleNodePointerdown, performTransfer, remapNodes, setParentValues } from "@formkit/drag-and-drop";
 import { ChangeEvent, SetStateAction } from "preact/compat";
 import { fill, strToInt, toPrecStat } from "../shared/util";
 import { Messages, Stage } from "./story";
@@ -15,6 +15,7 @@ import { Reference } from "./reference";
 import { LogoBack } from "./logo";
 import { addFromText, toText } from "../shared/text";
 import { Puzzle } from "../shared/puzzles";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 export const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2");
@@ -27,13 +28,15 @@ const nameInputProps = {
 const validTextRe = new RegExp(`^[a-z ]{0,${strLenLimit}}$`);
 
 const builtinNodes: Node[] = [
-	...(["add", "sub", "set", "access"] as const).map(op=>(
-		{op, lhs: -1, rhs: -1}
-	)),
-	...(["inc", "dec"] as const).map(op=>({ op, lhs: -1 })),
 	{ op: "goto", ref: "unset", conditional: null },
+	{ op: "inc", lhs: -1 },
+	{ op: "add", lhs: -1, rhs: -1 },
+	{ op: "dec", lhs: -1 },
+	{ op: "sub", lhs: -1, rhs: -1 },
+	{ op: "set", lhs: -1, rhs: -1 },
 	{ op: "setIdx", lhs: -1, rhs: -1, idx: -1 },
-	{ op: "breakpoint", conditional: null }
+	{ op: "access", lhs: -1, rhs: -1 },
+	{ op: "breakpoint", conditional: null },
 ];
 
 const nodeName: Record<Node["op"], string> = {
@@ -55,17 +58,20 @@ function useValidity(value: string, callback: (v: string)=>void): {
 		if (!v.editing) setV({editing: false, value});
 	}, [v.editing, value]);
 
+	const check = (elem: HTMLInputElement, editing: boolean)=>{
+		if (elem.value!=value || v.editing) setV({ editing, value: elem.value });
+		if (editing ? elem.reportValidity() : elem.checkValidity()) callback(elem.value);
+	};
+
 	return {
 		value: v.value,
-		onBlur() { setV({editing: false, value}); },
+		onBlur(ev) {
+			db.current?.cancel();
+			check(ev.currentTarget as HTMLInputElement, false);
+		},
 		onChange(ev) {
-			const elem = ev.currentTarget;
-			if (elem.value!=value || v.editing) {
-				setV({ editing: true, value: elem.value });
-			}
-			db.current?.call(()=>{
-				if (elem.reportValidity()) callback(elem.value);
-			});
+			const el = ev.currentTarget;
+			db.current?.call(()=>check(el, true));
 		}
 	};
 }
@@ -115,9 +121,8 @@ function iconURL(x: {op: "goto", conditional: number|null}|{op: Exclude<Node["op
 	return `/${x.op.toLowerCase()}.svg`;
 }
 
-function GotoArrow({p, node, nodeI, nodeListRef}: {
-	p: EditData, node: Node&{op: "goto"}, nodeI: number,
-	nodeListRef: RefObject<HTMLUListElement>
+function GotoArrow({p, node, nodeI}: {
+	p: EditData, node: Node&{op: "goto"}, nodeI: number
 }) {
 	const rectRef = useRef<HTMLDivElement>(null);
 	const arrowRef = useRef<HTMLDivElement>(null);
@@ -188,13 +193,13 @@ function GotoArrow({p, node, nodeI, nodeListRef}: {
 			observer.disconnect();
 			window.removeEventListener("resize", updateArrow);
 		};
-	}, [node, node.ref, nodeI, nodeListRef, p.nodeRefs, p.proc.nodeList, p.proc.nodes]);
+	}, [node, node.ref, nodeI, p.nodeRefs, p.proc.nodeList, p.proc.nodes]);
 
 	return <>
-		<div className="absolute w-4 nodrag" hidden ref={arrowRef} >
+		<div className="absolute w-4" hidden ref={arrowRef} >
 			<img src="/arrow.svg" />
 		</div>
-		<div className={twJoin("absolute border-2 border-r-0 nodrag", borderColor.focus)} hidden ref={rectRef} />
+		<div className={twJoin("absolute border-2 border-r-0", borderColor.focus)} hidden ref={rectRef} />
 	</>;
 }
 
@@ -205,10 +210,10 @@ const getClickNode = (ev: MouseEvent, refs: EditData["nodeRefs"])=>{
 }
 
 function GotoInner({p, node, setNode, nodeI}: {
-	p: EditData, node: Node&{op: "goto"}, nodeI?: number
+	p: EditData, node: Node&{op: "goto"}, nodeI: number
 	setNode?: (x: Node)=>void
 }) {
-	const selecting = nodeI!=undefined && p.selectingGoto==nodeI;
+	const selecting = setNode!=undefined && p.selectingGoto==nodeI;
 
 	useEffect(()=>{
 		if (!selecting) return;
@@ -230,7 +235,7 @@ function GotoInner({p, node, setNode, nodeI}: {
 
 	return <>
 		<Button onClick={()=>{
-			if (nodeI!=undefined) p.setSelectingGoto(selecting ? null : nodeI);
+			if (setNode!=undefined) p.setSelectingGoto(selecting ? null : nodeI);
 		}} className={
 			selecting ? bgColor.highlight : node.ref=="unset" && setNode ? bgColor.red : ""
 		} >
@@ -242,11 +247,9 @@ function GotoInner({p, node, setNode, nodeI}: {
 	</>;
 }
 
-function CallInner({
-	p, node, openProc, setNode
-}: {
+function CallInner({ p, node, openProc, setNode }: {
 	p: EditData, node: Node&{op: "call"},
-	nodeI?: number, setNode?: (x: Node)=>void,
+	setNode?: (x: Node)=>void,
 	openProc: (i: number)=>void
 }) {
 	const v = p.procs.get(node.procRef);
@@ -290,19 +293,19 @@ const nodeHint: Record<Node["op"], string> = {
 };
 
 function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, status, setRef}: {
-	p: EditData, node: Node, nodeI?: number, idx?: number
-	setNode: (x: Node|null, i: number)=>void
+	p: EditData, node: Node, nodeI: number, idx?: number
+	setNode?: (x: Node|null, i: number)=>void
 	openProc: (i: number)=>void,
 	setRef?: (i: number, ref: HTMLDivElement|null)=>void,
 	status?: "active"|"selected"|"target"
 }) {
-	const setNode = nodeI==undefined ? undefined : (newNode: Node|null)=>setNode2(newNode, nodeI);
+	const setNode = setNode2==undefined ? undefined : (newNode: Node|null)=>setNode2(newNode, nodeI);
 
 	let inner: ComponentChild;
 	if (node.op=="goto") {
 		inner=<GotoInner p={p} node={node} nodeI={nodeI} setNode={setNode} />;
 	} else if (node.op=="call") {
-		inner=<CallInner p={p} node={node} nodeI={nodeI} setNode={setNode} openProc={openProc} />
+		inner=<CallInner p={p} node={node} setNode={setNode} openProc={openProc} />
 	} else if (node.op=="setIdx") {
 		inner = <>
 			<RegisterPicker p={p} x={node.lhs} setX={setNode ? lhs=>setNode({...node, lhs}) : undefined} desc="a" />
@@ -331,13 +334,13 @@ function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, status, set
 		return nodeHint[node.op];
 	}, [node, p.procs]);
 
-	return <div className={twMerge(nodeStyle, "transition-colors animate-expand",
+	return <div className={twMerge(nodeStyle, "transition-colors",
 			status=="active" ? bgColor.highlight : status=="selected" ? bgColor.highlight2
 				: status=="target" ? bgColor.md : null, dropStyle)}
 			ref={useCallback(
 				(el: HTMLDivElement|null)=>nodeI!=undefined && setRef?.(nodeI, el),
 				[nodeI, setRef]
-			)} >
+			)} data-key={nodeI} >
 		<img src={iconURL(node)} className="w-10 cursor-move draghandle mb-4" />
 		{idx!=undefined && <Text v="dim" className="absolute left-1 bottom-1" >{idx}</Text>}
 		{inner}
@@ -403,11 +406,11 @@ function RegisterEditor({p, reg, setReg}: {
 		setRunValue(newV ?? x);
 	};
 
-	return <div className={twMerge(nodeStyle, dropStyle, "flex flex-col pl-2 items-stretch gap-1 pr-1")} >
+	return <div className={twMerge(nodeStyle, dropStyle, "flex flex-col pl-2 items-stretch gap-1 pr-1")}
+		data-key={reg} >
 		<div className="flex flex-row gap-2 mb-1 items-center" >
 			<Text v="bold" className="cursor-move draghandle" >{"#"}{regI+1}</Text>
-			<HiddenInput
-				placeholder={"(unnamed)"}
+			<HiddenInput placeholder={"(unnamed)"}
 				{...useValidity(
 					regV.name==null ? "" : regV.name,
 					v=>setReg({ ...regV, name: v.length==0 ? null : v }, reg)
@@ -478,14 +481,84 @@ type UserProcs = {
 	setProcList: (vs: number[])=>void
 };
 
+const dragListener = new Set<(x: boolean)=>void>();
 const dragOpts = {
-	draggable(child: HTMLElement) { return !child.classList.contains("nodrag"); },
 	dropZoneClass: "drop",
 	dragHandle: ".draghandle",
-	plugins: [animations()]
+	plugins: [animations()],
+	draggable(el: HTMLElement) { return "drag" in el.dataset; },
+	onDragstart() { dragListener.forEach(x=>x(false)); },
+	onDragend() { dragListener.forEach(x=>x(true)); }
 };
 
+export function useDragAnimate<X, T extends HTMLElement>({values, setValues, dataKey, ...opts}: {
+	values: readonly X[], setValues: (x: X[])=>void, dataKey: (x: X)=>number|string
+}&Partial<ReactDragAndDropConfig<T,X[]>>): Ref<T> {
+	const ref = useRef<T>(null);
+	const [ref2, setAnimateEnabled] = useAutoAnimate() as [ RefCallback<T>, (x: boolean)=>void ];
+	useEffect(()=>{
+		dragListener.add(setAnimateEnabled);
+		return ()=>dragListener.delete(setAnimateEnabled);
+	}, [setAnimateEnabled]);
+
+	useEffect(()=>{
+		const keys = new Set<unknown>(values.map(x=>dataKey(x).toString()));
+		dragAndDrop<HTMLUListElement, X>({
+			parent: ref.current,
+			state: [ values as X[], setValues as Dispatch<SetStateAction<X[]>> ],
+			...dragOpts,
+			draggable(x) { return "key" in x.dataset && keys.has(x.dataset.key); },
+			...opts,
+			performTransfer(d) {
+				if (opts.performTransfer) opts.performTransfer(d);
+				else performTransfer(d);
+			}
+		});
+	}, [values, setValues, opts, setAnimateEnabled, dataKey]);
+	
+	return useCloneRef(ref, ref2);
+}
+
 const MAX_UNDO_STEPS = 100;
+
+function NodeAdder({add, procs, procList, i}: {
+	add: (i: number, drag: DragNode)=>void, i: number,
+	procs: ReadonlyMap<number, Procedure>, procList: number[]
+}) {
+	const addNodeOptions: {
+		label: ComponentChildren, key: string|number, value: DragNode, search: string
+	}[] = useMemo(()=>{
+		const makeLabel = (icon: Parameters<typeof iconURL>[0], name: string) =>
+			<div className="flex flex-row justify-start gap-2 w-full" ><img src={iconURL(icon)} className="w-6" /> {name}</div>;
+
+		return [
+			...builtinNodes.map((x,i)=>({
+				label: makeLabel(x, nodeName[x.op]),
+				key: x.op, value: { type: "builtin" as const, i },
+				search: nodeName[x.op]
+			})),
+			...procList.flatMap((proc)=>{
+				const p = procs.get(proc);
+				if (!p) return [];
+				return [{
+					label: makeLabel({op: "call"}, p.name),
+					key: proc, search: p.name,
+					value: { type: "user" as const, i: proc }
+				}];
+			})
+		];
+	}, [procs, procList]);
+	
+	return <Select options={addNodeOptions} searchable
+		setValue={useCallback((v: DragNode)=>add(i,v), [i,add])}
+		className="place-content-center flex w-full -mt-1 group" >
+
+		<button className="relative w-full" >
+			<IconChevronCompactDown className="mx-auto group-hover:opacity-0 transition-opacity" />
+			<IconPlus className="group-hover:opacity-100 opacity-0 transition-opacity absolute top-0.5 left-0 right-0 mx-auto" />
+		</button>
+	</Select>;
+}
 
 function ProcEditor({
 	proc, i: procI, setProc, procs, userProcList, entryProc,
@@ -545,33 +618,40 @@ function ProcEditor({
 	}, [nodeForUserProc, setProc]);
 
 	// shitty stuff to accept builtin / procs
-	const nodeListRef = useRef<HTMLUListElement>(null);
 	const dragStateRef = useRef<DragState<number>>(null);
-	useEffect(()=>{
-		dragAndDrop<HTMLUListElement, number>({
-			multiDrag: true,
-			parent: nodeListRef.current, group: "proc",
-			state: [
-				proc.nodeList as number[],
-				((xs: number[])=>setProc(p=>({...p, nodeList: xs }))) as Dispatch<SetStateAction<number[]>>
-			],
-			handleNodePointerdown(data,state) {
-				dragStateRef.current = state;
-				handleNodePointerdown(data,state);
-			},
-			performTransfer({ initialParent, targetParent, draggedNodes, targetNodes }) {
-				remapNodes(initialParent.el);
 
-				const newData = updateFromDrag(draggedNodes.map(v=>v.data.value as unknown as DragNode));
-				draggedNodes.forEach((v,i)=>{ v.data.value=newData[i]; });
+	const [selection, setSelection] = useState<ReadonlySet<number>>(new Set<number>());
 
-				const idx = targetNodes.length ? targetNodes[0].data.index : targetParent.data.enabledNodes.length;
-				const up = proc.nodeList.toSpliced(idx, 0, ...draggedNodes.map(v=>v.data.value));
-				setParentValues(targetParent.el, targetParent.data, up);
-			},
-			...dragOpts,
-		});
-	}, [proc.nodeList, setProc, updateFromDrag]);
+	const setDragSelection = useCallback(()=>{
+		const dragState = dragStateRef.current;
+		const dragState2 = dragState?.activeState ?? dragState?.pointerDown;
+		if (dragState!=null && dragState2) {
+			const nodes = dragState2.parent.data.enabledNodes.filter(x=>selection.has(x.data.value));
+			dragState.pointerSelection = nodes.length>0;
+			dragState.selectedState = { nodes, parent: dragState2.parent };
+		}
+	}, [selection]);
+
+	const nodeListRef = useDragAnimate<number, HTMLUListElement>(useMemo(()=>({
+		multiDrag: true, values: proc.nodeList, group: "proc",
+		setValues: (xs: number[])=>setProc(p=>({...p, nodeList: xs })),
+		dataKey: v=>v,
+		handleNodePointerdown(data,state) {
+			dragStateRef.current = state;
+			handleNodePointerdown(data,state);
+			setDragSelection();
+		},
+		performTransfer({ initialParent, targetParent, draggedNodes, targetNodes }) {
+			remapNodes(initialParent.el);
+
+			const newData = updateFromDrag(draggedNodes.map(v=>v.data.value as unknown as DragNode));
+			draggedNodes.forEach((v,i)=>{ v.data.value=newData[i]; });
+
+			const idx = targetNodes.length ? targetNodes[0].data.index : targetParent.data.enabledNodes.length;
+			const up = proc.nodeList.toSpliced(idx, 0, ...draggedNodes.map(v=>v.data.value));
+			setParentValues(targetParent.el, targetParent.data, up);
+		},
+	}), [proc.nodeList, setDragSelection, setProc, updateFromDrag]));
 
 	const builtinDragNodes = fill(builtinNodes.length, i=>({ type: "builtin", i } as const));
 
@@ -579,20 +659,14 @@ function ProcEditor({
 		sortable: false, group: "proc", dropZone: false, ...dragOpts
 	}) as unknown as [Ref<HTMLUListElement>, DragNode[]]; // preact compat
 
-	const userProcListRef = useRef<HTMLUListElement>(null);
-	useEffect(()=>{
-		dragAndDrop<HTMLUListElement, DragNode>({
-			parent: userProcListRef.current,
-			dropZone: false,
-			state: [
-				userProcList.map(i=>({type: "user", i})),
-				((nodes: DragNode[])=>setProcList(nodes.map(x=>x.i))) as Dispatch<SetStateAction<DragNode[]>>
-			],
-			group: "proc", 
-			performTransfer() {},
-			...dragOpts
-		});
-	}, [setProcList, userProcList]);
+	const userProcListRef = useDragAnimate<DragNode, HTMLUListElement>({
+		dropZone: false,
+		values: userProcList.map(i=>({type: "user", i})),
+		setValues: (nodes: DragNode[])=>setProcList(nodes.map(x=>x.i)),
+		dataKey: x=>x.i,
+		group: "proc", 
+		performTransfer() {}
+	});
 
 	// ensure stability, otherwise arrows flicker on update
 	// bc refs are being deleted constantly...
@@ -669,8 +743,6 @@ function ProcEditor({
 			if (tm!=null) clearTimeout(tm);
 		}
 	}, []);
-	
-	const [selection, setSelection] = useState<ReadonlySet<number>>(new Set<number>());
 
 	const highlightGotoSelection = useMemo(()=>
 		new Set(proc.nodes.entries().flatMap(([k,v])=>{
@@ -734,14 +806,7 @@ function ProcEditor({
 	const toast = useToast();
 	useEffect(()=>{
 		// hacky af to sync selection with multidrag
-		const dragState = dragStateRef.current;
-		const dragState2 = dragState?.activeState ?? dragState?.pointerDown;
-		if (dragState!=null && dragState2) {
-			const nodes = dragState2.parent.data.enabledNodes
-				.filter(x=>selection.has(x.data.value));
-			dragState.pointerSelection = nodes.length>0;
-			dragState.selectedState = { nodes, parent: dragState2.parent };
-		}
+		setDragSelection();
 
 		const docClick = (ev: MouseEvent)=>{
 			const node = getClickNode(ev, data.nodeRefs);
@@ -812,38 +877,12 @@ function ProcEditor({
 			document.removeEventListener("keydown", clipboardListener)
 			document.removeEventListener("click", docClick);
 		};
-	}, [data.nodeRefs, pasteSel, proc, proc.nodeList, procI, remappingClipboard.open, selection, setProc, undo, toast]);
+	}, [data.nodeRefs, pasteSel, proc, proc.nodeList, procI, remappingClipboard.open, selection, setProc, undo, toast, setDragSelection]);
 
-	const addNodeOptions: {
-		label: ComponentChildren, key: string|number, value: DragNode, search: string
-	}[] = useMemo(()=>[
-		...builtinNodes.map((x,i)=>({
-			label: <><img src={iconURL(x)} className="w-6" /> {nodeName[x.op]}</>,
-			key: x.op, value: { type: "builtin" as const, i },
-			search: nodeName[x.op]
-		})),
-		...userProcList.flatMap((proc)=>{
-			const p = procs.get(proc);
-			if (!p) return [];
-			return [{
-				label: <><img src={iconURL({op: "call"})} className="w-6" /> {p.name}</>,
-				key: proc, search: p.name,
-				value: { type: "user" as const, i: proc }
-			}];
-		})
-	], [procs, userProcList]);
-	
-	const nodeAdder = (i: number, v: number)=><Select key={`sep${v}`} options={addNodeOptions} searchable
-		setValue={(v)=>{
-			const nv = updateFromDrag([v])[0];
-			setProc(p=>({...p, nodeList: p.nodeList.toSpliced(i+1,0,nv)}));
-		}} className="place-content-center flex w-full nodrag -mt-1 group" >
-
-		<button className="relative w-full" >
-			<IconChevronCompactDown className="mx-auto group-hover:opacity-0 transition-opacity" />
-			<IconPlus className="group-hover:opacity-100 opacity-0 transition-opacity absolute top-0.5 left-0 right-0 mx-auto" />
-		</button>
-	</Select>;
+	const addNode = useCallback((i: number, v: DragNode)=>{
+		const nv = updateFromDrag([v])[0];
+		setProc(p=>({...p, nodeList: p.nodeList.toSpliced(i+1,0,nv)}));
+	}, [setProc, updateFromDrag]);
 
 	return <>
 		<ConfirmModal open={confirmClear} onClose={()=>setConfirmClear(false)} msg={
@@ -884,7 +923,7 @@ function ProcEditor({
 			</div>
 		</Modal>
 
-		<div className="flex flex-col items-stretch editor-left min-h-0" >
+		<div className="flex flex-col items-stretch editor-left min-h-0 gap-2" >
 			<div className={twJoin("flex flex-row gap-2 items-end pl-2 shrink-0 h-11", !isUserProc && "pl-4")} >
 				{back && <Anchor className="items-center self-end mr-2" onClick={()=>openProc()} >
 					<IconChevronLeft size={32} />
@@ -893,7 +932,7 @@ function ProcEditor({
 				{!isUserProc ? <Text v="bold" >Procedure <Text v="code" >{proc.name}</Text></Text>
 				: <>
 					<Text v="bold" >Procedure</Text>
-					<HiddenInput {...procNameValidity} required {...nameInputProps} className="w-fit" />
+					<HiddenInput {...procNameValidity} required {...nameInputProps} size={1} className="grow" />
 				</>}
 				
 				<Button className="ml-auto py-1" onClick={()=>{
@@ -912,45 +951,48 @@ function ProcEditor({
 				</>}
 			</div>
 			 
-			<ul ref={nodeListRef} className="pl-[80px] flex flex-col gap-1 items-stretch overflow-y-auto relative pb-20" >
-				{nodeAdder(-1,-1)}
-				{proc.nodeList.flatMap((v,i)=>{
-					const node = proc.nodes.get(v)!;
-					return [
-						<ProcNode key={v} p={data} node={node} idx={i+1} setNode={setNode}
-							nodeI={v} openProc={openProc} setRef={setNodeRef}
-							status={runState?.activeNode==v ? "active"
-								: selection.has(v) ? "selected"
-								: highlightGotoSelection.has(v) ? "target" : undefined} />,
-						...node.op=="goto" ? [
-							<GotoArrow key={`arrow${v}`} p={data} node={node} nodeI={v} nodeListRef={nodeListRef} />
-						] : [],
-						nodeAdder(i,v)
-					];
-				})}
-			
-				<div className={twJoin(blankStyle, "nodrag", selectingGoto!=null && twJoin(bgColor.hover, "cursor-pointer"))} ref={endNodeRef} >
-					{proc.nodeList.length==0 ? <>
-						<IconInfoCircle />
-						<Text v="sm" >Use the library on the right to add nodes</Text>
-					</> : <>
-						<img src="/end.svg" className="w-7" />
-						<Text v="sm" >End of procedure{selectingGoto!=null && " (you can jump here)"}</Text>
-						<Text v="dim" className="bottom-1 left-1 absolute" >{proc.nodeList.length+1}</Text>
-					</>}
-				</div>
-			</ul>
+			<div className="relative" >
+				{proc.nodeList.map(x=>[proc.nodes.get(x),x] as const)
+					.filter((v): v is [Node&{op: "goto"},number]=>v[0]?.op=="goto")
+					.map(([v,i])=><GotoArrow key={`arrow${i}`} p={data} node={v} nodeI={i} />)}
+				<ul ref={nodeListRef}
+					className="pl-[80px] flex flex-col gap-1 items-stretch overflow-y-auto pb-20" >
+					<NodeAdder i={-1} add={addNode} procs={procs} procList={userProcList} />
+					{proc.nodeList.flatMap((v,i)=>{
+						const node = proc.nodes.get(v)!;
+						return [
+							<ProcNode key={v} p={data} node={node} idx={i+1} setNode={setNode}
+								nodeI={v} openProc={openProc} setRef={setNodeRef}
+								status={runState?.activeNode==v ? "active"
+									: selection.has(v) ? "selected"
+									: highlightGotoSelection.has(v) ? "target" : undefined} />,
+							<NodeAdder key={`sep${v}`} i={i} add={addNode} procs={procs} procList={userProcList} />
+						];
+					})}
+				
+					<div className={twJoin(blankStyle, selectingGoto!=null && twJoin(bgColor.hover, "cursor-pointer"))} ref={endNodeRef} >
+						{proc.nodeList.length==0 ? <>
+							<IconInfoCircle />
+							<Text v="sm" >Use the library on the right to add nodes</Text>
+						</> : <>
+							<img src="/end.svg" className="w-7" />
+							<Text v="sm" >End of procedure{selectingGoto!=null && " (you can jump here)"}</Text>
+							<Text v="dim" className="bottom-1 left-1 absolute" >{proc.nodeList.length+1}</Text>
+						</>}
+					</div>
+				</ul>
+			</div>
 		</div>
 		
 		<ul className="flex flex-col flex-wrap gap-2 mt-2 editor-nodebar" ref={builtinRef} >
 			<AppTooltip placement="right" content={"Drag the built-in instructions below to the left."} >
-				<div className={twMerge(blankStyle, "aspect-square py-0.5 nodrag", bgColor.hover)} >
-					<IconInfoCircle />
+				<div className={twMerge(blankStyle, "aspect-square py-1", bgColor.hover)} >
+					<IconInfoCircle size={30} />
 				</div>
 			</AppTooltip>
 			{builtinNodes.map(v=>
 				<AppTooltip key={v.op} placement="right" content={nodeHint[v.op]} >
-					<div className={twMerge(blankStyle, "py-1", bgColor.hover)} >
+					<div className={twMerge(blankStyle, "py-1", bgColor.hover)} data-drag >
 						<img src={iconURL(v)} className="w-10 cursor-move draghandle" />
 					</div>
 				</AppTooltip>
@@ -974,10 +1016,11 @@ function ProcEditor({
 
 				{userProcList.map(i=>{
 					if (!procs.has(i) || !showProcs.has(i)) return <div key={i} className="hidden" />;
-					return <ProcNode key={i} p={data} node={nodeForUserProc(i)} setNode={setNode} openProc={openProc} />;
+					return <ProcNode key={i} p={data} node={nodeForUserProc(i)}
+						openProc={openProc} nodeI={i} />;
 				})}
 
-				<Button className={twJoin(blankStyle, "nodrag")} onClick={()=>addProc()} >
+				<Button className={blankStyle} onClick={()=>addProc()} >
 					<IconPlus />
 					<Text v="sm" >Create procedure</Text>
 				</Button>
@@ -992,7 +1035,7 @@ function ProcEditor({
 					<RegisterEditor key={`${procI} ${r}`} p={data} reg={r} setReg={setReg} />
 				)}
 
-				<Button className={twJoin(blankStyle, "nodrag")} onClick={()=>{
+				<Button className={blankStyle} onClick={()=>{
 					setProc(p=>({
 						...p, registerList: [...p.registerList, p.maxRegister],
 						registers: mapWith(p.registers, p.maxRegister, { name: null, type: "value", value: 0 }),
@@ -1470,7 +1513,10 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				
 		{output[0]==io.programInput && (
 			output[1]==io.programOutput ? <Alert className={bgColor.green} title="Test passed"
-				txt={<p>Your program correctly output: <Text v="code" >{output[1].toString()}</Text></p>} />
+				txt={<>
+					<p>Your program correctly output:</p>
+					<Text v="code" >{output[1].toString()}</Text>
+				</>} />
 			: <Alert bad title="Test failed" txt={
 				<div className="flex flex-col gap-1" >
 					<p>{output[1]=="" ? "Your program didn't output anything!" : <>
@@ -1577,7 +1623,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		</div>
 		
 		<Modal open={open.open} onClose={()=>setOpen({panel: open.panel, open: false})}
-			title={open.panel=="dashboard" ? puzzle.name : "Text editor"} >
+			title={open.panel=="dashboard" ? puzzle.name : "SUBTEXT editor"} >
 			{open.panel=="dashboard" ? <div className="flex flex-col items-stretch gap-2" >
 				<Text className="mb-1 italic" >{puzzle.blurb}</Text>
 				{puzzle.extraDesc!=undefined && <Text className="mb-1" >{puzzle.extraDesc}</Text>}
@@ -1592,7 +1638,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				{inputSection}
 				
 				<Text v="sm" >
-					Submit when you're ready for your solution to be judged against a random testcase. You will need to match the plaintext exactly to pass this level.
+					Submit when you're ready for your solution to be judged. You will need to solve {numTests} tests to pass this level.
 				</Text>
 						
 				{submitButton(false)}
@@ -1600,7 +1646,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				<Submission sub={sub} />
 				
 				<Button icon={<IconPencil />} className="self-end"
-					onClick={()=>setOpen({open: true, panel: "text"})} >Text editor</Button>
+					onClick={()=>setOpen({open: true, panel: "text"})} >SUBTEXT editor</Button>
 			</div> : <TextEditor value={value} setValue={setValue}
 				edit={edit} setEdit={setEdit} back={()=>doOpen()} />}
 		</Modal>

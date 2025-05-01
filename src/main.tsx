@@ -1,6 +1,6 @@
 import "disposablestack/auto";
 import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useMd } from "./ui";
-import { ComponentChildren, ComponentProps, createContext, render, JSX } from "preact";
+import { ComponentChildren, ComponentProps, createContext, render, JSX, Fragment } from "preact";
 import { useCallback, useContext, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
 import { Editor } from "./editor";
 import { Stage, stages, Story } from "./story";
@@ -13,6 +13,7 @@ import { stageUrl } from "../shared/data";
 import { useStageCount } from "./api";
 import { BgAnimComponent } from "./bganim";
 import { LogoBack } from "./logo";
+import { forwardRef } from "preact/compat";
 
 export const GotoContext = createContext(undefined as unknown as {
   goto: (this: void, path: string)=>void,
@@ -82,10 +83,10 @@ function Home() {
   </FadeRoute><BgAnimComponent /></>;
 }
 
-export function Logo({className}: {className?: string}) {
+export const Logo = forwardRef<HTMLButtonElement, {className?: string}>(({className}, ref)=>{
   const goto = useGoto();
-  return <button onClick={()=>goto("/")} className={twMerge("w-1/2 self-end hover:scale-105 transition-transform", className)} ><LogoBack /></button>;
-}
+  return <button onClick={()=>goto("/")} className={twMerge("w-1/2 self-end hover:scale-105 transition-transform", className)} ref={ref} ><LogoBack /></button>;
+});
 
 function ErrorPage({errName, err, reset, children}: {
   errName?: string, err?: unknown, reset?: ()=>void, children?: ComponentChildren
@@ -143,8 +144,8 @@ function getCompleted() {
     ...stage, i,
     done: stage.type=="puzzle" ? puzzle.has(stage.key) : story.has(stage.key)
   }));
-  const activeStages = Math.max(-1, ...withDone.filter(x=>x.done).map(x=>x.i))+1;
 
+  const activeStages = withDone.find(x=>x.type=="puzzle" && !x.done)?.i ?? 0;
   return { story, puzzle, withDone, activeStages } as const;
 }
 
@@ -203,19 +204,25 @@ function Menu() {
 
     {withDone.flat().map(stage=>{
       const a = stage.i<=activeStages;
-      return <div className={twMerge(a && anchorHover, "flex flex-col gap-0.5 p-2 pt-1 group items-stretch relative pr-10")}
-        key={stageUrl(stage)}
-        onClick={stage.i<=activeStages ? ()=>{
-          goto(stageUrl(stage));          
-        } : undefined} >
-        <div className="flex flex-row gap-2 items-center" >
-          {stage.done ? <IconCircleCheckFilled /> : stage.i<=activeStages && <IconCircleDashedCheck />}
-          <Text v="bold" className={twJoin(a ? anchorUnderline : textColor.dim)} >{stage.name}</Text>
-          {stage.type=="puzzle" && <IconPuzzleFilled />}
-        </div>
-        {stage.i<=activeStages && <IconChevronRight size={36} className="transition-transform group-hover:translate-x-4 absolute top-2 right-4" />}
-        <Text v="sm" className={twJoin(!a && textColor.dim)} >{stage.blurb}</Text>
-      </div>
+      return <Fragment key={stageUrl(stage)} >
+        <button className={twMerge(a && anchorHover, "flex flex-col gap-0.5 p-2 pt-1 group items-start relative pr-10")}
+          onClick={stage.i<=activeStages ? ()=>{
+            goto(stageUrl(stage));          
+          } : undefined} >
+          <div className="flex flex-row gap-2 items-center" >
+            {stage.done ? <IconCircleCheckFilled /> : stage.i<=activeStages && <IconCircleDashedCheck />}
+            <Text v="bold" className={twJoin(a ? anchorUnderline : textColor.dim)} >{stage.name}</Text>
+            {stage.type=="puzzle" && <IconPuzzleFilled />}
+          </div>
+          {stage.i<=activeStages && <IconChevronRight size={36} className="transition-transform group-hover:translate-x-4 absolute top-2 right-4" />}
+          <Text v="sm" className={twJoin(!a && textColor.dim)} >{stage.blurb}</Text>
+        </button>
+        {stage.i==activeStages-1 && stage.i<stages.length-1 && <div className="flex flex-row items-center gap-2 -my-2" >
+          <div className={"border-dashed h-0 border-b-2 bg-none grow dark:border-zinc-400"} />
+          <Text v="md" >Next stage</Text>
+          <div className={"border-dashed h-0 border-b-2 bg-none grow dark:border-zinc-400"} />
+        </div>}
+      </Fragment>;
     })}
 
     <div className="flex flex-row w-full justify-between mt-2 -mb-5 self-start" >
@@ -333,12 +340,26 @@ function PuzzleStageWrap(props: ComponentProps<typeof PuzzleStage>) {
 function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
   const goto = useGoto();
   useStageCount(stage);
-  return <FadeRoute className="md:w-2xl w-md flex flex-col pb-[30dvh] pt-10" >
-    <Logo className="w-1/3" />
+  const logoRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(()=>{
+    const el = logoRef.current;
+    if (!el) return;
+    const cb = ()=>{
+      const t=Math.min(1,Math.max((350-el.offsetTop)/200, 0.0));
+      el.style.opacity = (0.2 + 0.8*(3*t*t - 2*t*t*t)).toString();
+    };
+
+    document.addEventListener("scroll", cb);
+    return ()=>document.removeEventListener("scroll", cb);
+  }, []);
+
+  return <FadeRoute className="w-4xl flex flex-row items-start gap-4 pb-[30dvh] pt-10" >
     <Story stage={stage} next={i+1>=stages.length ? undefined : ()=>{
       LocalStorage.readStory = setWith(LocalStorage.readStory??null, stage.key);
       goto(stageUrl(stages[i+1]));
     }} />
+    <Logo className="basis-1/4 shrink-0 self-start sticky top-4" ref={logoRef} />
   </FadeRoute>;
 }
 

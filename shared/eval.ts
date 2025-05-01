@@ -361,7 +361,7 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 				];
 			}
 		} else if (typeof l.current=="string" && typeof r.current=="string") {
-			out=l.current+r.current;
+			out=op=="add" ? l.current+r.current : l.current.slice(0,Math.max(0,l.current.length-r.current.length));
 		} else if (typeof l.current=="number" && typeof r.current=="number") {
 			out=mod(l.current, r.current);
 		}	else {
@@ -442,7 +442,7 @@ export type TestParams = {
 };
 
 // puzzle assumed to be valid key of puzzle stage
-const numTests = 15;
+export const numTests = 40;
 export async function test({ puzzle, proc, procs }: TestParams): Promise<Verdict> {
 	const pstateStats: ProgramStats[] = [];
 

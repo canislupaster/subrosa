@@ -149,15 +149,15 @@ dialog::backdrop {
 @keyframes arrow-big {
 	0% {
 		opacity: 0;
-		transform: scale(0.2) translateX(20%);
+		transform: scale(0.2) translateX(20%) scaleY(0);
 	}
 	20% {
 		opacity: 0;
-		transform: scale(0.2) translateX(20%);
+		transform: scale(0.2) translateX(20%) scaleY(0);
 	}
 	100% {
 		opacity: 1;
-		transform: scale(0.7) scaleX(0.8) translateX(-65%);
+		transform: scale(0.7) scaleX(0.8) translateX(-65%) scaleY(1);
 	}
 }
 
@@ -179,11 +179,11 @@ dialog::backdrop {
 @keyframes arrow-sm {
 	0% {
 		opacity: 0;
-		transform: scale(0.4) translateX(40%);
+		transform: scale(0.4) translateX(40%) scaleY(0);
 	}
 	100% {
 		opacity: 1;
-		transform: scale(1) scaleX(0.8) translateX(-170%);
+		transform: scale(1) scaleX(0.8) translateX(-170%) scaleY(1);
 	}
 }
 

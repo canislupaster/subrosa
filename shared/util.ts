@@ -1,7 +1,6 @@
 import { Procedure, ProgramStats } from "./eval.ts";
 
-type NoFunction<T> = T extends (...args: unknown[])=>unknown ? never : T;
-export function fill<T>(len: number, v: NoFunction<T>|((idx: number)=>T)): T[] {
+export function fill<T>(len: number, v: T|((idx: number)=>T)): T[] {
 	if (typeof v=="function") {
 		return [...new Array(len) as unknown[]].map((_,i): T=>(v as ((idx: number)=>T))(i));
 	}
