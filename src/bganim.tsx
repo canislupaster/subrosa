@@ -55,7 +55,6 @@ class BgAnim extends DisposableStack {
 	}
 	
 	sinceWrite=0;
-	writeDur = 0.001;
 	cursor: HTMLSpanElement|null = null;
 
 	addCursor() {
@@ -108,8 +107,10 @@ class BgAnim extends DisposableStack {
 
 		this.sinceWrite += dt;
 		let bad=false;
-		while (!this.initWriting || this.sinceWrite>this.writeDur) {
-			this.sinceWrite-=this.writeDur;
+
+		const writeDur = 1/(1000+Math.max(this.root.childElementCount, 1000)*0.1);
+		while (!this.initWriting || this.sinceWrite>writeDur) {
+			this.sinceWrite-=writeDur;
 
 			bad = this.root.scrollHeight <= this.root.clientHeight + 20
 				&& this.root.childElementCount<this.maxChild;
@@ -131,7 +132,7 @@ class BgAnim extends DisposableStack {
 		this.stop=true;
 		if (this.cursor) this.cursor.remove();
 
-		const step=1;
+		const step=800/this.root.childElementCount;
 		let delay = this.root.childElementCount*step;
 		const proms: Promise<void>[] = [];
 		for (const c of this.root.children) {

@@ -1,5 +1,5 @@
 import "disposablestack/auto";
-import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useMd } from "./ui";
+import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, ease, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useMd } from "./ui";
 import { ComponentChildren, ComponentProps, createContext, render, JSX, Fragment } from "preact";
 import { useCallback, useContext, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
 import { Editor } from "./editor";
@@ -145,7 +145,7 @@ function getCompleted() {
     done: stage.type=="puzzle" ? puzzle.has(stage.key) : story.has(stage.key)
   }));
 
-  const activeStages = withDone.find(x=>x.type=="puzzle" && !x.done)?.i ?? 0;
+  const activeStages = withDone.find(x=>x.type=="puzzle" && !x.done)?.i ?? withDone.length;
   return { story, puzzle, withDone, activeStages } as const;
 }
 
@@ -199,7 +199,7 @@ function Menu() {
 
     <div className={twJoin(bgColor.default, "w-full py-2 px-2 relative -my-2 overflow-hidden")} >
       <Text v="md" className="relative z-20" >{activeStages}/{stages.length} ({percentProgress})</Text>
-      <div className={twJoin(bgColor.green, "absolute rounded-r-md top-0 bottom-0 left-0 z-10")} style={{width: percentProgress}} />
+      <div className={twJoin(bgColor.green, "absolute rounded-r-full top-0 bottom-0 left-0 z-10")} style={{width: percentProgress}} />
     </div>
 
     {withDone.flat().map(stage=>{
@@ -341,21 +341,27 @@ function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
   const goto = useGoto();
   useStageCount(stage);
   const logoRef = useRef<HTMLButtonElement>(null);
+  
+  const [para, setPara] = useState<ComponentChildren[]|null>(null);
+  useAsyncEffect(async ()=>{
+    setPara(await stage.para());
+  }, [stage.para]);
 
   useEffect(()=>{
     const el = logoRef.current;
     if (!el) return;
     const cb = ()=>{
-      const t=Math.min(1,Math.max((350-el.offsetTop)/200, 0.0));
-      el.style.opacity = (0.2 + 0.8*(3*t*t - 2*t*t*t)).toString();
+      const t=Math.min(1,Math.max((250-el.offsetTop)/200, 0.0));
+      el.style.opacity = (0.2 + 0.8*ease(t)).toString();
     };
 
+    cb();
     document.addEventListener("scroll", cb);
     return ()=>document.removeEventListener("scroll", cb);
-  }, []);
+  }, [para]);
 
-  return <FadeRoute className="w-4xl flex flex-row items-start gap-4 pb-[30dvh] pt-10" >
-    <Story stage={stage} next={i+1>=stages.length ? undefined : ()=>{
+  return para!=null && <FadeRoute className="w-4xl flex flex-row items-start gap-4 pb-[30dvh] pt-10" >
+    <Story stage={stage} para={para} next={i+1>=stages.length ? undefined : ()=>{
       LocalStorage.readStory = setWith(LocalStorage.readStory??null, stage.key);
       goto(stageUrl(stages[i+1]));
     }} />

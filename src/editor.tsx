@@ -2,7 +2,7 @@ import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState
 import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection, makeProc, numTests } from "../shared/eval";
 import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, interactiveContainerDefault, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, ThemeSpinner, toSearchString, useCloneRef, useFnRef, useToast } from "./ui";
 import { twMerge, twJoin } from "tailwind-merge";
-import { IconArrowsRightLeft, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconInfoCircle, IconPencil, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
+import { IconArrowsRightLeft, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconHelp, IconInfoCircle, IconPencil, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref, RefCallback, RefObject } from "preact";
 import { dragAndDrop, ReactDragAndDropConfig, useDragAndDrop } from "@formkit/drag-and-drop/react";
 import { animations, DragState, handleNodePointerdown, performTransfer, remapNodes, setParentValues } from "@formkit/drag-and-drop";
@@ -972,7 +972,7 @@ function ProcEditor({
 				
 					<div className={twJoin(blankStyle, selectingGoto!=null && twJoin(bgColor.hover, "cursor-pointer"))} ref={endNodeRef} >
 						{proc.nodeList.length==0 ? <>
-							<IconInfoCircle />
+							<IconHelp />
 							<Text v="sm" >Use the library on the right to add nodes</Text>
 						</> : <>
 							<img src="/end.svg" className="w-7" />
@@ -987,7 +987,7 @@ function ProcEditor({
 		<ul className="flex flex-col flex-wrap gap-2 mt-2 editor-nodebar" ref={builtinRef} >
 			<AppTooltip placement="right" content={"Drag the built-in instructions below to the left."} >
 				<div className={twMerge(blankStyle, "aspect-square py-1", bgColor.hover)} >
-					<IconInfoCircle size={30} />
+					<IconHelp size={30} />
 				</div>
 			</AppTooltip>
 			{builtinNodes.map(v=>
@@ -1293,8 +1293,6 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			&& runState.stack.length>0 ? runState.stack.length-1 : null;
 
 		if (inBreakpoint!=null) {
-			console.log(inBreakpoint, runStatus, runState);
-			console.log(inBreakpoint);
 			toast("Breakpoint hit");
 			openFrame(inBreakpoint, runState!.stack[inBreakpoint].proc);
 		}
@@ -1505,7 +1503,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 					<Text v="code" >{io.encoded}</Text>
 				</div>
 			: <>
-				<IconInfoCircle className="self-center" />
+				<IconHelp className="self-center" />
 				After entering a plaintext above, you will see the ciphertext here.
 				<b>Your objective is to decrypt the ciphertext (i.e. perform the reverse operation).</b>
 			</>}

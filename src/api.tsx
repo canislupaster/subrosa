@@ -3,7 +3,7 @@ import { Procedure, ProgramStats, test, Verdict } from "../shared/eval";
 import { Stage } from "./story";
 import { API, COUNT_PLAY_INTERVAL_SECONDS, parseExtra, ServerResponse, StageStatsResponse, stringifyExtra, toPrecStat, validUsernameRe } from "../shared/util";
 import Tester from "../shared/worker?worker";
-import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor } from "./ui";
+import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor, PuzzleSolveData } from "./ui";
 import { StageData, stageUrl } from "../shared/data";
 import { blankStyle } from "./editor";
 import { twMerge, twJoin } from "tailwind-merge";
@@ -64,14 +64,16 @@ type SubmissionStatus = {
 	type: "done", verdict: Verdict
 }|null;
 
+type SubmissionWithStats = { sub: Submission, stats: ProgramStats };
+
 function Leaderboard({submission: s, puzzle}: {
-	submission: Submission|null, puzzle: Stage&{type: "puzzle"}
+	submission: SubmissionWithStats|null, puzzle: Stage&{type: "puzzle"}
 }) {
 	const [sort, setSort] = useState<keyof ProgramStats>("time");
-	const [input, setInput] = useState(()=>LocalStorage.username ?? "");
+	const [input, setInput] = useState(LocalStorage.username ?? "");
 
 	const [data, setData] = useState<{
-		type: "data", tokenId: {token: string, id: number}
+		type: "data", tokenId: PuzzleSolveData
 	}|{ type: "nosolve" }|null>(null);
 	const [stats, setStats] = useState<StageStatsResponse|null>(null);
 
@@ -81,11 +83,15 @@ function Leaderboard({submission: s, puzzle}: {
 
 		if (s) {
 			const solve = await makeReq<"solve">("solve", {
-				stage: puzzle.key, procs: s.procs, entry: s.active,
+				stage: puzzle.key, procs: s.sub.procs, entry: s.sub.active,
 				token: tokenId?.token ?? null, username: LocalStorage.username ?? null
 			});
 
-			tokenId={ token: solve.token, id: solve.id };
+			tokenId={
+				token: solve.token, id: solve.id, stats: s.stats,
+				username: LocalStorage.username ?? null
+			};
+
 			LocalStorage.puzzleSolve = mapWith(LocalStorage.puzzleSolve??null, puzzle.key, tokenId);
 		}
 		
@@ -108,12 +114,14 @@ function Leaderboard({submission: s, puzzle}: {
 	if (!data || !stats) return <Loading />;
 
 	const upName = (s:string|null)=>{
-		api.run("setusername", { token: data.tokenId.token, username: s }, ()=>{
+		api.run("setusername", { token: data.tokenId.token, username: s }, (r)=>{
+			if (r.type=="error") return;
+			LocalStorage.username = s ?? undefined;
 			refresh.run();
-		});				
-		LocalStorage.username = s ?? undefined;
+		});
 	};
 	
+	const appears = stats.some(x=>x.id==data.tokenId.id);
 	return <div className={twMerge(blankStyle, "items-start px-5")} >
 		<Text v="md" className="self-center" >Leaderboard</Text>
 
@@ -139,16 +147,19 @@ function Leaderboard({submission: s, puzzle}: {
 					</Button>
 				)}
 			</div>
-			{stats.map((v,i)=><Fragment key={v.id} >
+			{[
+				...stats.map((x,i)=>({...x, i: `${i+1}`})),
+				...!appears ? [{...data.tokenId, ...data.tokenId.stats, i: "???"}] : []
+			].map((v,i)=><Fragment key={v.id} >
 				{[
-					i+1,
-					v.username ?? "(none)",
+					v.i, v.username ?? "(none)",
 					toPrecStat(v.time),
 					toPrecStat(v.nodes),
 					toPrecStat(v.registers)
 				].map((cell,j)=>{
 					return <span key={j} className={twJoin(
-						data.tokenId.id==v.id ? bgColor.highlight : (i%2==0 ? bgColor.secondary : bgColor.md),
+						data.tokenId.id==v.id ? bgColor.highlight
+							: (i%2==0 ? bgColor.secondary : bgColor.md),
 						"p-2", borderColor.default, "border-1"
 					)} >{cell}</span>
 				})}
@@ -166,7 +177,7 @@ export function useSubmission({
 	resubmitting: boolean,
 	setSubmission: (x: Submission)=>void,
 	alreadySolved: boolean,
-	acSubmission: Submission|null,
+	acSubmission: SubmissionWithStats|null,
 	status: SubmissionStatus,
 	puzzle: Stage&{type: "puzzle"},
 	loading: boolean, nextStage: ()=>void
@@ -177,6 +188,7 @@ export function useSubmission({
 	}, [puzzle.key]);
 
 	const [s, setS] = useState<Submission|null>(null);
+	const [withStats, setWithStats] = useState<SubmissionWithStats|null>(null);
 	const [loading, setLoading] = useState(false);
 
 	const [status, setStatus] = useState<SubmissionStatus>(null);
@@ -216,6 +228,7 @@ export function useSubmission({
 				setSolved();
 			}
 			
+			setWithStats({ sub: s, stats: verdict });
 			setStatus({ type: "done", verdict });
 		} finally {
 			stack.dispose();
@@ -223,7 +236,7 @@ export function useSubmission({
 	}, [s]);
 
 	return {
-		acSubmission: status?.type=="done" && status.verdict.type=="AC" ? s : null,
+		acSubmission: status?.type=="done" && status.verdict.type=="AC" ? withStats : null,
 		status, loading, resubmitting: s!=null || alreadySolved, alreadySolved, puzzle,
 		nextStage, setSubmission: setS
 	};

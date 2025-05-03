@@ -22,14 +22,20 @@ type TerminalEvent = {
 } | {
 	type: "text", content: string
 } | {
+	type: "reverse"
+} | {
 	type: "pause"
+} | {
+	type: "step", mul: number
 };
 
 type TerminalMsg = {
 	ev: TerminalEvent[],
 	type: "server",
 	content: Node[],
-	elem: HTMLElement
+	elem: HTMLElement,
+	stepMul: number,
+	rev: boolean
 };
 
 class TerminalEffect {
@@ -39,23 +45,13 @@ class TerminalEffect {
 	interval: number|undefined;
 
 	step = 15;
-	wait = 3;
+	wait = 30;
 	inPause = -1;
 
 	constructor(private root: HTMLElement, private render: boolean) {
     if (!render) this.interval = setInterval(()=>this.update(), 50);
 	}
 
-	moveCursor(show: boolean) {
-		if (this.cursorElem) this.cursorElem.remove();
-		if (this.render || this.current>=this.msgs.length || !show) return;
-
-		this.cursorElem = document.createElement("span");
-		this.cursorElem.classList.add("cursor");
-
-		this.msgs[this.current].elem.appendChild(this.cursorElem);
-	}
-	
 	onEnd?: ()=>void;
 
 	update(step: number=this.step, wait: number=this.wait) {
@@ -63,42 +59,78 @@ class TerminalEffect {
 			return;
 		}
 
-		let writing = false;
-		if (this.current != -1 && this.msgs[this.current].ev.length > 0) {
-			let eaten = 0;
-			while (eaten < step && this.msgs[this.current].ev.length > 0) {
-				const ev = this.msgs[this.current].ev[0];
-				if (ev.type == "text") {
-					const len = Math.min(step - eaten, ev.content.length);
-					const subspan = document.createElement("span");
-					subspan.classList.add(this.render ? "text-bit-render" : "text-bit");
-					subspan.textContent = ev.content.slice(0, len);
+		if (this.cursorElem) this.cursorElem.remove();
 
-					this.msgs[this.current].elem.append(subspan);
-					ev.content = ev.content.slice(len);
-					if (ev.content.length == 0) this.msgs[this.current].ev.shift();
-					eaten += len;
+		const c = this.current>=this.msgs.length ? null : this.msgs[this.current];
+		let writing=false;
+		if (this.current != -1 && c && c.ev.length > 0) {
+			let eaten = 0;
+			const step2 = Math.ceil(Math.max(0.01,c.stepMul)*step);
+			while (eaten < step2 && c.ev.length > 0) {
+				const ev = c.ev[0];
+				if (ev.type == "text") {
 					writing=true;
+					const len = Math.min(step2 - eaten, ev.content.length);
+					if (c.rev) {
+						for (let i=0; i<len; ) {
+							const el = c.elem.lastElementChild!;
+							const l = el.textContent!.length;
+							const d = len-i;
+							if (d>=l) el.remove();
+							else el.textContent = el.textContent!.slice(0, l-d);
+							i+=Math.min(d,l);
+						}
+					} else {
+						const subspan = document.createElement("span");
+						subspan.classList.add(this.render ? "text-bit-render" : "text-bit");
+						subspan.textContent = ev.content.slice(0, len);
+
+						c.elem.append(subspan);
+					}
+
+					ev.content = ev.content.slice(len);
+					if (ev.content.length == 0) c.ev.shift();
+					eaten += len;
 				} else if (ev.type == "pause") {
-					this.inPause = wait;
-					this.msgs[this.current].ev.shift();
-					break;
+					c.ev.shift();
+					if (!c.rev) {
+						this.inPause = wait;
+						break;
+					}
 				} else if (ev.type == "start") {
-					this.msgs[this.current].elem.appendChild(ev.node);
-					this.msgs[this.current].elem = ev.node;
-					this.msgs[this.current].ev.shift();
+					if (c.rev) {
+						const p = c.elem.parentElement!;
+						c.elem.remove();
+						c.elem = p;
+					} else {
+						c.elem.appendChild(ev.node);
+						c.elem = ev.node;
+					}
+
+					c.ev.shift();
 				} else if (ev.type == "end") {
-					this.msgs[this.current].elem = this.msgs[this.current].elem.parentElement!;
-					this.msgs[this.current].ev.shift();
+					if (c.rev) {
+						c.elem = c.elem.lastElementChild as HTMLElement;
+					} else {
+						c.elem = c.elem.parentElement!;
+					}
+
+					c.ev.shift();
 					writing=false;
+				} else if (ev.type=="reverse") {
+					c.rev=!c.rev;
+					c.ev.shift();
+				} else if (ev.type=="step") {
+					c.stepMul = ev.mul;
+					c.ev.shift();
 				}
 			}
 
-			if (this.msgs[this.current].ev.length == 0) this.inPause = wait;
+			if (c.ev.length == 0) this.inPause = wait;
 		}
 
 		let skip=false;
-		if (this.inPause <= 0 && (this.current == -1 || this.msgs[this.current].ev.length == 0)) {
+		if (this.inPause <= 0 && (this.current == -1 || (c && c.ev.length == 0))) {
 			this.current++;
 
 			skip=true;
@@ -107,7 +139,13 @@ class TerminalEffect {
 		}
 
 		if (skip) this.append("\n");
-		this.moveCursor(writing);
+
+		if (this.render || this.current>=this.msgs.length || !c || !writing) return;
+
+		this.cursorElem = document.createElement("span");
+		this.cursorElem.classList.add("cursor");
+
+		c.elem.appendChild(this.cursorElem);
 	}
 
 	addMsg(msg: Omit<TerminalMsg, "elem"|"ev">) {
@@ -120,18 +158,43 @@ class TerminalEffect {
 		const t = (elem: HTMLElement) => {
 			for (const e of elem.childNodes) {
 				if (e.nodeType == Node.TEXT_NODE) {
-					ev.push(
-						...e.textContent!.split("[pause]")
-							.map(x=>({ type: "text", content: x } as const))
-							.reduce((a,b): TerminalEvent[] =>
-								(a.length > 0 ? [...a, { type: "pause" }, b] : [b]),
-								[] as TerminalEvent[]
-							)
-					);
+					const subs: [RegExp, (match: RegExpMatchArray)=>TerminalEvent[]][] = [
+						[/\[pause\]/, ()=>[{ type: "pause" }]],
+						[/\[step ([\d\\.]+)\]/, (match)=>[{ type: "step", mul: Number.parseFloat(match[1]) }]]
+					];
+
+					let txt: TerminalEvent[] = [ {type: "text", content: e.textContent ?? ""} ];
+					for (const [a,b] of subs) txt=txt.flatMap(v=>{
+						if (v.type!="text") return [v];
+
+						const out: TerminalEvent[] = [];
+						for (;;) {
+							const m = v.content.match(a);
+							const i = m?.index ?? v.content.length;
+							if (i > 0) {
+								out.push({type: "text", content: v.content.slice(0,i)});
+								v.content=v.content.slice(i+(m?.[0].length ?? 0));
+							}
+
+							if (m) out.push(...b(m));
+							else break;
+						}
+						
+						return out;
+					});
+					
+					ev.push(...txt);
 				} else {
+					const start = ev.length;
 					ev.push({ type: "start", node: e.cloneNode(false) as HTMLElement });
 					t(e as HTMLElement);
 					ev.push({ type: "end" });
+					if ("delete" in (e as HTMLElement).dataset) {
+						const end = ev.length;
+						ev.push({ type: "reverse" });
+						ev.push(...ev.slice(start,end).map(x=>({...x})).reverse());
+						ev.push({ type: "reverse" });
+					}
 				}
 			}
 		};
@@ -179,6 +242,7 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 		}[]
 	}
 }) {
+	console.log(children);
 	const ref = useRef<HTMLDivElement>(null);
 	const src = useRef<HTMLDivElement>(null);
 	const [done, setDone] = useState(noCursor==true);
@@ -202,7 +266,7 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 		const fx = new TerminalEffect(ref.current, !isActive);
 		setDone(!isActive);
 		fx.onEnd = ()=>setDone(true);
-		fx.addMsg({ type: "server", content: [...src.current?.childNodes ?? []] });
+		fx.addMsg({ type: "server", content: [...src.current?.childNodes ?? []], rev: false, stepMul: 1 });
 		if (!isActive) fx.renderAll();
 		
 		const cb = ()=>setSkip(true);
@@ -395,7 +459,10 @@ export function Messages({ stage }: { stage: Stage }) {
 	</>;
 }
 
-export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>void}) {
+export function Story({stage, next, para}: {
+	stage: Stage&{type:"story"}, next?: ()=>void,
+	para: ComponentChildren[]
+}) {
 	const [index, setIndex] = useState(()=>{
 		return LocalStorage.storyParagraph?.[stage.key] ?? 0;
 	});
@@ -403,11 +470,11 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(()=>{
-		if (index>=stage.para.length) next?.();
+		if (index>=para.length) next?.();
 		else LocalStorage.storyParagraph = {
 			...LocalStorage.storyParagraph, [stage.key]: Math.min(index)
 		};
-	}, [index, next, stage.key, stage.para.length]);
+	}, [index, next, stage.key, para.length]);
 
 	useEffect(()=>{
 		const container = containerRef.current!;
@@ -464,7 +531,7 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 		<div className="flex flex-row self-stretch justify-between gap-2 items-center" >
 			<Text v="big" className="my-4" >{stage.name}</Text>
 			<div className="flex flex-row gap-2 items-end" >
-				<Anchor className={textColor.dim} onClick={()=>setIndex(stage.para.length)} >Skip chapter</Anchor>
+				<Anchor className={textColor.dim} onClick={()=>setIndex(para.length)} >Skip chapter</Anchor>
 				{index>0 && <>
 					<Divider vert />
 					<Anchor className={textColor.dim} onClick={()=>setIndex(0)} >Reset chapter</Anchor>
@@ -472,10 +539,10 @@ export function Story({stage, next}: {stage: Stage&{type:"story"}, next?: ()=>vo
 			</div>
 		</div>
 
-		{stage.para.slice(0, index+1).map((v,i)=><Fragment key={i} >
+		{para.slice(0, index+1).map((v,i)=><Fragment key={i} >
 			<StoryContext.Provider value={{
 				active: index==i, last: next==undefined ? "end"
-					: i==stage.para.length-1 ? "chapter" : "next",
+					: i==para.length-1 ? "chapter" : "next",
 				next() { setIndex(i=>i+1); },
 			}} >
 				{v}

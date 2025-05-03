@@ -4,7 +4,7 @@ import { IconChevronDown, IconChevronUp, IconInfoCircleFilled, IconInfoTriangleF
 import { twMerge, twJoin } from "tailwind-merge";
 import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
 import { forwardRef, SetStateAction } from "preact/compat";
-import { NodeSelection, Procedure } from "../shared/eval";
+import { NodeSelection, Procedure, ProgramStats } from "../shared/eval";
 import { parseExtra, stringifyExtra } from "../shared/util";
 
 // dump of a bunch of UI & utility stuff ive written...
@@ -82,7 +82,7 @@ export function HiddenInput({className, ...props}: JSX.InputHTMLAttributes<HTMLI
 }
 
 export function Textarea({className, children, ...props}: JSX.IntrinsicElements["textarea"]&{className?: string}) {
-	return <textarea className={twMerge(twJoin(interactiveContainerDefault, borderColor.focus, "w-full p-2 border-2 transition duration-300 rounded-none resize-y max-h-60 min-h-24", className))}
+	return <textarea className={twMerge(interactiveContainerDefault, borderColor.focus, "w-full p-2 border-2 transition duration-300 rounded-none resize-y max-h-60 min-h-24", className)}
 		rows={6} tabIndex={100} {...props} >
 		{children}
 	</textarea>
@@ -103,7 +103,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(({
 });
 
 export const IconButton = ({className, children, icon, disabled, ...props}: {icon?: ComponentChildren, disabled?: boolean, className?: string}&JSX.IntrinsicElements["button"]) =>
-	<button className={twMerge(twJoin("rounded-sm p-1.5 flex items-center justify-center h-fit aspect-square", interactiveContainerDefault, className))} disabled={disabled} {...props} >
+	<button className={twMerge("rounded-sm p-1.5 flex items-center justify-center h-fit aspect-square", interactiveContainerDefault, className)} disabled={disabled} {...props} >
 		{icon}
 		{children}
 	</button>;
@@ -116,14 +116,14 @@ export const anchorStyle = twJoin(anchorHover, anchorUnderline);
 export const Anchor = forwardRef<HTMLAnchorElement, AnchorProps>((
 	{className,children,...props}: AnchorProps, ref
 ) => {
-	const classN = twMerge(twJoin(anchorStyle, className));
+	const classN = twMerge(anchorStyle, className);
 	return <a ref={ref} className={classN} {...props} >{children}</a>;
 });
 
 export const LinkButton = ({className, icon, ...props}:
 	JSX.AnchorHTMLAttributes<HTMLAnchorElement>&{icon?: ComponentChildren, className?: string}
 ) =>
-	<a className={twMerge(twJoin("flex flex-row gap-2 px-3 py-1.5 items-center rounded-xl text-sm", interactiveContainerDefault, className))} rel="noopener noreferrer" {...props} >
+	<a className={twMerge("flex flex-row gap-2 px-3 py-1.5 items-center rounded-xl text-sm", interactiveContainerDefault, className)} rel="noopener noreferrer" {...props} >
 		{icon!=undefined &&
 			<span className="inline-block h-4 w-auto" >{icon}</span> }
 		{props.children}
@@ -131,7 +131,7 @@ export const LinkButton = ({className, icon, ...props}:
 
 export const ThemeSpinner = ({className,size}: {className?: string, size?: "sm"|"md"|"lg"}) =>
 	<IconLoader2 size={{sm: 24, md: 36, lg: 72}[size ?? "md"]}
-		className={twMerge(twJoin(`animate-spin stroke-${{sm: 1, md: 2, lg: 3}[size ?? "md"]} dark:stroke-white stroke-blue-600`, className))} />;
+		className={twMerge(`animate-spin stroke-${{sm: 1, md: 2, lg: 3}[size ?? "md"]} dark:stroke-white stroke-blue-600`, className)} />;
 
 export const Loading = (props: ComponentProps<typeof ThemeSpinner>) =>
 	<div className="h-full w-full flex item-center justify-center py-16 px-20" >
@@ -152,7 +152,7 @@ export const chipColorKeys = Object.keys(chipColors) as (keyof typeof chipColors
 export const Chip = ({className, color, ...props}: JSX.HTMLAttributes<HTMLSpanElement>&{
 	color?: keyof typeof chipColors, className?: string
 }) =>
-	<span className={twMerge(twJoin("inline-block text-xs px-2 py-1 rounded-lg border-solid border whitespace-nowrap", chipColors[color ?? "gray"], className))}
+	<span className={twMerge("inline-block text-xs px-2 py-1 rounded-lg border-solid border whitespace-nowrap", chipColors[color ?? "gray"], className)}
 		{...props} >{props.children}</span>;
 
 export function capitalize(s: string) {
@@ -167,7 +167,7 @@ export const Alert = ({title, txt, bad, className}: {
 	title?: ComponentChildren, txt: ComponentChildren,
 	bad?: boolean, className?: string
 }) =>
-	<div className={twMerge(twJoin("border", bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.default} ${borderColor.default}`, "p-2 px-4 rounded-sm flex flex-row gap-2", className))} >
+	<div className={twMerge("border", bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.default} ${borderColor.default}`, "p-2 px-4 rounded-sm flex flex-row gap-2", className)} >
 		<div className={twJoin("flex-shrink-0", title!=undefined && "mt-1")} >
 			{bad??false ? <IconInfoTriangleFilled /> : <IconInfoCircleFilled />}
 		</div>
@@ -178,19 +178,19 @@ export const Alert = ({title, txt, bad, className}: {
 	</div>;
 
 export const Divider = ({className, contrast, vert}: {className?: string, contrast?: boolean, vert?: boolean}) =>
-	<span className={twMerge(twJoin("shrink-0 block", vert==true ? "w-px h-5 self-center pb-1" : "w-full h-px my-2", contrast??false ? "dark:bg-gray-400 bg-gray-500" : "dark:bg-gray-600 bg-zinc-300", className))} />;
+	<span className={twMerge("shrink-0 block", vert==true ? "w-px h-5 self-center pb-1" : "w-full h-px my-2", contrast??false ? "dark:bg-gray-400 bg-gray-500" : "dark:bg-gray-600 bg-zinc-300", className)} />;
 
 export const Card = ({className, children, ...props}:
 	JSX.HTMLAttributes<HTMLDivElement>&{className?: string}
 ) =>
-	<div className={twMerge(twJoin("flex flex-col gap-1 rounded-md p-2 border-1 dark:border-zinc-600 shadow-md dark:shadow-black shadow-white/20 border-zinc-300", bgColor.md, className))} {...props} >
+	<div className={twMerge("flex flex-col gap-1 rounded-md p-2 border-1 dark:border-zinc-600 shadow-md dark:shadow-black shadow-white/20 border-zinc-300", bgColor.md, className)} {...props} >
 		{children}
 	</div>;
 
 export function MoreButton({children, className, act: hide, down}: {
 	act: ()=>void, children?: ComponentChildren, className?: string, down?: boolean
 }) {
-	return <div className={twMerge(twJoin("flex flex-col w-full items-center", className))} >
+	return <div className={twMerge("flex flex-col w-full items-center", className)} >
 		<button onClick={hide} className={twJoin("flex flex-col items-center cursor-pointer transition", down??false ? "hover:translate-y-1" : "hover:-translate-y-1")} >
 			{down??false ? <>{children}<IconChevronDown /></>
 				: <><IconChevronUp />{children}</>}
@@ -373,15 +373,15 @@ export function Text({className, children, v, ...props}:
 	&JSX.HTMLAttributes<HTMLParagraphElement>&{v?: TextVariants, className?: string}
 ) {
 	switch (v) {
-		case "big": return <h1 className={twMerge(twJoin("md:text-3xl text-2xl font-display font-black", textColor.contrast, className))} {...props} >{children}</h1>;
-		case "bold": return <b className={twMerge(twJoin("text-lg font-display font-extrabold", textColor.contrast, className))} {...props} >{children}</b>;
-		case "smbold": return <b className={twMerge(twJoin("text-sm font-display font-bold text-gray-700 dark:text-gray-300", className))} {...props} >{children}</b>;
-		case "md": return <h3 className={twMerge(twJoin("text-xl font-display font-bold", textColor.contrast, className))} {...props} >{children}</h3>;
-		case "lg": return <h3 className={twMerge(twJoin("text-xl font-display font-extrabold", textColor.contrast, className))} {...props} >{children}</h3>;
-		case "dim": return <span className={twMerge(twJoin("text-sm text-gray-500 dark:text-gray-400", className))} {...props} >{children}</span>;
-		case "sm": return <p className={twMerge(twJoin("text-sm text-gray-800 dark:text-gray-200", className))} {...props} >{children}</p>;
-		case "code": return <code className={twMerge(twJoin("break-all text-gray-800 dark:text-gray-200 font-semibold rounded-sm p-0.5 whitespace-pre-wrap", bgColor.md, className))} {...props} >{children}</code>;
-		case "err": return <span className={twMerge(twJoin("text-red-500", className))} {...props} >{children}</span>;
+		case "big": return <h1 className={twMerge("md:text-3xl text-2xl font-display font-black", textColor.contrast, className)} {...props} >{children}</h1>;
+		case "bold": return <b className={twMerge("text-lg font-display font-extrabold", textColor.contrast, className)} {...props} >{children}</b>;
+		case "smbold": return <b className={twMerge("text-sm font-display font-bold text-gray-700 dark:text-gray-300", className)} {...props} >{children}</b>;
+		case "md": return <h3 className={twMerge("text-xl font-display font-bold", textColor.contrast, className)} {...props} >{children}</h3>;
+		case "lg": return <h3 className={twMerge("text-xl font-display font-extrabold", textColor.contrast, className)} {...props} >{children}</h3>;
+		case "dim": return <span className={twMerge("text-sm text-gray-500 dark:text-gray-400", className)} {...props} >{children}</span>;
+		case "sm": return <p className={twMerge("text-sm text-gray-800 dark:text-gray-200", className)} {...props} >{children}</p>;
+		case "code": return <code className={twMerge("break-all text-gray-800 dark:text-gray-200 font-semibold rounded-sm p-0.5 whitespace-pre-wrap", bgColor.md, className)} {...props} >{children}</code>;
+		case "err": return <span className={twMerge("text-red-500", className)} {...props} >{children}</span>;
 		default: return <p className={className} {...props} >{children}</p>;
 	}
 }
@@ -400,7 +400,7 @@ export function Modal({bad, open, onClose, closeButton, title, children, classNa
 		if (show) modalRef.current?.showModal();
 		else modalRef.current?.close();
 	}} ref={modalRef} >
-		<dialog className={twMerge(twJoin(bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "[:not(.show)]:opacity-0 [:not(.show)]:pointer-events-none transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 pt-4 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0 gap-2 group [.show]:opacity-100 [.show]:pointer-events-auto", className))}
+		<dialog className={twMerge(bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "[:not(.show)]:opacity-0 [:not(.show)]:pointer-events-none transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 pt-4 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0 gap-2 group [.show]:opacity-100 [.show]:pointer-events-auto", className)}
 			onClose={(ev)=>{
 				ev.preventDefault();
 				onClose?.();
@@ -518,7 +518,7 @@ export const AppTooltip = forwardRef(({
 				popoverRect={popoverRect}
 				arrowClassName={borderClass}
 				arrowSize={7} arrowColor="" >
-				<Collapse className={twMerge(twJoin(containerDefault, "p-2 py-1", className))}
+				<Collapse className={twMerge(containerDefault, "p-2 py-1", className)}
 					onPointerEnter={interact} onPointerLeave={unInteract} open={isOpen} tabIndex={0} {...props} >
 					{content}
 				</Collapse>
@@ -922,6 +922,10 @@ export function throttle(ms: number, callOnDispose?: boolean) {
 	} as const;
 }
 
+export type PuzzleSolveData = {
+	token: string, id: number, username: string|null, stats: ProgramStats
+};
+
 export type LocalStorage = Partial<{
 	theme: Theme,
 	storyState: Record<string, unknown>,
@@ -941,7 +945,7 @@ export type LocalStorage = Partial<{
 	stepsPerS: number,
 	// timestamp of when stage last counted
 	lastStageCount: Map<string, number>,
-	puzzleSolve: Map<string, {token: string, id: number}>,
+	puzzleSolve: Map<string, PuzzleSolveData>,
 	username: string,
 	
 	seenReference: boolean,
@@ -1066,3 +1070,9 @@ export function AlertErrorBoundary({children}: {children?: ComponentChildren}) {
 	
 	return children;
 }
+
+export function ease(t: number) {
+	const a = t*t*(3-2*t);
+	return a*a/2 + 0.5-(1-a)*(1-a)/2;
+}
+	
