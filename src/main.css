@@ -92,6 +92,9 @@ button:not(:disabled) {
   height: 1.2rem;
   margin-left: -2px;
   background: linear-gradient(to right, #d1ffde4d, #5efd8b);
+}
+
+.cursor-blink {
   animation: blinker 0.7s cubic-bezier(0.98, -0.01, 0.09, 1.01) infinite alternate
 }
 
@@ -196,3 +199,8 @@ svg.logo .subrose-text { animation-name: subrose-text; }
 svg.logo .arrow-sm { animation-name: arrow-sm; }
 svg.logo .rose { animation-name: rose; }
 svg.logo .back { animation-name: back; }
+
+.ul {
+  margin-left: 1rem;
+  list-style-type: disc;
+}

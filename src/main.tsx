@@ -1,11 +1,11 @@
 import "disposablestack/auto";
-import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, ease, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useMd } from "./ui";
-import { ComponentChildren, ComponentProps, createContext, render, JSX, Fragment } from "preact";
+import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, ease, GotoContext, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useGoto, useMd, useTitle } from "./ui";
+import { ComponentChildren, ComponentProps, render, JSX, Fragment } from "preact";
 import { useCallback, useContext, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
 import { Editor } from "./editor";
 import { Stage, stages, Story } from "./story";
 import { EditorState, makeEntryProc, Procedure } from "../shared/eval";
-import { IconBrandGithubFilled, IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled } from "@tabler/icons-preact";
+import { IconBrandGithubFilled, IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled, IconTriangleFilled } from "@tabler/icons-preact";
 import { LocationProvider, Route, Router, useLocation } from "preact-iso";
 import { twMerge, twJoin } from "tailwind-merge";
 import { parseExtra, stringifyExtra } from "../shared/util";
@@ -15,13 +15,6 @@ import { BgAnimComponent } from "./bganim";
 import { LogoBack } from "./logo";
 import { forwardRef } from "preact/compat";
 
-export const GotoContext = createContext(undefined as unknown as {
-  goto: (this: void, path: string)=>void,
-  addTransition(f: ()=>Promise<void>): Disposable
-});
-
-// idk i usually use pushstate iirc or smh i guess not today!
-export function useGoto() { return useContext(GotoContext).goto; }
 export function FadeRoute({className, ...props}: JSX.IntrinsicElements["div"]&{
   className?: string
 }) {
@@ -33,7 +26,7 @@ export function FadeRoute({className, ...props}: JSX.IntrinsicElements["div"]&{
     if (!el) return;
 
     let anim: Animation|null=null;
-    const trans = ctx.addTransition(async ()=>{
+    const trans = ctx!.addTransition(async ()=>{
       anim?.cancel();
       anim = await el.animate([ { opacity: 1 }, { opacity: 0 } ], {
         duration: 500, fill: "forwards", iterations: 1
@@ -83,14 +76,20 @@ function Home() {
   </FadeRoute><BgAnimComponent /></>;
 }
 
-export const Logo = forwardRef<HTMLButtonElement, {className?: string}>(({className}, ref)=>{
+export const Logo = forwardRef<HTMLButtonElement, {className?: string, menu?: boolean}>(({
+  className, menu
+}, ref)=>{
   const goto = useGoto();
-  return <button onClick={()=>goto("/")} className={twMerge("w-1/2 self-end hover:scale-105 transition-transform", className)} ref={ref} ><LogoBack /></button>;
+  return <button onClick={()=>goto(menu==true ? "/menu" : "/")}
+    className={twMerge("w-1/2 self-end", className)}
+    ref={ref} ><LogoBack /></button>;
 });
 
 function ErrorPage({errName, err, reset, children}: {
   errName?: string, err?: unknown, reset?: ()=>void, children?: ComponentChildren
 }) {
+  useTitle(`Subrose | Error`);
+
   return <div className="max-w-md flex flex-col w-full pt-20 gap-2" >
     <Logo />
     <Text v="big" >{errName ?? "An error occurred"}</Text>
@@ -145,7 +144,8 @@ function getCompleted() {
     done: stage.type=="puzzle" ? puzzle.has(stage.key) : story.has(stage.key)
   }));
 
-  const activeStages = withDone.find(x=>x.type=="puzzle" && !x.done)?.i ?? withDone.length;
+  const activeStages = import.meta.env["VITE_ALL_COMPLETED"]=="1" ? withDone.length
+    : withDone.find(x=>x.type=="puzzle" && !x.done)?.i ?? withDone.length;
   return { story, puzzle, withDone, activeStages } as const;
 }
 
@@ -160,6 +160,8 @@ function Menu() {
   const [exporting, setExporting] = useState(false);
 
   const percentProgress = `${Math.round(activeStages/stages.length * 100)}%`;
+
+  useTitle("Subrose | Menu");
 
   return <><FadeRoute className="flex flex-col gap-4 pt-20 max-w-xl" >
     <ConfirmModal confirm={()=>{
@@ -205,6 +207,8 @@ function Menu() {
     {withDone.flat().map(stage=>{
       const a = stage.i<=activeStages;
       return <Fragment key={stageUrl(stage)} >
+        {stage.type=="story" && stage.startOf!=undefined
+          && <Text v="md" className="mt-1 -mb-2 flex flex-row gap-2 items-center" ><IconTriangleFilled size={18} />{stage.startOf}</Text>}
         <button className={twMerge(a && anchorHover, "flex flex-col gap-0.5 p-2 pt-1 group items-start relative pr-10")}
           onClick={stage.i<=activeStages ? ()=>{
             goto(stageUrl(stage));          
@@ -302,6 +306,8 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
   }), [stage.key, throttleSave]);
 
   const goto = useGoto();
+  useTitle(`Subrose | ${stage.name}`);
+
   return edit && <FadeRoute>
     <Editor edit={edit} setEdit={setEdit2} puzzle={stage} nextStage={()=>{
       goto(stageUrl(stages[i+1]));
@@ -343,8 +349,10 @@ function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
   const logoRef = useRef<HTMLButtonElement>(null);
   
   const [para, setPara] = useState<ComponentChildren[]|null>(null);
-  useAsyncEffect(async ()=>{
-    setPara(await stage.para());
+  useEffect(()=>{
+    const cb = stage.para.onload(setPara);
+    void stage.para.load();
+    return cb;
   }, [stage.para]);
 
   useEffect(()=>{
@@ -360,12 +368,14 @@ function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
     return ()=>document.removeEventListener("scroll", cb);
   }, [para]);
 
+  useTitle(`Subrose | ${stage.name}`);
+
   return para!=null && <FadeRoute className="w-4xl flex flex-row items-start gap-4 pb-[30dvh] pt-10" >
     <Story stage={stage} para={para} next={i+1>=stages.length ? undefined : ()=>{
       LocalStorage.readStory = setWith(LocalStorage.readStory??null, stage.key);
       goto(stageUrl(stages[i+1]));
     }} />
-    <Logo className="basis-1/4 shrink-0 self-start sticky top-4" ref={logoRef} />
+    <Logo className="basis-1/4 shrink-0 self-start sticky top-4 hover:opacity-100! transition-opacity duration-300" ref={logoRef} menu />
   </FadeRoute>;
 }
 
@@ -444,8 +454,5 @@ function App({theme: initialTheme}: {theme: Theme}) {
 }
 
 document.addEventListener("DOMContentLoaded", ()=>{
-	const initialTheme = LocalStorage.theme
-		?? "dark";//(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-
-	render(<LocationProvider><App theme={initialTheme} /></LocationProvider>, document.body);
+	render(<LocationProvider><App theme={"dark"} /></LocationProvider>, document.body);
 });

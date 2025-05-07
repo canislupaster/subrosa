@@ -1,6 +1,6 @@
 import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection, makeProc, numTests } from "../shared/eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, interactiveContainerDefault, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, ThemeSpinner, toSearchString, useCloneRef, useFnRef, useToast } from "./ui";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, interactiveContainerDefault, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, ThemeSpinner, toSearchString, useCloneRef, useFnRef, useGoto, useToast } from "./ui";
 import { twMerge, twJoin } from "tailwind-merge";
 import { IconArrowsRightLeft, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconHelp, IconInfoCircle, IconPencil, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, Ref, RefCallback, RefObject } from "preact";
@@ -8,14 +8,13 @@ import { dragAndDrop, ReactDragAndDropConfig, useDragAndDrop } from "@formkit/dr
 import { animations, DragState, handleNodePointerdown, performTransfer, remapNodes, setParentValues } from "@formkit/drag-and-drop";
 import { ChangeEvent, SetStateAction } from "preact/compat";
 import { fill, strToInt, toPrecStat } from "../shared/util";
-import { Messages, Stage } from "./story";
+import { Messages } from "./story";
 import { Submission, useSubmission } from "./api";
-import { useGoto } from "./main";
 import { Reference } from "./reference";
 import { LogoBack } from "./logo";
 import { addFromText, toText } from "../shared/text";
-import { Puzzle } from "../shared/puzzles";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { Puzzle } from "./data";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 export const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2");
@@ -1168,7 +1167,7 @@ function usePuzzleIO(puzzle: Puzzle): PuzzleIO {
 			}
 
 			const obj = Object.fromEntries(s.puzzle.schema.map((x,i)=>[x.key, toNumStr[i]]));
-			err ??= s.puzzle.validator(obj);
+			err ??= s.puzzle.validator?.(obj) ?? null;
 			if (err==null) s={
 				...s, input: toNumStr, programInput: toNumStr, output: s.puzzle.solve(obj)
 			};
@@ -1203,7 +1202,7 @@ function usePuzzleIO(puzzle: Puzzle): PuzzleIO {
 
 export function Editor({edit, setEdit, nextStage, puzzle}: {
 	edit: EditorState, setEdit: SetFn<EditorState>,
-	puzzle: Stage&{type: "puzzle"}, nextStage: ()=>void
+	puzzle: Puzzle, nextStage: ()=>void
 }) {
 	const [runState, setRunState] = useState<ReturnType<typeof clone>|null>();
 	const [runStatus, setRunStatus] = useState<{ type: "done"|"stopped" }
@@ -1422,7 +1421,10 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	};
 	
 	const [referenceOpen, setReferenceOpen] = useState(false);
-	const [open, setOpen] = useState<{panel: "text"|"dashboard", open: boolean}>({panel: "dashboard", open: true});
+	const [open, setOpen] = useState<{panel: "text"|"dashboard", open: boolean}>({
+		panel: "dashboard", open: false
+	});
+
 	const doOpen = ()=>setOpen({panel: "dashboard", open: true});
 	const [value, setValue] = useState("");
 	useEffect(()=>{
@@ -1469,7 +1471,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			{runState.stack.flat().map((v,i)=>{
 				const p = edit.procs.get(v.proc);
 				return <button key={i}
-					className={twJoin("w-full py-0.5 px-1 not-last:border-b-1", bgColor.default, borderColor.default, bgColor.hover, i==frameI && "dark:bg-zinc-700!")}
+					className={twJoin("w-full py-0.5 px-1 not-last:border-b-1", bgColor.default, borderColor.divider, bgColor.hover, i==frameI && "dark:bg-zinc-700!")}
 					disabled={!p || i==frameI}
 					onClick={()=>openFrame(i, v.proc)} >
 					{p?.name ?? "(deleted)"}: {"#"}{v.i+1}
@@ -1621,7 +1623,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		</div>
 		
 		<Modal open={open.open} onClose={()=>setOpen({panel: open.panel, open: false})}
-			title={open.panel=="dashboard" ? puzzle.name : "SUBTEXT editor"} >
+			title={open.panel=="dashboard" ? puzzle.name : "SUBTXT editor"} >
 			{open.panel=="dashboard" ? <div className="flex flex-col items-stretch gap-2" >
 				<Text className="mb-1 italic" >{puzzle.blurb}</Text>
 				{puzzle.extraDesc!=undefined && <Text className="mb-1" >{puzzle.extraDesc}</Text>}
@@ -1644,7 +1646,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				<Submission sub={sub} />
 				
 				<Button icon={<IconPencil />} className="self-end"
-					onClick={()=>setOpen({open: true, panel: "text"})} >SUBTEXT editor</Button>
+					onClick={()=>setOpen({open: true, panel: "text"})} >SUBTXT editor</Button>
 			</div> : <TextEditor value={value} setValue={setValue}
 				edit={edit} setEdit={setEdit} back={()=>doOpen()} />}
 		</Modal>

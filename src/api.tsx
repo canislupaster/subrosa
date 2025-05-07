@@ -1,6 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
 import { Procedure, ProgramStats, test, Verdict } from "../shared/eval";
-import { Stage } from "./story";
 import { API, COUNT_PLAY_INTERVAL_SECONDS, parseExtra, ServerResponse, StageStatsResponse, stringifyExtra, toPrecStat, validUsernameRe } from "../shared/util";
 import Tester from "../shared/worker?worker";
 import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor, PuzzleSolveData } from "./ui";
@@ -9,6 +8,7 @@ import { blankStyle } from "./editor";
 import { twMerge, twJoin } from "tailwind-merge";
 import { IconChevronDown } from "@tabler/icons-preact";
 import { Fragment } from "preact";
+import { Puzzle } from "./data";
 
 export type Submission = { active: number, procs: ReadonlyMap<number,Procedure> };
 
@@ -16,8 +16,10 @@ export type APIRequest = ({
 	[K in keyof API]: [K, API[K]["request"]]|[K, API[K]["request"], (resp: ServerResponse<K>) => void]
 });
 
-const apiBaseUrlEnv = (import.meta as unknown as {env: {VITE_API_BASE_URL: string}}).env.VITE_API_BASE_URL;
-const apiBaseUrl = apiBaseUrlEnv=="" ? new URL("/", window.location.href).href : apiBaseUrlEnv;
+const apiBaseUrl = import.meta.env["VITE_API_BASE_URL"]==""
+	? new URL("/", window.location.href).href
+	: import.meta.env["VITE_API_BASE_URL"] as string;
+
 console.log(`api base url: ${apiBaseUrl}`);
 
 async function makeReq<T extends keyof API>(...args: APIRequest[T]) {
@@ -67,7 +69,7 @@ type SubmissionStatus = {
 type SubmissionWithStats = { sub: Submission, stats: ProgramStats };
 
 function Leaderboard({submission: s, puzzle}: {
-	submission: SubmissionWithStats|null, puzzle: Stage&{type: "puzzle"}
+	submission: SubmissionWithStats|null, puzzle: Puzzle
 }) {
 	const [sort, setSort] = useState<keyof ProgramStats>("time");
 	const [input, setInput] = useState(LocalStorage.username ?? "");
@@ -171,15 +173,14 @@ function Leaderboard({submission: s, puzzle}: {
 export function useSubmission({
 	setSolved, nextStage, puzzle
 }: { 
-	puzzle: Stage&{type: "puzzle"},
-	setSolved: ()=>void, nextStage: ()=>void
+	puzzle: Puzzle, setSolved: ()=>void, nextStage: ()=>void
 }): {
 	resubmitting: boolean,
 	setSubmission: (x: Submission)=>void,
 	alreadySolved: boolean,
 	acSubmission: SubmissionWithStats|null,
 	status: SubmissionStatus,
-	puzzle: Stage&{type: "puzzle"},
+	puzzle: Puzzle,
 	loading: boolean, nextStage: ()=>void
 } {
 	const [alreadySolved, setAlreadySolved] = useState(false);

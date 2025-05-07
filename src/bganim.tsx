@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "preact/hooks"
 import { alpha, RNG } from "../shared/puzzles";
-import { GotoContext } from "./main";
 import { twJoin } from "tailwind-merge";
+import { GotoContext } from "./ui";
 
 class BgAnim extends DisposableStack {
 	frame: number|null=null;
@@ -162,7 +162,7 @@ export function BgAnimComponent() {
 		if (!ref.current) return;
 
 		const bg = new BgAnim(ref.current);
-		const transition = gotoCtx.addTransition(()=>{
+		const transition = gotoCtx!.addTransition(()=>{
 			setUnwriting(true);
 			return bg.unwrite();
 		});

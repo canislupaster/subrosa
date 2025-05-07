@@ -34,12 +34,13 @@ export const bgColor = {
 	highlight: "dark:bg-yellow-800 bg-amber-200",
 	highlight2: "dark:bg-teal-900 bg-cyan-200",
 	restriction: "dark:bg-amber-900 bg-amber-100",
-	divider: "dark:bg-zinc-500 bg-zinc-400",
+	divider: "dark:bg-gray-600 bg-zinc-300",
 	contrast: "dark:bg-white bg-black"
 }
 
 export const borderColor = {
 	default: "border-zinc-300 dark:border-zinc-600 disabled:bg-zinc-300 aria-expanded:border-blue-500 data-[selected=true]:border-blue-500",
+	divider: "dark:border-gray-600 border-zinc-300",
 	red: "border-red-400 dark:border-red-600",
 	defaultInteractive: "border-zinc-300 hover:border-zinc-400 dark:border-zinc-600 dark:hover:border-zinc-500 disabled:bg-zinc-300 aria-expanded:border-blue-500 active:border-blue-500 dark:active:border-blue-500 data-[selected=true]:border-blue-500",
 	blue: `hover:border-blue-500 dark:hover:border-blue-500 border-blue-500 dark:border-blue-500`,
@@ -178,7 +179,7 @@ export const Alert = ({title, txt, bad, className}: {
 	</div>;
 
 export const Divider = ({className, contrast, vert}: {className?: string, contrast?: boolean, vert?: boolean}) =>
-	<span className={twMerge("shrink-0 block", vert==true ? "w-px h-5 self-center pb-1" : "w-full h-px my-2", contrast??false ? "dark:bg-gray-400 bg-gray-500" : "dark:bg-gray-600 bg-zinc-300", className)} />;
+	<span className={twMerge("shrink-0 block", vert==true ? "w-px h-5 self-center pb-1" : "w-full h-px my-2", contrast??false ? "dark:bg-gray-400 bg-gray-500" : bgColor.divider, className)} />;
 
 export const Card = ({className, children, ...props}:
 	JSX.HTMLAttributes<HTMLDivElement>&{className?: string}
@@ -204,6 +205,22 @@ export const fadeGradient = {
 	secondary: "from-transparent dark:to-zinc-900 to-zinc-150"
 };
 
+export const GotoContext = createContext(undefined as {
+  goto: (this: void, path: string)=>void,
+  addTransition(f: ()=>Promise<void>): Disposable
+}|undefined);
+
+export const TitleContext = createContext(undefined as {
+	setTitle: (title: string)=>(()=>void)
+}|undefined);
+
+export function useTitle(value: string) {
+	const ctx = useContext(TitleContext)!.setTitle;
+	useEffect(()=>{ return ctx(value); }, [ctx, value]);
+}
+
+// idk i usually use pushstate iirc or smh i guess not today!
+export function useGoto() { return useContext(GotoContext)!.goto; }
 type ShowTransitionProps = {
 	children: ComponentChild, open: boolean,
 	openClassName?: string, closedClassName?: string,
@@ -216,8 +233,10 @@ export const ShowTransition = forwardRef<HTMLElement, ShowTransitionProps>(({
 	const myRef = useRef<HTMLElement>(null);
 	const [show, setShow] = useState(false);
 
-	const cls = open ? openClassName : closedClassName;
-	const removeCls = open ? closedClassName : openClassName;
+	const cls = (open ? openClassName : closedClassName)?.split(" ") ?? [];
+	const removeCls = (open ? closedClassName : openClassName)?.split(" ") ?? [];
+
+	const goto = useContext(GotoContext);
 	useEffect(()=>{
 		const el = myRef.current;
 		if (!open && !show) return;
@@ -231,27 +250,36 @@ export const ShowTransition = forwardRef<HTMLElement, ShowTransitionProps>(({
 
 		// wait for animations to begin, and then wait for all to end
 		let enabled=true;
-		const wait = ()=>setTimeout(()=>{
-			const anims = el.getAnimations({subtree: true});
-			if (!enabled || anims.length==0) {
-				update?.(false, el);
-				setShow(false);
-				return;
+		const wait = (async ()=>{
+			while (enabled) {
+				const anims = el.getAnimations({subtree: true});
+				if (anims.length==0) {
+					update?.(false, el);
+					setShow(false);
+					return true;
+				}
+
+				await Promise.all(anims.map(x=>x.finished));
+				await new Promise<void>(res=>setTimeout(res, 50));
 			}
+			
+			return false;
+		});
 
-			void Promise.all(anims.map(x=>x.finished)).then(()=>{
-				tm=wait();
-			});
-		}, 50);
-
-		let tm = open ? null : wait();
+		if (!open) void wait();
 		
-		el.classList.remove(...removeCls?.split(" ") ?? []);
-		el.classList.add(...cls?.split(" ") ?? []);
+		el.classList.remove(...removeCls);
+		el.classList.add(...cls);
+		
+		const t = !open ? null : goto?.addTransition(async ()=>{
+			el.classList.remove(...cls);
+			el.classList.add(...removeCls);
+			await wait();
+		});
 
 		return () => {
-			if (tm!=null) clearTimeout(tm);
 			enabled=false;
+			t?.[Symbol.dispose]();
 		};
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open, show]);
@@ -279,9 +307,9 @@ export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&
 		let frame: number|null;
 		setShowInner(main.clientHeight>0 || open!=false);
 
-		let lt = performance.now();
+		let lt: number|null = null;
 		const cb = ()=>requestAnimationFrame((t)=>{
-			const dt = t-lt;
+			const dt = Math.min(t-(lt ?? t), 50);
 			const style = getComputedStyle(main);
 			const mainInnerHeight = main.clientHeight - parseFloat(style.paddingBottom) - parseFloat(style.paddingTop);
 			const d = (open==false ? 0 : inner.clientHeight) - mainInnerHeight;
@@ -296,25 +324,30 @@ export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&
 			main.style.height = `${newH}px`;
 
 			lt=t;
-			if (done) frame=null; else frame = cb();
+			if (done) frame=lt=null; else frame = cb();
 		});
 		
+		let tm: number|null=null;
 		const observer = new ResizeObserver(()=>{
-			if (frame==null) frame=cb();
+			if (frame==null) {
+				if (tm!=null) clearTimeout(tm);
+				tm=setTimeout(()=>frame=cb(), 100);
+			}
 		});
 
 		observer.observe(inner);
 
-		frame = cb();
+		frame=cb();
 
 		return ()=>{
 			observer.disconnect();
+			if (tm!=null) clearTimeout(tm);
 			if (frame!=null) cancelAnimationFrame(frame);
 		};
 	}, [open, speed]);
 
 	return <div ref={useCloneRef(ref, myRef)} className={twMerge("overflow-hidden", className as string)}
-		style={{height: 0, ...style as JSX.CSSProperties}} {...props} >
+		style={{...style as JSX.CSSProperties, height: "1px"}} {...props} >
 		<div ref={innerRef} >
 			{showInner && children}
 		</div>
@@ -715,35 +748,50 @@ export function Container({children, className, ...props}: {
 		return ()=>clearTimeout(tm);
 	}, [toasts]);
 
-	return <PopupCountCtx.Provider value={{count, incCount}} >
-		<ToastContext.Provider value={{pushToast: useCallback((toast: string)=>{
-			setToasts(xs=>[...xs.slice(0,3), [toastKey.current++, toast]]);
-		}, [])}} >
-			<div className="fixed bottom-5 left-2 px-10 z-[12000] flex flex-col items-center gap-3" >
-				{toasts.map((x,i)=>
-					<ShowTransition key={x[0]} open={i!=0}
-						openClassName="opacity-100" closedClassName="opacity-0" >
+	const titlesRef = useRef<string[]>([document.title]);
 
-						<div className={twMerge(
-							containerDefault, "p-2 pl-5 gap-5 flex flex-row items-center transition-opacity",
-							bgColor.sky
-						)} >
-							{x[1]}
-							<button className="ml-auto" onClick={()=>{
-								setToasts(xs=>xs.filter(y=>y[0]!=x[0]));
-							}} ><IconX /></button>
-						</div>
-					</ShowTransition>
-				)}
-			</div>
+	return <TitleContext.Provider value={useMemo(()=>({
+		setTitle(title) {
+			const arr = titlesRef.current;
+			const i = arr.length;
+			arr.push(document.title = title);
 
-			<div className={twMerge("font-body dark:text-gray-100 text-gray-950 min-h-dvh relative", className)}
-				{...props} >
-				{children}
-				<div className="bg-neutral-100 dark:bg-neutral-950 absolute left-0 top-0 bottom-0 right-0 -z-50" />
-			</div>
-		</ToastContext.Provider>
-	</PopupCountCtx.Provider>;
+			return ()=>{
+				while (i<arr.length) arr.pop();
+				document.title = arr[arr.length-1];
+			};
+		}
+	}), [])} >
+		<PopupCountCtx.Provider value={{count, incCount}} >
+			<ToastContext.Provider value={{pushToast: useCallback((toast: string)=>{
+				setToasts(xs=>[...xs.slice(0,3), [toastKey.current++, toast]]);
+			}, [])}} >
+				<div className="fixed bottom-5 left-2 px-10 z-[12000] flex flex-col items-center gap-3" >
+					{toasts.map((x,i)=>
+						<ShowTransition key={x[0]} open={i!=0}
+							openClassName="opacity-100" closedClassName="opacity-0" >
+
+							<div className={twMerge(
+								containerDefault, "p-2 pl-5 gap-5 flex flex-row items-center transition-opacity",
+								bgColor.sky
+							)} >
+								{x[1]}
+								<button className="ml-auto" onClick={()=>{
+									setToasts(xs=>xs.filter(y=>y[0]!=x[0]));
+								}} ><IconX /></button>
+							</div>
+						</ShowTransition>
+					)}
+				</div>
+
+				<div className={twMerge("font-body dark:text-gray-100 text-gray-950 min-h-dvh relative", className)}
+					{...props} >
+					{children}
+					<div className="bg-neutral-100 dark:bg-neutral-950 absolute left-0 top-0 bottom-0 right-0 -z-50" />
+				</div>
+			</ToastContext.Provider>
+		</PopupCountCtx.Provider>
+	</TitleContext.Provider>;
 }
 
 export const toSearchString = (x: string) => x.toLowerCase().replace(/[^a-z0-9\n]/g, "");
@@ -927,7 +975,6 @@ export type PuzzleSolveData = {
 };
 
 export type LocalStorage = Partial<{
-	theme: Theme,
 	storyState: Record<string, unknown>,
 	storyParagraph: Record<string, number>,
 	solvedPuzzles: Set<string>,
@@ -958,7 +1005,7 @@ export type LocalStorage = Partial<{
 };
 
 const localStorageKeys: (Exclude<keyof LocalStorage,"toJSON">)[] = [
-	"theme", "storyState",
+	"storyState",
 	"puzzleProcs", "readStory",
 	"solvedPuzzles", "stepsPerS",
 	"userProcs", "storyParagraph",
@@ -1075,4 +1122,3 @@ export function ease(t: number) {
 	const a = t*t*(3-2*t);
 	return a*a/2 + 0.5-(1-a)*(1-a)/2;
 }
-	

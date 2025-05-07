@@ -1,7 +1,7 @@
 import { ComponentChildren, createContext, Fragment } from "preact";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, textColor, IconButton, borderColor, mapWith, Modal } from "./ui";
-import { data } from "../shared/data";
+import { data, StageData } from "../shared/data";
 import { extraData, Message, messages } from "./data";
 import { IconMailFilled, IconUserCircle } from "@tabler/icons-preact";
 import { twJoin } from "tailwind-merge";
@@ -26,7 +26,7 @@ type TerminalEvent = {
 } | {
 	type: "pause"
 } | {
-	type: "step", mul: number
+	type: "speed", mul: number
 };
 
 type TerminalMsg = {
@@ -44,17 +44,26 @@ class TerminalEffect {
 	current: number = -1;
 	interval: number|undefined;
 
-	step = 15;
-	wait = 30;
+	step = 8;
+	minWait = 10;
+	maxWait = 25;
 	inPause = -1;
 
-	constructor(private root: HTMLElement, private render: boolean) {
-    if (!render) this.interval = setInterval(()=>this.update(), 50);
+	constructor(private root: HTMLElement) {
+	}
+
+	start() {
+		if (this.interval!=undefined) return;
+		this.inPause = 5;
+		this.interval = setInterval(()=>this.update(this.step, true), 50);
 	}
 
 	onEnd?: ()=>void;
 
-	update(step: number=this.step, wait: number=this.wait) {
+	wait = ()=>Math.random()*(this.maxWait-this.minWait) + this.minWait;
+
+	update(step: number, wait: boolean) {
+		const render = step==Number.MAX_VALUE;
 		if (this.current >= this.msgs.length || --this.inPause > 0) {
 			return;
 		}
@@ -65,9 +74,12 @@ class TerminalEffect {
 		let writing=false;
 		if (this.current != -1 && c && c.ev.length > 0) {
 			let eaten = 0;
-			const step2 = Math.ceil(Math.max(0.01,c.stepMul)*step);
-			while (eaten < step2 && c.ev.length > 0) {
+			while (c.ev.length > 0) {
+				const step2 = Math.ceil(Math.max(0.01,c.stepMul)*step);
+				if (eaten>=step2) break;
+
 				const ev = c.ev[0];
+
 				if (ev.type == "text") {
 					writing=true;
 					const len = Math.min(step2 - eaten, ev.content.length);
@@ -82,7 +94,7 @@ class TerminalEffect {
 						}
 					} else {
 						const subspan = document.createElement("span");
-						subspan.classList.add(this.render ? "text-bit-render" : "text-bit");
+						subspan.classList.add(render ? "text-bit-render" : "text-bit");
 						subspan.textContent = ev.content.slice(0, len);
 
 						c.elem.append(subspan);
@@ -93,8 +105,8 @@ class TerminalEffect {
 					eaten += len;
 				} else if (ev.type == "pause") {
 					c.ev.shift();
-					if (!c.rev) {
-						this.inPause = wait;
+					if (!c.rev && wait) {
+						this.inPause = this.wait();
 						break;
 					}
 				} else if (ev.type == "start") {
@@ -120,13 +132,15 @@ class TerminalEffect {
 				} else if (ev.type=="reverse") {
 					c.rev=!c.rev;
 					c.ev.shift();
-				} else if (ev.type=="step") {
+				} else if (ev.type=="speed") {
 					c.stepMul = ev.mul;
 					c.ev.shift();
 				}
 			}
 
-			if (c.ev.length == 0) this.inPause = wait;
+			if (c.ev.length == 0 && wait) {
+				this.inPause = 0.2*this.wait();
+			}
 		}
 
 		let skip=false;
@@ -140,10 +154,10 @@ class TerminalEffect {
 
 		if (skip) this.append("\n");
 
-		if (this.render || this.current>=this.msgs.length || !c || !writing) return;
+		if (render || this.current>=this.msgs.length || !c || !writing) return;
 
 		this.cursorElem = document.createElement("span");
-		this.cursorElem.classList.add("cursor");
+		this.cursorElem.classList.add("cursor", "cursor-blink");
 
 		c.elem.appendChild(this.cursorElem);
 	}
@@ -160,7 +174,7 @@ class TerminalEffect {
 				if (e.nodeType == Node.TEXT_NODE) {
 					const subs: [RegExp, (match: RegExpMatchArray)=>TerminalEvent[]][] = [
 						[/\[pause\]/, ()=>[{ type: "pause" }]],
-						[/\[step ([\d\\.]+)\]/, (match)=>[{ type: "step", mul: Number.parseFloat(match[1]) }]]
+						[/\[speed ([\d\\.]+)\]/, (match)=>[{ type: "speed", mul: Number.parseFloat(match[1]) }]]
 					];
 
 					let txt: TerminalEvent[] = [ {type: "text", content: e.textContent ?? ""} ];
@@ -171,11 +185,10 @@ class TerminalEffect {
 						for (;;) {
 							const m = v.content.match(a);
 							const i = m?.index ?? v.content.length;
-							if (i > 0) {
-								out.push({type: "text", content: v.content.slice(0,i)});
-								v.content=v.content.slice(i+(m?.[0].length ?? 0));
-							}
 
+							if (i > 0) out.push({type: "text", content: v.content.slice(0,i)});
+
+							v.content=v.content.slice(i+(m?.[0].length ?? 0));
 							if (m) out.push(...b(m));
 							else break;
 						}
@@ -208,7 +221,7 @@ class TerminalEffect {
 	renderAll() {
 		if (this.interval!=undefined) clearInterval(this.interval);
 		while (this.current<this.msgs.length) {
-			this.update(Number.MAX_VALUE, 0);
+			this.update(Number.MAX_VALUE, false);
 		}
 	}
 
@@ -242,7 +255,6 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 		}[]
 	}
 }) {
-	console.log(children);
 	const ref = useRef<HTMLDivElement>(null);
 	const src = useRef<HTMLDivElement>(null);
 	const [done, setDone] = useState(noCursor==true);
@@ -251,6 +263,21 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 		return LocalStorage.storyState?.[end?.key] as string|undefined ?? null;
 	});
 
+	const [fx, setFx] = useState<TerminalEffect|null>(null);
+	useEffect(()=>{
+		if (!ref.current) return;
+
+		const nfx = new TerminalEffect(ref.current);
+		nfx.addMsg({
+			type: "server", content: [...src.current?.childNodes ?? []],
+			rev: false, stepMul: 1
+		});
+
+		setFx(nfx);
+
+		return ()=>nfx[Symbol.dispose]();
+	}, []);
+
 	const ctx = useContext(StoryContext)!;
 
 	const [skip, setSkip] = useState(false);
@@ -258,24 +285,22 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 
 	const noTxtFx = children==undefined || noCursor==true;
 	useEffect(()=>{
-		if (!ref.current || noTxtFx) {
+		if (!fx || noTxtFx) {
 			setDone(true);
 			return;
 		}
 
-		const fx = new TerminalEffect(ref.current, !isActive);
 		setDone(!isActive);
 		fx.onEnd = ()=>setDone(true);
-		fx.addMsg({ type: "server", content: [...src.current?.childNodes ?? []], rev: false, stepMul: 1 });
-		if (!isActive) fx.renderAll();
+		if (isActive) fx.start();
+		else fx.renderAll();
 		
 		const cb = ()=>setSkip(true);
 		document.addEventListener("keypress", cb);
 		return ()=>{
 			document.removeEventListener("keypress", cb);
-			fx[Symbol.dispose]();
 		};
-	}, [ctx, setDone, noTxtFx, isActive]);
+	}, [ctx, setDone, noTxtFx, isActive, fx]);
 	
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	useEffect(()=>{
@@ -283,12 +308,12 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 	}, [done, choice]);
 
 	return <>
-		{asciiArt!=undefined && <pre className={twJoin("self-center text-[10px] text-center", !ctx.active && "dark:text-zinc-200")} >
+		{asciiArt!=undefined && <div className={twJoin("self-center text-[10px] text-center", !isActive && "dark:text-zinc-200")} >
 			{asciiArt}
-		</pre>}
+		</div>}
 
 		{noCursor!=true && children!=undefined && <div hidden ref={src} >{children}</div>}
-		{children!=undefined && <div key={noCursor} ref={ref} className={twJoin(!ctx.active && "dark:text-zinc-200", "main-text w-full", ctx.active && !skip && "animate-fade-in")} >
+		{children!=undefined && <div key={noCursor} ref={ref} className={twJoin(!ctx.active && "dark:text-zinc-200", "main-text w-full", isActive && "animate-fade-in")} >
 			{noCursor==true && children}
 		</div>}
 
@@ -333,7 +358,7 @@ export const stages: ReadonlyArray<Stage> = data.map(d=>({
 	...d, ...extraData[d.key]
 } as Stage));
 
-const keyMessages = new Map<string, Message>(messages.map(x=>[x.key, x]));
+const keyMessages = new Map<string, Message&{i: number}>(messages.map((x,i)=>[x.key, {...x, i}]));
 const today = new Date();
 
 const formatTime = (x: Date)=>
@@ -342,7 +367,8 @@ const formatTime = (x: Date)=>
 		: x.toLocaleString(undefined, { hour: "numeric", minute: "numeric", day: "numeric", month: "numeric" });
 		
 type MessageProps = {
-	message: Message, read: boolean, time: Date,
+	message: Message&{i: number},
+	read: boolean, time: Date,
 	reply: MessageProps|null
 };
 
@@ -372,20 +398,22 @@ function MessageView({ message, time, reply, inReply }: MessageProps&{inReply?: 
 	</div>;
 }
 
-const getMessage = (x: string): MessageProps|null=>{
+const getMessage = (x: string, read: boolean): MessageProps|null=>{
 	const v = keyMessages.get(x);
 	const t = LocalStorage.seenMessages?.get(x);
-	const rep = v?.replyTo==undefined ? null : getMessage(v.replyTo);
+	const rep = v?.replyTo==undefined ? null : getMessage(v.replyTo, true);
 	if (!v || t==undefined) return null;
 	return {
-		message: v, read: true, time: new Date(t), reply: rep
+		message: v, read, time: new Date(t), reply: rep
 	};
 };
 
-export function Messages({ stage }: { stage: Stage }) {
+export function Messages({ stage }: { stage: StageData }) {
 	const [messageList, setMessages] = useState<MessageProps[]>(()=>{
-		return [...LocalStorage.seenMessages?.keys() ?? []].map(getMessage)
-			.filter((x): x is MessageProps=>x!=null);
+		return [...LocalStorage.seenMessages?.keys() ?? []]
+			.map(x=>getMessage(x, true))
+			.filter((x): x is MessageProps=>x!=null)
+			.sort((a,b)=>b.message.i-a.message.i);
 	});
 
 	const initCheck = useRef(false);
@@ -393,7 +421,7 @@ export function Messages({ stage }: { stage: Stage }) {
 	const numUnread = useMemo(()=>messageList.reduce((a,b)=>a+(b.read ? 0 : 1),0), [messageList]);
 	
 	useEffect(()=>{
-		const keyToStageI = new Map(data.map((x,i)=>[x.key, i]));
+		const keyToStageI = new Map<string, number>(data.map((x,i)=>[x.key, i]));
 		const curI = keyToStageI.get(stage.key)!;
 		const curMessages = new Set(messageList.map(x=>x.message.key));
 		const available: Message[] = messages.filter(msg=>{
@@ -404,10 +432,11 @@ export function Messages({ stage }: { stage: Stage }) {
 		const check = ()=>{
 			const t = new Date();
 			for (const msg of available) {
-				const p = msg.expectedMinutes<=1e-4 ? 1 : 1-Math.exp(-1/msg.expectedMinutes);
+				const p = msg.expectedMinutes<=1e-4 || import.meta.env["VITE_ALL_COMPLETED"]=="1"
+					? 1 : -Math.expm1(-1/msg.expectedMinutes);
 				if (Math.random()<p) {
 					LocalStorage.seenMessages = mapWith(LocalStorage.seenMessages??null, msg.key, t.getTime());
-					const msgProps = getMessage(msg.key);
+					const msgProps = getMessage(msg.key, false);
 					if (msgProps) setMessages(msgs=>[msgProps, ...msgs]);
 				} else {
 					break; // messages arrive in order
@@ -423,10 +452,10 @@ export function Messages({ stage }: { stage: Stage }) {
 	const [open, setOpen] = useState(false);
 	
 	return <>
-		<Modal open={open} onClose={()=>setOpen(false)} title="Mail" className="pb-0" >
-			<div className="flex flex-row items-stretch -mt-2 -mx-6 min-h-0" >
+		<Modal open={open} onClose={()=>setOpen(false)} title="Mail" className="pb-0 theme:max-w-3xl" >
+			<div className="flex flex-row items-stretch -mt-2 -mx-5 min-h-0" >
 				<div className="flex flex-col basis-1/3 min-h-20 overflow-y-auto shrink-0 items-stretch pb-5" >
-					{messageList.map((msg,i)=><button key={msg.message.key} className={twJoin("flex flex-row gap-3 border-b-1 p-4 items-start justify-stretch", borderColor.default, msg==activeMessage ? bgColor.secondary : bgColor.hover)} disabled={msg==activeMessage} onClick={()=>{
+					{messageList.map((msg,i)=><button key={msg.message.key} className={twJoin("flex flex-row gap-3 border-b-1 p-4 items-start justify-stretch", borderColor.divider, msg==activeMessage ? bgColor.secondary : bgColor.hover)} disabled={msg==activeMessage} onClick={()=>{
 						const nmsg = {...msg, read: true};
 						setMessages(messageList.toSpliced(i, 1, nmsg));
 						setActiveMessage(nmsg);
@@ -434,9 +463,11 @@ export function Messages({ stage }: { stage: Stage }) {
 						{!msg.read && <div className={twJoin("animate-pulse rounded-full mt-2 h-4 w-4 aspect-square", bgColor.sky)} />}
 						<div className="flex flex-col gap-1 text-left grow items-stretch" >
 							<Text v="lg" >{msg.message.subject}</Text>
-							<Text v="sm" className="flex flex-row gap-1 items-center mt-1 ml-1" >
+							<Text v="sm" className="flex flex-row gap-1 items-center mt-1" >
 								<IconUserCircle /> {msg.message.from}
-								<Text v="dim" className="pt-1 ml-auto" >{formatTime(msg.time)}</Text>
+								<Text v="dim" className="pt-1 text-xs ml-auto flex flex-col shrink-0" >{
+									formatTime(msg.time).split(", ").map((x,i)=><span key={i} >{x}</span>)
+								}</Text>
 							</Text>
 						</div>
 					</button>)}
@@ -464,7 +495,7 @@ export function Story({stage, next, para}: {
 	para: ComponentChildren[]
 }) {
 	const [index, setIndex] = useState(()=>{
-		return LocalStorage.storyParagraph?.[stage.key] ?? 0;
+		return Math.min(LocalStorage.storyParagraph?.[stage.key] ?? 0, para.length-1);
 	});
 
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -472,7 +503,7 @@ export function Story({stage, next, para}: {
 	useEffect(()=>{
 		if (index>=para.length) next?.();
 		else LocalStorage.storyParagraph = {
-			...LocalStorage.storyParagraph, [stage.key]: Math.min(index)
+			...LocalStorage.storyParagraph, [stage.key]: index
 		};
 	}, [index, next, stage.key, para.length]);
 
@@ -485,12 +516,26 @@ export function Story({stage, next, para}: {
 
 		let animFrame: number;
 		let lt = performance.now();
+
+		let prevChild: HTMLElement|null = null;
+		let curDelay = 0;
+		const childChangeDelay = 100;
+
 		const animateScroll = ()=>requestAnimationFrame((t: number)=>{
 			const dt = Math.min(t-lt, 50);
+			let doScroll=true;
+			if ((curDelay-=dt) > 0) doScroll=false;
+
 			const lastChild = [...container.children]
 				.findLast(x=>!x.classList.contains("ignore-scroll")) as HTMLElement|null;
 
-			if (scroll && scrollLocked && lastChild) {
+			if (prevChild!=lastChild) {
+				curDelay=childChangeDelay;
+				prevChild=lastChild;
+				doScroll=false;
+			}
+
+			if (scroll && scrollLocked && lastChild && doScroll) {
 				const targetScrollTop = lastChild.clientHeight > scroll.clientHeight*0.8
 					? scroll.scrollHeight - scroll.clientHeight
 					: Math.max(0,lastChild.offsetTop + lastChild.clientHeight/2 - scroll.clientHeight/2);

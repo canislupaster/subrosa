@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { fill } from "../shared/util";
-import { Collapse, ease, Text, useAsyncEffect } from "./ui";
+import { Collapse, ease, useAsyncEffect } from "./ui";
 import { useDisableStoryAnimation } from "./story";
 
 const chars = [["Q",38],["W",37],["B",36],["g",36],["M",35],["N",35],["R",35],["&",34],["@",33],["D",33],["H",33],["O",33],["K",32],["b",32],["m",32],["0",31],["G",31],["d",31],["p",31],["q",31],["8",30],["E",30],["U",30],["w",30],["6",29],["9",29],["A",29],["P",29],["S",29],["h",29],["k",29],["$",28],["X",28],["Z",28],["%",27],["4",27],["5",27],["V",27],["3",26],["I",26],["a",26],["j",26],["#",25],["2",25],["C",25],["F",25],["e",25],["n",25],["o",25],["J",24],["f",24],["u",24],["y",24],["s",23],["t",23],["z",23],["1",22],["T",22],["Y",22],["l",21],["x",21],["7",20],["L",20],["c",20],["{",20],["}",20],["[",19],["]",19],["i",19],["v",19],["|",19],["(",17],[")",17],["\"",16],["\\",16],["/",16],[";",16],["r",16],["*",15],["<",14],["=",14],[">",14],["!",13],["+",13],["^",13],[":",12],[",",10],["'",8],["~",8],["-",7],[".",6],["`",4],[" ",0]] as const;
@@ -32,18 +32,21 @@ const palette = [...new Set([
 
 type ImageProps = {
 	src: string, contrast?: number, brightness?: number,
-	saturation?: number, hue?: number, scale?: number, yScale?: number
+	saturation?: number, hue?: number, scale?: number, yScale?: number,
+	edge?: number
 };
 
 const imagePropsKeys = [
-	"contrast", "brightness", "hue", "scale", "yScale"
-] as const;
+	"contrast", "brightness", "hue", "scale", "yScale", "edge"
+] as const satisfies (keyof ImageProps)[];
+
+type LoadImage = {
+	html: string[], value: number[], cols: number, fontSize: number
+};
 
 async function loadImage({
-	src, contrast, brightness, hue, scale, yScale, saturation
-}: ImageProps): Promise<{
-	html: string[], value: number[], cols: number
-}> {
+	src, contrast, brightness, hue, scale, yScale, saturation, edge
+}: ImageProps): Promise<LoadImage> {
 	const image = new Image();
 	const prom = new Promise<void>((res,rej) => {
 		image.onerror = ()=>rej(new Error(`Error loading image`));
@@ -81,21 +84,22 @@ async function loadImage({
 
 	const value = arr.map(v=>v[2]);
 	const minV = Math.min(...value), maxV = Math.max(...value);
-	const bias = (brightness ?? 0)/100-minV, mul = (contrast ?? 100)/(maxV - minV)/100;
+	const bias = -minV, mul = 1/(maxV - minV);
 	let sobelI=0;
 
-	const out: {html: string[], value: number[], cols: number} = {
-		html: [], value: [], cols: w
+	const out: LoadImage = {
+		html: [], value: [], cols: w,
+		fontSize: 12*100/Math.max(150,w)
 	};
 
 	for (const x of arr) {
-		x[2] = Math.max(Math.min((x[2]+bias)*mul + sobel[sobelI++]*1.7-0.6,1),0);
+		x[2] = Math.pow(Math.max(Math.min((x[2]+bias)*mul + (brightness ?? 0)/100 + (edge??100)/100*(sobel[sobelI++]*1.7-0.6),1),0), (contrast??100)/100);
 		if (saturation!=null) x[1] *= saturation / 100;
 		x[0] = (x[0]+(hue??0))%360;
 		let bestScore = Number.MAX_SAFE_INTEGER, bestHex="";
 		for (const [y, hex] of palette) {
 			const d = (360+x[0]-y[0])%360;
-			const score = (d>180 ? 360-d : d) + Math.abs(x[1]-y[1])*100 + Math.abs(x[2]-y[2])*10;
+			const score = (d>180 ? 360-d : d)*y[1] + Math.abs(x[1]-y[1])*100 + Math.abs(x[2]-y[2])*50;
 			if (score<bestScore) { [bestScore, bestHex] = [score,hex]; }
 		}
 
@@ -127,7 +131,7 @@ export function AsciiArt({src, ...opts}: Partial<Record<keyof ImageProps, string
 			fill(Math.ceil(x.length/k), i=>x.slice(k*i, k*(i+1)));
 
 		if (disableAnim) {
-			el.innerHTML = chunk(img.html, img.cols).map(x=>x.join("")).join("\n");
+			el.innerHTML = chunk(img.html, img.cols).map(x=>x.join("")).join("<br/>");
 			return;
 		}
 
@@ -168,13 +172,8 @@ export function AsciiArt({src, ...opts}: Partial<Record<keyof ImageProps, string
 		return ()=>cancelAnimationFrame(f);
 	}, [img, disableAnim]);
 	
-	if (disableAnim)
-		// eslint-disable-next-line react/no-danger
-		return <pre className="contents" ref={ref} />
-	
-	return <Collapse open speed={0.6} >
-		{img==null ? <Text v="dim" >...</Text>
-			// eslint-disable-next-line react/no-danger
-			: <pre className="contents animate-fade-in" ref={ref} />}
+	return <Collapse init={disableAnim} open speed={0.6} >
+		<pre className="animate-fade-in whitespace-pre block" ref={ref}
+			style={{fontSize: `${img?.fontSize ?? "12"}px`}} />
 	</Collapse>;
 }

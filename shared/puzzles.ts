@@ -30,19 +30,20 @@ export class RNG {
 // puzzle task is solve(generator) -> generated value
 export type PuzzleInputSchema = readonly Readonly<{type: "number"|"string", name: string, key: string}>[];
 export type PuzzleInput<T extends PuzzleInputSchema> = Readonly<{
-	[K in T[number]["key"]]: "number"|"string" extends (T[number]&{key: K})["type"] ? string|number
+	[K in T[number]["key"]]: "number"|"string" extends (T[number]&{key: K})["type"]
+		? string|number
 		: (T[number]&{key: K})["type"] extends "string" ? string : number
 }>;
 
 type SimplePuzzle<T extends PuzzleInputSchema> = {
 	kind: "simple",
 	schema: T,
-	validator: (x: PuzzleInput<T>)=>string|null, // null for valid, otherwise error
+	validator?: (x: PuzzleInput<T>)=>string|null, // null for valid, otherwise error
 	generator: (seed?: number)=>PuzzleInput<T>,
 	solve: (x: PuzzleInput<T>)=>string|number
 };
 
-export type Puzzle = {
+export type PuzzleData = {
 	name: string,
 	key: string
 }&({
@@ -87,20 +88,82 @@ function simple<T extends PuzzleInputSchema>(t: T, x: Omit<SimplePuzzle<T>, "sch
 
 export const puzzles = [
 	{
-		name: "“Team” puzzle",
-		key: "team",
+		name: "Addition",
+		key: "add",
 		...simple([
 			{type: "number", name: "x", key: "x"},
 			{type: "number", name: "y", key: "y"}
 		] as const, {
 			generator(seed) {
 				const r = new RNG(seed);
-				return { x: r.nextRange(1,20), y: r.nextRange(1,20) };
+				return { x: r.nextRange(-200,200), y: r.nextRange(-200,200) };
 			},
 			solve(inp) {
-				return inp.x*inp.y;
+				return inp.x+inp.y;
 			},
 			validator() {
+				return null;
+			}
+		})
+	},
+	{
+		name: "Division",
+		key: "div",
+		...simple([
+			{type: "number", name: "x", key: "x"},
+			{type: "number", name: "y", key: "y"}
+		] as const, {
+			generator(seed) {
+				const r = new RNG(seed);
+				const div = r.nextRange(1,200);
+				return { x: div*r.nextRange(0,200) + r.nextRange(0,div-1), y: div };
+			},
+			solve(inp) {
+				return Math.floor(inp.x/inp.y);
+			},
+			validator(inp) {
+				return inp.x<0 || inp.y<1 ? "x should be nonnegative and y should be positive." : null;
+			}
+		})
+	},
+	{
+		// Reverse
+		name: "Reverse",
+		key: "reverse",
+		...simple([
+			{type: "string", name: "Input", key: "input"}
+		] as const, {
+			generator: (seed)=>({ input: defaultGen(seed) }),
+			solve: (inp)=>[...inp.input].reverse().join("")
+		})
+	},
+	{
+		name: "Next permutation",
+		key: "permutation",
+		...simple([
+			{type: "string", name: "Input permutation", key: "input"}
+		] as const, {
+			generator(seed) {
+				const r = new RNG(seed), vs=alpha.slice(0, r.nextRange(2,alpha.length));
+				return { input: r.shuffle(vs).join("") };
+			},
+			solve({input: s}) {
+				let i=s.length-1;
+				while (i>0 && s[i-1]>s[i]) i--;
+
+				const nxt = [...s];
+				if (i>0) {
+					let j=s.length-1;
+					while (j>i && s[j]<s[i-1]) j--;
+					[nxt[i-1], nxt[j]] = [s[j], s[i-1]];
+				}
+				
+				return [...nxt.slice(0,i), ...nxt.slice(i).reverse()].join("");
+			},
+			validator({input}) {
+				const sl = new Set(input);
+				if (sl.size!=input.length) return "Input permutation must contain distinct values.";
+				if (sl.size<1) return "Input permutation must be nonempty";
 				return null;
 			}
 		})
@@ -127,17 +190,6 @@ export const puzzles = [
 		kind: "decode",
 		encode(inp) {
 			return fill(inp.length, i=>numToChar[alphaLen-1-charToNum[inp.charAt(i)]]).join("");
-		}
-	},
-	{
-		// Reverse
-		name: "naming",
-		key: "elzzup",
-		generator: defaultGen,
-		validator: defaultValidator,
-		kind: "decode",
-		encode(inp) {
-			return inp.split("").reverse().join("");
 		}
 	},
 	{
@@ -297,4 +349,4 @@ export const puzzles = [
 			return res;
 		}
 	}
-] as const satisfies Puzzle[];
+] as const satisfies PuzzleData[];

@@ -26,3 +26,4 @@ dist-ssr
 .deployenv
 *.tsbuildinfo
 server/db.sqlite
+server/.env

@@ -1,5 +1,5 @@
 import { data, StageData } from "./data.ts";
-import { Puzzle } from "./puzzles.ts";
+import { PuzzleData } from "./puzzles.ts";
 import { fill, stringifyExtra } from "./util.ts";
 
 export type Register = Readonly<({
@@ -112,7 +112,7 @@ export type EditorState = Readonly<{
 	solved: boolean
 }>;
 
-export function makeEntryProc(puzzle: Puzzle): Procedure {
+export function makeEntryProc(puzzle: PuzzleData): Procedure {
 	const regs = fill(puzzle.kind=="decode" ? 1 : puzzle.schema.length, i=>{
 		const inpName = puzzle.kind=="decode" ? "Input" : puzzle.schema[i].name;
 		return [i, {
@@ -438,12 +438,13 @@ export type Verdict = Readonly<{
 
 export type TestParams = {
 	puzzle: string, proc: number,
-	procs: ReadonlyMap<number,Procedure>
+	procs: ReadonlyMap<number,Procedure>,
+	statsSeed: number|null
 };
 
 // puzzle assumed to be valid key of puzzle stage
 export const numTests = 40;
-export async function test({ puzzle, proc, procs }: TestParams): Promise<Verdict> {
+export async function test({ puzzle, proc, procs, statsSeed }: TestParams): Promise<Verdict> {
 	const pstateStats: ProgramStats[] = [];
 
 	// median
@@ -466,11 +467,12 @@ export async function test({ puzzle, proc, procs }: TestParams): Promise<Verdict
 	try {
 		// lmao now its deterministic, but supposedly impossible to game
 		// (u cant succeed on client and fail on server)
-		let seed = Number(new BigUint64Array(
+		// use statsseed for consistent leaderboard tests
+		let seed = statsSeed ?? (Number(new BigUint64Array(
 			(await crypto.subtle.digest("SHA-1", new TextEncoder().encode(
 				stringifyExtra({ proc, procs })
 			))).slice(0,8)
-		)[0] % BigInt(Number.MAX_SAFE_INTEGER));
+		)[0] % BigInt(Number.MAX_SAFE_INTEGER)));
 
 		for (let i=0; i<numTests; i++) {
 			const stage = data.find(x=>x.key==puzzle) as StageData&{type: "puzzle"};
