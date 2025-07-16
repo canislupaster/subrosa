@@ -124,40 +124,39 @@ makeRoute<"solve">({
 	async handler(solve) {
 		const stage = getPuzzle(solve.stage);
 
+		const runTest = async (worker: Worker, seed: number|null) => {
+			const delay = new Promise<null>((res)=>setTimeout(()=>res(null), 10_000));
+			const recv = new Promise<Verdict|"error">((res)=>{
+				worker.onmessageerror = worker.onerror = ()=>res("error");
+				worker.onmessage = (e)=>res(parseExtra(e.data as string) as Verdict);
+			});
+
+			worker.postMessage(stringifyExtra({
+				puzzle: stage.key, proc: solve.entry, procs: solve.procs,
+				statsSeed: seed
+			} satisfies TestParams));
+			
+			const res = await Promise.race([delay, recv]);
+
+			if (res==null) throw new AppError("execution timed out");
+			if (res=="error") throw new AppError("execution error");
+			if (res.type!="AC") throw new AppError(`received verdict ${res.type} != AC`);
+	
+			return res;
+		};
+
 		const worker = new Worker(
 			new URL("../shared/worker.ts", import.meta.url).href,
 			{ type: "module" }
 		);
 			
-		const runTest = async (seed: number|null) => {
-			try {
-				const delay = new Promise<null>((res)=>setTimeout(()=>res(null), 10_000));
-				const recv = new Promise<Verdict|"error">((res)=>{
-					worker.onmessageerror = worker.onerror = ()=>res("error");
-					worker.onmessage = (e)=>res(parseExtra(e.data as string) as Verdict);
-				});
-
-				worker.postMessage(stringifyExtra({
-					puzzle: stage.key, proc: solve.entry, procs: solve.procs,
-					statsSeed: seed
-				} satisfies TestParams));
-				
-				const res = await Promise.race([delay, recv]);
-
-				if (res==null) throw new AppError("execution timed out");
-				if (res=="error") throw new AppError("execution error");
-				if (res.type!="AC") throw new AppError(`received verdict ${res.type} != AC`);
-		
-				return res;
-			} finally {
-				worker.terminate();
-			}
-		};
-
-		await runTest(null);
-		const res = await runTest(seed);
-
-		return await addSolve({ ...res, stage: solve.stage, token: solve.token });
+		try {
+			await runTest(worker, null);
+			const res = await runTest(worker, seed);
+			return await addSolve({ ...res, stage: solve.stage, token: solve.token });
+		} finally {
+			worker.terminate();
+		}
 	}
 })
 

@@ -1,9 +1,9 @@
 import { data, StageData } from "./data.ts";
 import { PuzzleData } from "./puzzles.ts";
-import { fill, stringifyExtra } from "./util.ts";
+import { fill } from "./util.ts";
 
 export type Register = Readonly<({
-	type: "value", value: number|string // initial values, determined by program state at runtime
+	type: "value", value: bigint|string // initial values, determined by program state at runtime
 } | {
 	type: "param"
 })&{
@@ -54,7 +54,7 @@ export type Node = Readonly<{
 	conditional: number|null // if positive
 }>;
 
-export type RegisterRef = { current: number|string };
+export type RegisterRef = { current: bigint|string };
 
 export type ProgramStats = {
 	// measures exclude breakpoint nodes
@@ -85,7 +85,7 @@ export const makeProc = (name: string): Procedure => ({
 });
 
 export function makeState({input, procs, entry, stopOnBreakpoint}: {
-	input: readonly (string|number)[],
+	input: readonly (string|bigint)[],
 	procs: ReadonlyMap<number, Procedure>,
 	entry: number,
 	stopOnBreakpoint?: boolean
@@ -258,7 +258,7 @@ export function push(prog: ProgramState, procI: number, params: RegisterRef[]) {
 }
 
 const [charStart, charEnd] = ["a", "z"].map(x=>x.charCodeAt(0));
-export const charMod = charEnd-charStart+1;
+const charMod = BigInt(charEnd-charStart+1);
 export const charMap = [
 	[" ", -1],
 	...fill(charEnd-charStart+1, i=>[String.fromCharCode(charStart+i), i])
@@ -332,37 +332,36 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 	
 	const castToNum = (r: number)=>{
 		let v = get(r).current;
-		if (typeof v=="string") v=v.length>0 ? charToNum[v]??-1 : 0;
+		if (typeof v=="string") v=BigInt(v.length>0 ? charToNum[v]??-1 : 0);
 		return v;
 	};
 
 	const castToStr = (r: number)=>{
 		let v = get(r).current;
-		if (typeof v=="number") v=numToChar[v%charMod] ?? "";
+		if (typeof v=="bigint") v=numToChar[Number(v%charMod)] ?? "";
 		return v;
 	};
 	
 	const compute = (op: "add"|"sub", l: RegisterRef, r: RegisterRef) => {
-		const swap = typeof l.current=="number" && typeof r.current=="string";
+		const swap = typeof l.current=="bigint" && typeof r.current=="string";
 		if (swap) [r,l]=[l,r];
 		
-		const mod = (a: number, b: number) => {
-			// truncate to 32 bit signed (no infinities)
-			if (op=="add") return (a+b)|0;
-			return (a-b)|0;
+		const mod = (a: bigint, b: bigint) => {
+			if (op=="add") return a+b;
+			return a-b;
 		};
 
-		let out: string|number;
-		if (typeof l.current=="string" && typeof r.current=="number")	{
+		let out: string|bigint;
+		if (typeof l.current=="string" && typeof r.current=="bigint")	{
 			out="";
 			for (let i=0; i<l.current.length; i++) {
 				out+=numToChar[
-					(charMod+mod(charToNum[l.current[i]]??0, r.current)%charMod)%charMod
+					Number((charMod+mod(BigInt(charToNum[l.current[i]]??0), r.current)%charMod)%charMod)
 				];
 			}
 		} else if (typeof l.current=="string" && typeof r.current=="string") {
 			out=op=="add" ? l.current+r.current : l.current.slice(0,Math.max(0,l.current.length-r.current.length));
-		} else if (typeof l.current=="number" && typeof r.current=="number") {
+		} else if (typeof l.current=="bigint" && typeof r.current=="bigint") {
 			out=mod(l.current, r.current);
 		}	else {
 			throw new Error("unreachable");
@@ -374,11 +373,11 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 
 	const arrOp = (idx: number, lhs: number, rhs?: number) => {
 		const l = get(lhs).current;
-		const i = castToNum(idx);
+		const i = Number(castToNum(idx));
 		if (i<0) return;
 
 		if (rhs==undefined) {
-			get(idx).current = typeof l=="string" ? (i>=l.length ? -1 : charToNum[l[i]] ?? -1) : l;
+			get(idx).current = typeof l=="string" ? BigInt(i>=l.length ? -1 : charToNum[l[i]] ?? -1) : l;
 		} else {
 			const s = castToStr(rhs);
 			let outS: string|null=null;
@@ -407,7 +406,7 @@ export function step(prog: ProgramState): "breakpoint"|boolean {
 	} else if (x.op=="add" || x.op=="sub") {
 		compute(x.op, get(x.lhs), get(x.rhs));
 	} else if (x.op=="inc" || x.op=="dec") {
-		compute(x.op=="inc" ? "add" : "sub", get(x.lhs), { current: 1 });
+		compute(x.op=="inc" ? "add" : "sub", get(x.lhs), { current: 1n });
 	} else if (x.op=="access") {
 		arrOp(x.lhs, x.rhs);
 	} else if (x.op=="setIdx") {
@@ -444,7 +443,9 @@ export type TestParams = {
 
 // puzzle assumed to be valid key of puzzle stage
 export const numTests = 40;
-export async function test({ puzzle, proc, procs, statsSeed }: TestParams): Promise<Verdict> {
+const defaultSeed = 1234;
+
+export function test({ puzzle, proc, procs, statsSeed }: TestParams): Verdict {
 	const pstateStats: ProgramStats[] = [];
 
 	// median
@@ -465,20 +466,14 @@ export async function test({ puzzle, proc, procs, statsSeed }: TestParams): Prom
 	};
 
 	try {
-		// lmao now its deterministic, but supposedly impossible to game
-		// (u cant succeed on client and fail on server)
-		// use statsseed for consistent leaderboard tests
-		let seed = statsSeed ?? (Number(new BigUint64Array(
-			(await crypto.subtle.digest("SHA-1", new TextEncoder().encode(
-				stringifyExtra({ proc, procs })
-			))).slice(0,8)
-		)[0] % BigInt(Number.MAX_SAFE_INTEGER)));
+		// use statsseed for consistent secret/leaderboard tests, otherwise public fixed seed
+		let seed = statsSeed ?? defaultSeed;
 
 		for (let i=0; i<numTests; i++) {
 			const stage = data.find(x=>x.key==puzzle) as StageData&{type: "puzzle"};
 
-			let input: (string|number)[];
-			let output: string|number;
+			let input: (string|bigint)[];
+			let output: string|bigint;
 			if (stage.kind=="decode") {
 				const plaintxt = stage.generator(seed++);
 				input = [stage.encode(plaintxt)];

@@ -3,9 +3,11 @@ import { Dispatch, useCallback, useContext, useEffect, useErrorBoundary, useMemo
 import { IconChevronDown, IconChevronUp, IconInfoCircleFilled, IconInfoTriangleFilled, IconLoader2, IconX } from "@tabler/icons-preact";
 import { twMerge, twJoin } from "tailwind-merge";
 import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
-import { forwardRef, SetStateAction } from "preact/compat";
 import { NodeSelection, Procedure, ProgramStats } from "../shared/eval";
-import { parseExtra, stringifyExtra } from "../shared/util";
+import { fill, parseExtra, stringifyExtra } from "../shared/util";
+import { createPortal, forwardRef, SetStateAction } from "preact/compat";
+import { animations, performTransfer } from "@formkit/drag-and-drop";
+import { dragAndDrop, ReactDragAndDropConfig } from "@formkit/drag-and-drop/react";
 
 // dump of a bunch of UI & utility stuff ive written...
 
@@ -19,7 +21,9 @@ export const textColor = {
 	blueLink: "dark:text-blue-200 text-sky-800",
 	star: "dark:text-amber-400 text-amber-600",
 	gray: "dark:text-gray-200 text-gray-700",
-	dim: "dark:text-gray-400 text-gray-500"
+	dim: "dark:text-gray-400 text-gray-500",
+	divider: "dark:text-gray-600 text-zinc-300",
+	dimmer: "dark:text-gray-700 text-gray-300"
 };
 
 export const bgColor = {
@@ -28,14 +32,15 @@ export const bgColor = {
 	hover: "dark:hover:bg-zinc-700 hover:bg-zinc-150",
 	secondary: "dark:bg-zinc-900 bg-zinc-150",
 	green: "dark:enabled:bg-green-800 enabled:bg-green-400",
-	sky: "dark:enabled:bg-sky-700 enabled:bg-sky-300",
+	sky: "dark:enabled:bg-sky-900 enabled:bg-sky-300",
 	red: "dark:enabled:bg-red-800 enabled:bg-red-300",
 	rose: "dark:enabled:bg-rose-900 enabled:bg-rose-300",
 	highlight: "dark:bg-yellow-800 bg-amber-200",
 	highlight2: "dark:bg-teal-900 bg-cyan-200",
 	restriction: "dark:bg-amber-900 bg-amber-100",
 	divider: "dark:bg-gray-600 bg-zinc-300",
-	contrast: "dark:bg-white bg-black"
+	contrast: "dark:bg-white bg-black",
+	border: "bg-zinc-300 dark:bg-zinc-700",
 }
 
 export const borderColor = {
@@ -89,27 +94,58 @@ export function Textarea({className, children, ...props}: JSX.IntrinsicElements[
 	</textarea>
 }
 
-export type ButtonProps = JSX.IntrinsicElements["button"]&{
-	icon?: ComponentChildren, iconRight?: ComponentChildren, disabled?: boolean, className?: string
+type ShortcutsProps = {
+	onClick?: ()=>void,
+	shortcut?: string,
+	shortcuts?: string[],
+	disabled?: boolean
 };
 
+const ShortcutContext = createContext(undefined as unknown as {
+	shortcuts: React.MutableRefObject<Map<string, Set<()=>void>>>,
+});
+
+export function useShortcuts({shortcuts, shortcut, onClick, disabled}: ShortcutsProps) {
+	const ctx = useContext(ShortcutContext);
+	useEffect(()=>{
+		if (onClick && disabled!=true) {
+			const remove: (()=>void)[] = [];
+			for (const str of [...shortcuts ?? [], ...shortcut!=undefined ? [shortcut] : []]) {
+				const set = ctx.shortcuts.current.get(str) ?? new Set();
+				set.add(onClick);
+				ctx.shortcuts.current.set(str, set);
+				remove.push(()=>set.delete(onClick));
+			}
+			return ()=>remove.forEach(cb=>cb());
+		}
+	}, [ctx.shortcuts, disabled, onClick, shortcut, shortcuts]);
+}
+
+export type ButtonProps = JSX.IntrinsicElements["button"]&{
+	icon?: ComponentChildren, iconRight?: ComponentChildren,
+	disabled?: boolean, className?: string
+}&ShortcutsProps;
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(({
-	className, disabled, icon, iconRight, ...props
+	className, icon, iconRight, ...props
 }, ref) => {
-	return <button ref={ref} disabled={disabled} className={twMerge(twJoin("flex flex-row justify-center gap-1 px-2 py-1.5 items-center group", interactiveContainerDefault), className)} {...props} >
+	useShortcuts(props);
+	return <button ref={ref} className={twMerge(twJoin("flex flex-row justify-center gap-1 px-2 py-1.5 items-center group", interactiveContainerDefault), className)} {...props} >
 		{icon}
 		{props.children}
 		{iconRight}
 	</button>;
 });
 
-export const IconButton = ({className, children, icon, disabled, ...props}: {icon?: ComponentChildren, disabled?: boolean, className?: string}&JSX.IntrinsicElements["button"]) =>
-	<button className={twMerge("rounded-sm p-1.5 flex items-center justify-center h-fit aspect-square", interactiveContainerDefault, className)} disabled={disabled} {...props} >
+export const IconButton = ({className, children, icon, ...props}: {icon?: ComponentChildren, className?: string}&ShortcutsProps&JSX.IntrinsicElements["button"]) => {
+	useShortcuts(props);
+	return <button className={twMerge("rounded-sm p-1.5 flex items-center justify-center h-fit aspect-square", interactiveContainerDefault, className)} {...props} >
 		{icon}
 		{children}
 	</button>;
+}
 
-type AnchorProps = JSX.AnchorHTMLAttributes<HTMLAnchorElement>&{className?: string};
+type AnchorProps = JSX.AnchorHTMLAttributes<HTMLAnchorElement>&ShortcutsProps&{className?: string};
 export const anchorHover = "transition-all hover:text-black dark:hover:text-gray-50 hover:bg-cyan-100/5 cursor-pointer";
 export const anchorUnderline = "text-gray-600 dark:text-gray-300 inline-flex flex-row align-baseline items-baseline gap-1 underline decoration-dashed decoration-1 underline-offset-2";
 export const anchorStyle = twJoin(anchorHover, anchorUnderline);
@@ -117,6 +153,7 @@ export const anchorStyle = twJoin(anchorHover, anchorUnderline);
 export const Anchor = forwardRef<HTMLAnchorElement, AnchorProps>((
 	{className,children,...props}: AnchorProps, ref
 ) => {
+	useShortcuts(props);
 	const classN = twMerge(anchorStyle, className);
 	return <a ref={ref} className={classN} {...props} >{children}</a>;
 });
@@ -173,7 +210,7 @@ export const Alert = ({title, txt, bad, className}: {
 			{bad??false ? <IconInfoTriangleFilled /> : <IconInfoCircleFilled />}
 		</div>
 		<div>
-			{title!=undefined && <h2 className="font-bold font-display text-lg" >{title}</h2>}
+			{title!=undefined && <h2 className="font-bold font-big text-lg" >{title}</h2>}
 			<div className="flex flex-col gap-2" >{txt}</div>
 		</div>
 	</div>;
@@ -231,7 +268,8 @@ export const ShowTransition = forwardRef<HTMLElement, ShowTransitionProps>(({
 	children, open, openClassName, closedClassName, update
 }, ref) => {
 	const myRef = useRef<HTMLElement>(null);
-	const [show, setShow] = useState(false);
+	const [show2, setShow] = useState(false);
+	const show = show2 || open;
 
 	const cls = (open ? openClassName : closedClassName)?.split(" ") ?? [];
 	const removeCls = (open ? closedClassName : openClassName)?.split(" ") ?? [];
@@ -239,34 +277,34 @@ export const ShowTransition = forwardRef<HTMLElement, ShowTransitionProps>(({
 	const goto = useContext(GotoContext);
 	useEffect(()=>{
 		const el = myRef.current;
-		if (!open && !show) return;
-		if (!show) { setShow(true); return; }
+		if (!show) return;
 		if (!el) {
 			console.warn("transition element not mounted despite shown");
 			return;
 		}
 
-		update?.(true, el);
-
-		// wait for animations to begin, and then wait for all to end
 		let enabled=true;
 		const wait = (async ()=>{
-			while (enabled) {
-				const anims = el.getAnimations({subtree: true});
+			for (;;) {
+				await new Promise<void>(res=>setTimeout(res, 100));
+				if (!enabled) break;
+
+				const anims = el.getAnimations({subtree: true})
+					.filter(anim=>anim.playState!="finished");
 				if (anims.length==0) {
-					update?.(false, el);
-					setShow(false);
+					update?.(open, el);
+					setShow(open);
 					return true;
 				}
 
-				await Promise.all(anims.map(x=>x.finished));
-				await new Promise<void>(res=>setTimeout(res, 50));
+				await Promise.allSettled(anims.map(x=>x.finished));
 			}
 			
 			return false;
 		});
 
-		if (!open) void wait();
+		if (open) setShow(true);
+		else void wait();
 		
 		el.classList.remove(...removeCls);
 		el.classList.add(...cls);
@@ -406,11 +444,11 @@ export function Text({className, children, v, ...props}:
 	&JSX.HTMLAttributes<HTMLParagraphElement>&{v?: TextVariants, className?: string}
 ) {
 	switch (v) {
-		case "big": return <h1 className={twMerge("md:text-3xl text-2xl font-display font-black", textColor.contrast, className)} {...props} >{children}</h1>;
-		case "bold": return <b className={twMerge("text-lg font-display font-extrabold", textColor.contrast, className)} {...props} >{children}</b>;
-		case "smbold": return <b className={twMerge("text-sm font-display font-bold text-gray-700 dark:text-gray-300", className)} {...props} >{children}</b>;
-		case "md": return <h3 className={twMerge("text-xl font-display font-bold", textColor.contrast, className)} {...props} >{children}</h3>;
-		case "lg": return <h3 className={twMerge("text-xl font-display font-extrabold", textColor.contrast, className)} {...props} >{children}</h3>;
+		case "big": return <h1 className={twMerge("md:text-3xl text-2xl font-big font-black", textColor.contrast, className)} {...props} >{children}</h1>;
+		case "bold": return <b className={twMerge("text-lg font-bold", textColor.contrast, className)} {...props} >{children}</b>;
+		case "smbold": return <b className={twMerge("text-sm font-semibold text-gray-700 dark:text-gray-300", className)} {...props} >{children}</b>;
+		case "md": return <h3 className={twMerge("text-xl font-big font-bold", textColor.contrast, className)} {...props} >{children}</h3>;
+		case "lg": return <h3 className={twMerge("text-xl font-big font-extrabold", textColor.contrast, className)} {...props} >{children}</h3>;
 		case "dim": return <span className={twMerge("text-sm text-gray-500 dark:text-gray-400", className)} {...props} >{children}</span>;
 		case "sm": return <p className={twMerge("text-sm text-gray-800 dark:text-gray-200", className)} {...props} >{children}</p>;
 		case "code": return <code className={twMerge("break-all text-gray-800 dark:text-gray-200 font-semibold rounded-sm p-0.5 whitespace-pre-wrap", bgColor.md, className)} {...props} >{children}</code>;
@@ -421,6 +459,39 @@ export function Text({className, children, v, ...props}:
 
 const ModalContext = createContext<null|RefObject<HTMLDialogElement>>(null);
 
+function ModalBackground({className}: {className?: string}) {
+	const [dims, setDims] = useState<null|[number,number,number]>(null);
+	const modalCtx = useContext(ModalContext);
+	useEffect(()=>{
+		const el = modalCtx?.current;
+		if (!el) return;
+		const observer = new ResizeObserver(()=>{
+			const nx = Math.ceil(10 * el.clientWidth / window.innerWidth) + 1;
+			const len = Math.ceil(el.clientWidth / nx);
+			const ny = Math.ceil(el.clientHeight / len);
+			setDims([nx, ny, len]);
+		});
+
+		observer.observe(el);
+		return ()=>{
+			observer.disconnect();
+			setDims(null);
+		};
+	}, [modalCtx]);
+	
+	return <>
+		{dims && fill(dims[0], i=>fill(dims[1], j=>{
+			return <div key={j*dims[0] + i} className={twMerge("in-[.show]:animate-[fade-in_200ms_forwards] opacity-0 in-[.not-show]:animate-[fade-out_10ms_forwards] -z-10 absolute", className)}
+				style={{
+					animationFillMode: "both",
+					animationDelay: `${20*(j*dims[0]*0.5 + i)}ms`,
+					top: `${j*dims[2]}px`, left: `${i*dims[2]}px`,
+					width: `${dims[2]}px`, height: `${dims[2]}px`,
+				}} />;
+		})).flat()}
+	</>;
+}
+
 export const transparentNoHover = "[:not(:hover)]:theme:bg-transparent [:not(:hover)]:border-transparent";
 //not very accessible 🤡
 export function Modal({bad, open, onClose, closeButton, title, children, className, ...props}: {
@@ -428,12 +499,23 @@ export function Modal({bad, open, onClose, closeButton, title, children, classNa
 	children?: ComponentChildren, className?: string
 }&JSX.HTMLAttributes<HTMLDialogElement>) {
 	const modalRef = useRef<HTMLDialogElement>(null);
+	const [show, setShow] = useState(false);
+	const setToastRoot = useContext(ToastContext)?.setToastRoot;
+	useEffect(()=>{
+		if (!show) return;
+		const el = modalRef.current!;
+		const disp = setToastRoot?.(el);
+		// showmodal is not needed and ruins transition (what the hell)
+		el.showModal();
+		return ()=>{ disp?.(); el.close(); };
+	}, [setToastRoot, show]);
 
-	return <ShowTransition open={open} openClassName="show" update={(show)=>{
-		if (show) modalRef.current?.showModal();
-		else modalRef.current?.close();
-	}} ref={modalRef} >
-		<dialog className={twMerge(bad??false ? `${bgColor.red} ${borderColor.red}` : `${bgColor.md} ${borderColor.default}`, "[:not(.show)]:opacity-0 [:not(.show)]:pointer-events-none transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 pt-4 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0 gap-2 group [.show]:opacity-100 [.show]:pointer-events-auto", className)}
+	useEffect(()=>{
+		modalRef.current?.showModal();
+	}, [open]);
+
+	return <ShowTransition open={open} openClassName="show" closedClassName="not-show" update={setShow} ref={modalRef} >
+		<dialog className={twMerge(bad??false ? borderColor.red : borderColor.default, "bg-transparent border opacity-0 [:not(.show)]:pointer-events-none transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 pt-4 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0 gap-2 group [.show]:opacity-100 [.show]:pointer-events-auto", className)}
 			onClose={(ev)=>{
 				ev.preventDefault();
 				onClose?.();
@@ -446,13 +528,14 @@ export function Modal({bad, open, onClose, closeButton, title, children, classNa
 			{title!=undefined && <>
 				<Text v="big" className="pr-8" >{title}</Text>
 				<div className="my-0" >
-					<Divider className="absolute left-0 right-0 my-auto" contrast={bad} />
+					<Divider className={twJoin("absolute left-0 right-0 my-auto", bad!=true && bgColor.border)} contrast={bad} />
 				</div>
 			</>}
 
 			{children}
 
-			<div className="fixed bg-black/30 left-0 right-0 top-0 bottom-0 -z-10"
+			<ModalBackground className={bad??false ? bgColor.red : bgColor.md} />
+			<div className="fixed bg-black/30 left-0 right-0 top-0 bottom-0 -z-20"
 				onClick={()=>onClose?.()} />
 	</ModalContext.Provider></dialog></ShowTransition>;
 }
@@ -714,11 +797,12 @@ export const ThemeContext = createContext<{
 }>(undefined as never)
 export const useTheme = ()=>useContext(ThemeContext).theme;
 
-const ToastContext = createContext(undefined as unknown as {
-	pushToast(this: void, x: string): void;
-});
+const ToastContext = createContext(undefined as {
+	pushToast: (this: void, x: string)=>void,
+	setToastRoot: (root: HTMLElement)=>()=>void;
+}|undefined);
 
-export function useToast() { return useContext(ToastContext).pushToast; }
+export function useToast() { return useContext(ToastContext)!.pushToast; }
 
 export function Container({children, className, ...props}: {
 	children?: ComponentChildren, className?: string
@@ -749,49 +833,84 @@ export function Container({children, className, ...props}: {
 	}, [toasts]);
 
 	const titlesRef = useRef<string[]>([document.title]);
+	const [toastRoot, setToastRoot] = useState<HTMLElement|null>(null);
 
-	return <TitleContext.Provider value={useMemo(()=>({
-		setTitle(title) {
-			const arr = titlesRef.current;
-			const i = arr.length;
-			arr.push(document.title = title);
+	const shortcutsRef = useRef(new Map<string, Set<()=>void>>());
+	useEffect(()=>{
+		const shortcuts = shortcutsRef.current;
+		const listener = (ev: KeyboardEvent)=>{
+			if (ev.target instanceof HTMLElement && [
+				"INPUT", "TEXTAREA", "SELECT", "DIALOG", "BUTTON"
+			].includes(ev.target.tagName)) return;
+		
+			const keyStr: string[] = [];
+			if (ev.metaKey) keyStr.push("cmd");
+			if (ev.ctrlKey) keyStr.push("ctrl");
+			if (ev.shiftKey) keyStr.push("shift");
+			if (ev.altKey) keyStr.push("alt");
 
-			return ()=>{
-				while (i<arr.length) arr.pop();
-				document.title = arr[arr.length-1];
-			};
-		}
-	}), [])} >
-		<PopupCountCtx.Provider value={{count, incCount}} >
-			<ToastContext.Provider value={{pushToast: useCallback((toast: string)=>{
-				setToasts(xs=>[...xs.slice(0,3), [toastKey.current++, toast]]);
-			}, [])}} >
-				<div className="fixed bottom-5 left-2 px-10 z-[12000] flex flex-col items-center gap-3" >
-					{toasts.map((x,i)=>
-						<ShowTransition key={x[0]} open={i!=0}
-							openClassName="opacity-100" closedClassName="opacity-0" >
+			keyStr.push((ev.key.startsWith("Key") ? ev.key.slice("Key".length) : ev.key).toLowerCase());
 
-							<div className={twMerge(
-								containerDefault, "p-2 pl-5 gap-5 flex flex-row items-center transition-opacity",
-								bgColor.sky
-							)} >
-								{x[1]}
-								<button className="ml-auto" onClick={()=>{
-									setToasts(xs=>xs.filter(y=>y[0]!=x[0]));
-								}} ><IconX /></button>
-							</div>
-						</ShowTransition>
-					)}
-				</div>
+			const set = shortcuts.get(keyStr.join("-")) ?? new Set();
+			if (set.size > 0) {
+				set.forEach(cb=>cb());
+				ev.preventDefault();
+			}
+		};
+		
+		document.addEventListener("keydown", listener);
+		return ()=>document.removeEventListener("keydown", listener);
+	}, [shortcutsRef]);
 
-				<div className={twMerge("font-body dark:text-gray-100 text-gray-950 min-h-dvh relative", className)}
-					{...props} >
-					{children}
-					<div className="bg-neutral-100 dark:bg-neutral-950 absolute left-0 top-0 bottom-0 right-0 -z-50" />
-				</div>
-			</ToastContext.Provider>
-		</PopupCountCtx.Provider>
-	</TitleContext.Provider>;
+	return <ShortcutContext.Provider value={{shortcuts: shortcutsRef}} >
+		<TitleContext.Provider value={useMemo(()=>({
+			setTitle(title) {
+				const arr = titlesRef.current;
+				const i = arr.length;
+				arr.push(document.title = title);
+
+				return ()=>{
+					while (i<arr.length) arr.pop();
+					document.title = arr[arr.length-1];
+				};
+			}
+		}), [])} >
+			<PopupCountCtx.Provider value={{count, incCount}} >
+				<ToastContext.Provider value={{
+					pushToast: useCallback((toast: string)=>{
+						setToasts(xs=>[...xs.slice(0,3), [toastKey.current++, toast]]);
+					}, []),
+					setToastRoot: useCallback((el: HTMLElement)=>{
+						setToastRoot(el);
+						return ()=>setToastRoot(old=>el==old ? null : old);
+					}, [])
+				}} >
+					{createPortal(<div className="fixed bottom-5 left-2 px-10 z-[12000] flex flex-col items-start gap-3" >
+						{toasts.map((x,i)=>
+							<ShowTransition key={x[0]} open={i!=0}
+								openClassName="opacity-100" closedClassName="opacity-0" >
+								<div className={twMerge(
+									containerDefault, bgColor.sky,
+									"p-2 pl-5 gap-5 flex flex-row items-center transition-opacity duration-1000"
+								)} >
+									{x[1]}
+									<button className="ml-auto" onClick={()=>{
+										setToasts(xs=>xs.filter(y=>y[0]!=x[0]));
+									}} ><IconX /></button>
+								</div>
+							</ShowTransition>
+						)}
+					</div>, toastRoot ?? document.body)}
+
+					<div className={twMerge("font-body dark:text-gray-100 text-gray-950 min-h-dvh relative", className)}
+						{...props} >
+						{children}
+						<div className="bg-neutral-100 dark:bg-neutral-950 absolute left-0 top-0 bottom-0 right-0 -z-50" />
+					</div>
+				</ToastContext.Provider>
+			</PopupCountCtx.Provider>
+		</TitleContext.Provider>
+	</ShortcutContext.Provider>;
 }
 
 export const toSearchString = (x: string) => x.toLowerCase().replace(/[^a-z0-9\n]/g, "");
@@ -897,12 +1016,17 @@ export function useAsync<T extends unknown[], R>(f: (...args: T)=>Promise<R>, op
 	}), [f, state]);
 }
 
-export function useAsyncEffect(f: ()=>Promise<void|(()=>void)>, deps: unknown[]) {
+// if T is disposable, will dispose before rerunning and on unmount
+export function useAsyncEffect<T>(f: ()=>Promise<T>, deps: unknown[]) {
 	const oldV = useRef<()=>void>(null);
 	const x = useAsync(async ()=>{
 		const v = await f();
 		oldV.current?.();
-		if (v) oldV.current=v;
+		if (typeof v=="object" && v && Symbol.dispose in v) {
+			oldV.current = v[Symbol.dispose] as ()=>void;
+		}
+
+		return v;
 	});
 
 	useEffect(()=>()=>{
@@ -913,7 +1037,7 @@ export function useAsyncEffect(f: ()=>Promise<void|(()=>void)>, deps: unknown[])
 	const changed = useRef(false);
 
 	// eslint-disable-next-line react-hooks/exhaustive-deps
-	useEffect(()=>{changed.current=true;}, deps);
+	useEffect(()=>{ changed.current=true; }, deps);
 
 	useEffect(()=>{
 		if (!x.loading && changed.current) {
@@ -997,6 +1121,7 @@ export type LocalStorage = Partial<{
 	
 	seenReference: boolean,
 	referencePage: string,
+	numNodesCreated: number,
 
 	clipboard: NodeSelection,
 	seenMessages: Map<string, number> //time message received
@@ -1005,12 +1130,11 @@ export type LocalStorage = Partial<{
 };
 
 const localStorageKeys: (Exclude<keyof LocalStorage,"toJSON">)[] = [
-	"storyState",
-	"puzzleProcs", "readStory",
+	"storyState", "puzzleProcs", "readStory",
 	"solvedPuzzles", "stepsPerS",
 	"userProcs", "storyParagraph",
 	"lastStageCount", "puzzleSolve",
-	"username", "currentlyEditing",
+	"username", "currentlyEditing", "numNodesCreated",
 	"clipboard", "maxProc", "seenMessages",
 	"seenReference"
 ];
@@ -1111,7 +1235,7 @@ export function AlertErrorBoundary({children}: {children?: ComponentChildren}) {
 	if (err!=undefined) {
 		return <Alert bad title="An error occurred" txt={<>
 			<Text>{err instanceof Error ? `Details: ${err.message}` : "Unknown error"}</Text>
-			<Button onClick={()=>reset()} >Retry</Button>
+			<Button onClick={()=>reset()} className="self-start" >Retry</Button>
 		</>} />;
 	}
 	
@@ -1121,4 +1245,108 @@ export function AlertErrorBoundary({children}: {children?: ComponentChildren}) {
 export function ease(t: number) {
 	const a = t*t*(3-2*t);
 	return a*a/2 + 0.5-(1-a)*(1-a)/2;
+}
+
+export const dragOpts = {
+	dropZoneClass: "drop",
+	dragHandle: ".draghandle",
+	plugins: [animations()],
+	draggable(el: HTMLElement) { return "drag" in el.dataset; },
+	threshold: { horizontal: Infinity, vertical: 0 },
+} satisfies Partial<ReactDragAndDropConfig<HTMLElement, unknown[]>>;
+
+export function useDragList<X, T extends HTMLElement>({values, setValues, dataKey, ...opts}: {
+	values: readonly X[], setValues: (x: X[])=>void, dataKey: (x: X)=>number|string
+}&Partial<ReactDragAndDropConfig<T,X[]>>): Ref<T> {
+	const ref = useRef<T>(null);
+	const animating = useRef<Set<HTMLElement>>(new Set());
+	useEffect(()=>{
+		const el = ref.current;
+		if (!el) return;
+
+		const removed = new Set<HTMLElement>();
+		const toRemove = new Set<HTMLElement>();
+
+		const observer = new MutationObserver((mut)=>{
+			for (const record of mut) {
+				const cbs: (()=>void)[] = [];
+				const anim = async (node: globalThis.Node, add: boolean) => {
+					if (!(node instanceof HTMLElement)) return;
+					const remove = removed.has(node);
+
+					if (!add) {
+						if (remove) return;
+
+						toRemove.add(node);
+						await new Promise<void>(res=>cbs.push(res));
+						if (!toRemove.has(node)) return;
+
+						const node2 = node.cloneNode(true) as HTMLElement;
+						removed.add(node2);
+						if (record.nextSibling?.parentNode!=null) {
+							el.insertBefore(node2, record.nextSibling);
+						} else if (record.previousSibling instanceof HTMLElement && record.previousSibling?.parentNode) {
+							record.previousSibling.after(node2);
+						}
+
+						return;
+					} else if (toRemove.has(node)) {
+						toRemove.delete(node);
+						return;
+					}
+
+					const style = getComputedStyle(node);
+					const frames: Keyframe[] = [
+						{ opacity: "0" }, { opacity: style.getPropertyValue("opacity") }
+					];
+
+					for (const k of ["height", "paddingTop", "paddingBottom", "borderTop", "borderBottom", "marginTop", "marginBottom"] as const) {
+						frames[0][k] = "1px";
+						frames[1][k] = style.getPropertyValue(k);
+					}
+					
+					if (remove) frames.reverse();
+					node.style.overflow = "clip";
+
+					animating.current.add(node);
+					node.animate(frames, {
+						duration: 100,
+						fill: "both"
+					}).onfinish = ()=>{
+						if (remove) node.remove();
+						else node.style.overflow = style.overflow;
+						animating.current.delete(node);
+					};
+				};
+
+				for (const node of record.removedNodes) void anim(node, false);
+				for (const node of record.addedNodes) void anim(node, true);
+				cbs.forEach(cb=>cb());
+			}
+		});
+
+		observer.observe(el, {childList: true});
+		return ()=>{
+			observer.disconnect();
+		};
+	}, [ref]);
+
+	useEffect(()=>{
+		const keys = new Set<unknown>(values.map(x=>dataKey(x).toString()));
+		dragAndDrop<HTMLUListElement, X>({
+			parent: ref.current,
+			state: [ values as X[], setValues as Dispatch<SetStateAction<X[]>> ],
+			...dragOpts,
+			draggable(x) {
+				return (animating.current.size==0 || animating.current.has(x)) && "key" in x.dataset && keys.has(x.dataset.key);
+			},
+			...opts,
+			performTransfer(d) {
+				if (opts.performTransfer) opts.performTransfer(d);
+				else performTransfer(d);
+			}
+		});
+	}, [values, setValues, opts, dataKey]);
+
+	return ref;
 }

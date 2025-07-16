@@ -1,9 +1,9 @@
 <StoryParagraph>
-The television mounted by the kitchen blares inconsiderately with media selected by the administration.
+The television mounted by the kitchen blares inconsiderately with media controlled by the administration.
 
 "What's on your mind?"[pause]
 
-Today the President announced a defense contract with Subrose Systems, as if they didn't already have a monopoly everywhere else. Is it normal to have megacorps span every sector, shuffling data away into their gigantic stores?
+Today the President announced a defense contract with Subrose Systems, as if they didn't already have a monopoly in civil life. Is it normal to have megacorps span every sector, shuffling data away into their gigantic stores?
 
 Sometimes, I wonder about the world beyond our borders. I dream of Pala, a global superpower without the corruption and inequality plaguing our country. Widespread poverty replaced with technology out of our reach. Encryption without reliance on a centralized database and breakable ciphers.[pause] You swallow the slurry of homemade potato chip stuck in your mouth.
 
@@ -23,7 +23,8 @@ Mikah glances at you.
 
 Disappointed, you nod. He stands, looks at you questioningly, and walks away. The only voice left is from the President.[pause]
 
-"We're settng our sights on bringing accountability and transparency to federal spending and ensuring taxpayer dollars are spent wisely. We've already saved taxpayers billions of dollars. But we want think our administration can be leaner.
+<!-- inspired by https://www.whitehouse.gov/fact-sheets/2025/02/fact-sheet-president-donald-j-trump-requires-transparency-for-the-american-people-about-wasteful-spending/ -->
+"We're setting our sights on bringing accountability and transparency to federal spending and ensuring taxpayer dollars are spent wisely. We've already saved taxpayers billions of dollars. But we want think our administration can be leaner.
 
 "State-of-the-art research indicates that cutting welfare spending can help get unemployed citizens back on their feet. Our expert economists have identified this as a major source of inefficiency, and changes will be effective in the near future."
 
@@ -49,7 +50,7 @@ Deal closed without negotiating, high-heels clacking briskly, she leaves again. 
 <AsciiArt src="/img/cd.png" brightness="20" edge="30" contrast="95" />
 
 <StoryParagraph>
-You half-heartedly shake Ishan's hand and take a seat at his station. He pulls up his editor and idly pokes through the <code>net-rw</code> listing.
+You half-heartedly shake Ishan's hand and take a seat at his station. He types his password with grandmotherly care and without much effort, you deduce it's <code>hunter2</code>. A man of taste. He pulls up his editor and idly pokes through the <code>net-rw</code> listing.
 
 "Yeah, so the part I work on is bioinformatics research."[pause]
 

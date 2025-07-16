@@ -2,7 +2,9 @@
 <StoryParagraph>
 Even in its capital city, this country reeks of neglect. The subway rattles on ancient rails and closures have prolonged your commute by half an hour. You remember when things were better, when the government cared about its people and places. But ever since the President was elected... The train shudders to a halt and you cross to the platform, enveloped by hordes of fellow commuters. Despite the repression, everyone keeps going.
 
-A lone guitarist solicits donations by the stairwell. Effortless arpeggios immediately flip the mood. He's obviously improvising, with at least years of experience. What's he doing down here? You spare a few dollars. Dingy neon signage leads towards the light, casting you onto the streets.
+A lone guitarist solicits donations by the stairwell. Effortless arpeggios immediately flip the mood, transforming the confining environment into the sublime. He's obviously improvising, synthesizing new material from (at least) years of experience. What's he doing down here? You spare him a few dollars. Dingy neon signage drags you towards the light and casts you out onto the streets.
+
+Just a few months ago, before the popular vote was blinded by nationalism, there was serious talk of joining Pala. A diplomat, Hamilton Wang, coordinated efforts from Pala and established an embassy. He's still here, just locked away like the rest of the world. Maybe he feels safe and secure in the walled garden of his embassy, waiting for the situation to either deteriorate or improve. For now, the President wouldn't dare touch Hamilton. Any rash action could incite a war which this country couldn't take. Pala is too powerful, too *good*.
 
 You finally arrive at the office. The skyscraper is a solitary island of unblemished prosperity, as if it were unshackled from the physical laws which oppress the rest of the city. Some pigs make enough that none of it matters.
 </StoryParagraph>
@@ -50,5 +52,11 @@ But it's true. Your **SUBKEY** is woefully insecure, yet it's the only thing tyi
 <AsciiArt src="/img/subkey.png" edge="140" contrast="130" brightness="80" />
 
 <StoryParagraph>
-You get a fresh **SUBKEY** later that day, and this time it takes hours to figure out the encryption algorithm. You're still disappointed at the lack of absolute security, but except for those at the top, **SUBKEY**s aren't impossible to figure out. Instead, they are designed to defend against large-scale attacks, because each one relies on the creative input of the best programmers at Subrose: the keycoders.
+A fresh **SUBKEY** is delivered later that day. You pry it out of sleek metal casing, tear off the shrinkwrap and plug it in. This time, it takes hours to figure out the cipher. You're still disappointed at the lack of bulletproof security, but except for those at the top, **SUBKEY**s aren't impossible to figure out. Instead, they are designed to defend against large-scale attacks, because each one relies on the creative input of the best programmers at Subrose: the keycoders.
+
+Keycoders like Karen design symmetric encryption algorithms by specifying encryption and decryption algorithms. Next, they obfuscate the encryption code until it is virtually irreversible, except through intensive manual analysis. This is made public to various systems which need to verify the **SUBKEY**, while the decryption program is only given to its rightful owner. To let entities prove their legitimacy to a system, they prove they can decrypt anything the system challenges them with.
+
+A simpler scheme would be to have a centralized database of random keys which entities demonstrate they know. But it's harder to prevent these keys from leaking -- not just anyone working on the system should be able to impersonate its users. And this way, the **SUBKEY** can be used across many systems while posing minimal risk the decryption algorithm is compromised, since it is supposed to be near-impossible to deduce from the encryption program.
+
+Of course, this also allows any system to send information that only with the **SUBKEY** can read.
 </StoryParagraph>

@@ -1,19 +1,18 @@
-import { Dispatch, MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection, makeProc, numTests } from "../shared/eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, interactiveContainerDefault, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, ThemeSpinner, toSearchString, useCloneRef, useFnRef, useGoto, useToast } from "./ui";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, dragOpts, HiddenInput, IconButton, Input, interactiveContainerDefault, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, ThemeSpinner, toSearchString, DragList, useFnRef, useGoto, useShortcuts, useToast } from "./ui";
 import { twMerge, twJoin } from "tailwind-merge";
-import { IconArrowsRightLeft, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconHelp, IconInfoCircle, IconPencil, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
-import { ComponentChild, ComponentChildren, Ref, RefCallback, RefObject } from "preact";
-import { dragAndDrop, ReactDragAndDropConfig, useDragAndDrop } from "@formkit/drag-and-drop/react";
-import { animations, DragState, handleNodePointerdown, performTransfer, remapNodes, setParentValues } from "@formkit/drag-and-drop";
-import { ChangeEvent, SetStateAction } from "preact/compat";
-import { fill, strToInt, toPrecStat } from "../shared/util";
+import { IconArrowsRightLeft, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconHelp, IconInfoCircle, IconLogin2, IconPencil, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
+import { ComponentChild, ComponentChildren, Ref, RefObject } from "preact";
+import { useDragAndDrop } from "@formkit/drag-and-drop/react";
+import { DragState, handleNodePointerdown, remapNodes, setParentValues } from "@formkit/drag-and-drop";
+import { ChangeEvent } from "preact/compat";
+import { fill, statsArr, strToInt } from "../shared/util";
 import { Messages } from "./story";
 import { Submission, useSubmission } from "./api";
 import { Reference } from "./reference";
 import { LogoBack } from "./logo";
 import { addFromText, toText } from "../shared/text";
-import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { Puzzle } from "./data";
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
@@ -93,10 +92,10 @@ type EditData = {
 
 const regLabel = (i: number, v: Register)=>`#${i+1}${v.name!=undefined ? `: ${v.name}` : ""}`;
 
-function RegisterPicker<Create extends boolean = false>({p, x, setX, desc, create}: {
+function RegisterPicker<Create extends boolean = false>({p, x, setX, desc, create, className}: {
 	p: EditData, x: Create extends true ? number|"create" : number,
 	setX?: (x: Create extends true ? number|"create" : number)=>void,
-	desc?: string, create?: Create
+	desc?: string, create?: Create, className?: string
 }) {
 	return <div className="flex flex-col" >
 		{desc!=undefined && <Text v="sm" >{desc}</Text>}
@@ -111,7 +110,8 @@ function RegisterPicker<Create extends boolean = false>({p, x, setX, desc, creat
 			searchable
 			disabled={setX==undefined}
 			placeholder={"(unset)"}
-			value={x} setValue={setX} />
+			value={x} setValue={setX}
+			className={className} />
 	</div>;
 }
 
@@ -430,7 +430,7 @@ function RegisterEditor({p, reg, setReg}: {
 			setValue={v=>{
 				if (v=="param") setReg({...regV, type: "param"}, reg);
 				else if (v=="number") {
-					setReg({...regV, type: "value", value: 0}, reg);
+					setReg({...regV, type: "value", value: 0n}, reg);
 					setValue("0");
 				} else if (v=="string") {
 					setReg({...regV, type: "value", value: value.toString()}, reg);
@@ -456,7 +456,8 @@ function RegisterEditor({p, reg, setReg}: {
 			<Divider className="my-1" />
 			<Text v="dim" >Current value ({typeof runValue=="string" ? "text" : "numeric"}):</Text>
 
-			<Input className={twJoin(err2 && borderColor.red)} value={runValue} valueChange={setRunV} />
+			<Input className={twJoin(err2 && borderColor.red)}
+				value={runValue.toString()} valueChange={setRunV} />
 			{err2 && <Alert bad txt="Invalid register value" />}
 		</>}
 	</div>;
@@ -479,44 +480,6 @@ type UserProcs = {
 	openProc: (i?: number)=>void,
 	setProcList: (vs: number[])=>void
 };
-
-const dragListener = new Set<(x: boolean)=>void>();
-const dragOpts = {
-	dropZoneClass: "drop",
-	dragHandle: ".draghandle",
-	plugins: [animations()],
-	draggable(el: HTMLElement) { return "drag" in el.dataset; },
-	onDragstart() { dragListener.forEach(x=>x(false)); },
-	onDragend() { dragListener.forEach(x=>x(true)); }
-};
-
-export function useDragAnimate<X, T extends HTMLElement>({values, setValues, dataKey, ...opts}: {
-	values: readonly X[], setValues: (x: X[])=>void, dataKey: (x: X)=>number|string
-}&Partial<ReactDragAndDropConfig<T,X[]>>): Ref<T> {
-	const ref = useRef<T>(null);
-	const [ref2, setAnimateEnabled] = useAutoAnimate() as [ RefCallback<T>, (x: boolean)=>void ];
-	useEffect(()=>{
-		dragListener.add(setAnimateEnabled);
-		return ()=>dragListener.delete(setAnimateEnabled);
-	}, [setAnimateEnabled]);
-
-	useEffect(()=>{
-		const keys = new Set<unknown>(values.map(x=>dataKey(x).toString()));
-		dragAndDrop<HTMLUListElement, X>({
-			parent: ref.current,
-			state: [ values as X[], setValues as Dispatch<SetStateAction<X[]>> ],
-			...dragOpts,
-			draggable(x) { return "key" in x.dataset && keys.has(x.dataset.key); },
-			...opts,
-			performTransfer(d) {
-				if (opts.performTransfer) opts.performTransfer(d);
-				else performTransfer(d);
-			}
-		});
-	}, [values, setValues, opts, setAnimateEnabled, dataKey]);
-	
-	return useCloneRef(ref, ref2);
-}
 
 const MAX_UNDO_STEPS = 100;
 
@@ -631,7 +594,7 @@ function ProcEditor({
 		}
 	}, [selection]);
 
-	const nodeListRef = useDragAnimate<number, HTMLUListElement>(useMemo(()=>({
+	const nodeListRef = DragList<number, HTMLUListElement>(useMemo(()=>({
 		multiDrag: true, values: proc.nodeList, group: "proc",
 		setValues: (xs: number[])=>setProc(p=>({...p, nodeList: xs })),
 		dataKey: v=>v,
@@ -658,12 +621,12 @@ function ProcEditor({
 		sortable: false, group: "proc", dropZone: false, ...dragOpts
 	}) as unknown as [Ref<HTMLUListElement>, DragNode[]]; // preact compat
 
-	const userProcListRef = useDragAnimate<DragNode, HTMLUListElement>({
+	const userProcListRef = DragList<DragNode, HTMLUListElement>({
 		dropZone: false,
 		values: userProcList.map(i=>({type: "user", i})),
 		setValues: (nodes: DragNode[])=>setProcList(nodes.map(x=>x.i)),
 		dataKey: x=>x.i,
-		group: "proc", 
+		group: "proc",
 		performTransfer() {}
 	});
 
@@ -689,20 +652,13 @@ function ProcEditor({
 		}));
 	}, [setProc]);
 	
-	const registerList = useRef<HTMLUListElement>(null);
-	useEffect(()=>{
-		dragAndDrop<HTMLUListElement, {type: "register", i: number}>({
-			parent: registerList.current,
-			dropZone: false,
-			state: [
-				proc.registerList.map(i=>({type: "register", i})), // mutability
-				((vs: {type: "register", i: number}[])=>
-					setProc(p=>({...p, registerList: vs.map(v=>v.i)}))
-				) as Dispatch<SetStateAction<{type: "register", i: number}[]>>
-			],
-			...dragOpts
-		});
-	}, [proc.registerList, registerList, setProc])
+	const registerListRef = DragList<number, HTMLUListElement>({
+		dropZone: false,
+		values: proc.registerList,
+		setValues: (registerList: number[])=>setProc(p=>({...p, registerList})),
+		dataKey: x=>x,
+		performTransfer() {}
+	});
 
 	const procNameValidity = useValidity(proc.name, v=>setProc(p=>({...p, name: v})))
 	const [procFilter, setProcFilter] = useState("");
@@ -786,7 +742,10 @@ function ProcEditor({
 				...sel, procRegisters: mapWith(sel.procRegisters, procI, regMap2)
 			};
 
-			const nlist = proc.nodeList.toSpliced(insBegin, 0, ...newNodes.map(([i])=>i));
+			const addedI = newNodes.map(([i])=>i);
+			const nlist = proc.nodeList.toSpliced(insBegin, 0, ...addedI);
+			// probably illegal
+			setSelection(new Set(addedI));
 			return {
 				...p,
 				maxRegister: p.maxRegister+newRegisters.length,
@@ -798,7 +757,6 @@ function ProcEditor({
 			};
 		});
 
-		setSelection(new Set());
 		setRemappingClipboard(v=>({...v, open: false}));
 	}, [proc.maxNode, proc.nodeList, procI, selection, setProc]);
 
@@ -846,7 +804,7 @@ function ProcEditor({
 					}));
 				}
 
-				toast(ev.key=="c" ? "Copied" : ev.key=="x" ? "Cut" : "Deleted");
+				toast(`${ev.key=="c" ? "Copied" : ev.key=="x" ? "Cut" : "Deleted"} ${selection.size} node${selection.size==1 ? "" : "s"}`);
 			} else if (ev.key=="v") {
 				const data = LocalStorage.clipboard;
 				if (!data || remappingClipboard.open) return;
@@ -859,7 +817,7 @@ function ProcEditor({
 					});
 				} else {
 					pasteSel(data, regMap);
-					toast("Pasted");
+					toast(`Pasted ${data.nodes.length} node${data.nodes.length==1 ? "" : "s"}`);
 				}
 			} else if (ev.key=="a") {
 				setSelection(new Set(proc.nodeList));
@@ -870,10 +828,10 @@ function ProcEditor({
 			ev.preventDefault();
 		};
 		
-		document.addEventListener("keydown", clipboardListener)
+		document.addEventListener("keydown", clipboardListener);
 		document.addEventListener("click", docClick);
 		return ()=>{
-			document.removeEventListener("keydown", clipboardListener)
+			document.removeEventListener("keydown", clipboardListener);
 			document.removeEventListener("click", docClick);
 		};
 	}, [data.nodeRefs, pasteSel, proc, proc.nodeList, procI, remappingClipboard.open, selection, setProc, undo, toast, setDragSelection]);
@@ -904,7 +862,8 @@ function ProcEditor({
 						
 						<IconArrowsRightLeft />
 						
-						<RegisterPicker create p={data} x={remappingClipboard.remap[i]} setX={(nx)=>{
+						<RegisterPicker create p={data} x={remappingClipboard.remap[i]}
+							className="w-full" setX={(nx)=>{
 							setRemappingClipboard({
 								...remappingClipboard,
 								remap: remappingClipboard.remap.toSpliced(i, 1, nx)
@@ -922,13 +881,16 @@ function ProcEditor({
 			</div>
 		</Modal>
 
-		<div className="flex flex-col items-stretch editor-left min-h-0 gap-2" >
+		<div className="flex flex-col items-stretch editor-left overflow-y-auto overflow-x-hidden min-h-0 gap-2" >
 			<div className={twJoin("flex flex-row gap-2 items-end pl-2 shrink-0 h-11", !isUserProc && "pl-4")} >
-				{back && <Anchor className="items-center self-end mr-2" onClick={()=>openProc()} >
+				{back && <Anchor className="items-center self-end -mr-1" onClick={()=>openProc()} >
 					<IconChevronLeft size={32} />
 				</Anchor>}
 
-				{!isUserProc ? <Text v="bold" >Procedure <Text v="code" >{proc.name}</Text></Text>
+				{!isUserProc ? <>
+					<IconLogin2 size={32} />
+					<Text v="bold" >Entrypoint</Text>
+				</>
 				: <>
 					<Text v="bold" >Procedure</Text>
 					<HiddenInput {...procNameValidity} required {...nameInputProps} size={1} className="grow" />
@@ -938,7 +900,7 @@ function ProcEditor({
 					setConfirmClear(true);
 				}} >Clear</Button>
 				{isUserProc && <>
-					<AppTooltip placement="right" className="px-2 pb-2" content={<>
+					<AppTooltip placement="bottom" className="px-2 pb-2" content={<>
 						<Text v="dim" >Comment</Text>
 						<Input maxLength={1024} value={proc.comment} valueChange={v=>setProc(p=>({
 							...p, comment: v.length==0 ? undefined : v
@@ -954,8 +916,7 @@ function ProcEditor({
 				{proc.nodeList.map(x=>[proc.nodes.get(x),x] as const)
 					.filter((v): v is [Node&{op: "goto"},number]=>v[0]?.op=="goto")
 					.map(([v,i])=><GotoArrow key={`arrow${i}`} p={data} node={v} nodeI={i} />)}
-				<ul ref={nodeListRef}
-					className="pl-[80px] flex flex-col gap-1 items-stretch overflow-y-auto pb-20" >
+				<ul ref={nodeListRef} className="pl-[80px] flex flex-col gap-1 items-stretch pb-20" >
 					<NodeAdder i={-1} add={addNode} procs={procs} procList={userProcList} />
 					{proc.nodeList.flatMap((v,i)=>{
 						const node = proc.nodes.get(v)!;
@@ -1029,7 +990,7 @@ function ProcEditor({
 		<div className="flex flex-col gap-1 editor-right min-h-0 pr-3" >
 			<Text v="bold" className="mt-2" >Registers</Text>
 			<ul className={twJoin("flex flex-col gap-2 overflow-y-auto pb-5", stack!=undefined && "basis-1/3 shrink-0 grow max-h-fit")}
-				ref={registerList} >
+				ref={registerListRef} >
 				{proc.registerList.map(r=>
 					<RegisterEditor key={`${procI} ${r}`} p={data} reg={r} setReg={setReg} />
 				)}
@@ -1037,7 +998,9 @@ function ProcEditor({
 				<Button className={blankStyle} onClick={()=>{
 					setProc(p=>({
 						...p, registerList: [...p.registerList, p.maxRegister],
-						registers: mapWith(p.registers, p.maxRegister, { name: null, type: "value", value: 0 }),
+						registers: mapWith(p.registers, p.maxRegister, {
+							name: null, type: "value", value: 0n
+						}),
 						maxRegister: p.maxRegister+1
 					}));
 				}} >
@@ -1091,12 +1054,12 @@ type PuzzleIOState = Readonly<({
 } | {
 	type: "simple",
 	puzzle: Puzzle&{kind: "simple"},
-	input: readonly (string|number)[],
+	input: readonly (string|bigint)[],
 	dirtyInput: readonly string[],
-	output: string|number
+	output: string|bigint
 })&{
 	err: string|null,
-	programInput: readonly (number|string)[],
+	programInput: readonly (bigint|string)[],
 }>;
 
 type PuzzleIO = PuzzleIOState&({
@@ -1108,8 +1071,8 @@ type PuzzleIO = PuzzleIOState&({
 	setDecoded: (x: string)=>void
 })&{
 	randomize: ()=>void,
-	programInputRef: RefObject<readonly (number|string)[]>,
-	programOutput: number|string
+	programInputRef: RefObject<readonly (bigint|string)[]>,
+	programOutput: bigint|string
 };
 
 function usePuzzleIO(puzzle: Puzzle): PuzzleIO {
@@ -1177,7 +1140,7 @@ function usePuzzleIO(puzzle: Puzzle): PuzzleIO {
 	};
 	
 	// to be used from effect without updating (i.e. only when run starts)
-	const programInputRef = useRef<readonly(string|number)[]>([]);
+	const programInputRef = useRef<readonly(string|bigint)[]>([]);
 	useEffect(()=>{ programInputRef.current = state.programInput; }, [state.programInput]);
 
 	return {
@@ -1209,7 +1172,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		|{ type: "paused", breakpoint?: number }
 		|{ type: "running", step: boolean, restart: boolean }>({type: "stopped"});
 	const [runError, setRunError] = useState<InterpreterError|null>(null);
-	const [output, setOutput] = useState<[readonly(string|number)[]|null, string|number]>([null, ""]);
+	const [output, setOutput] = useState<[readonly(string|bigint)[]|null, string|bigint]>([null, ""]);
 
 	const [procHistory, setProcHistory] = useState<number[]>([]);
 	const [active, setActive] = useState(edit.entryProc);
@@ -1313,7 +1276,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	});
 
 	const runStateRef = useRef<ProgramState|null>(null);
-	const originalInput = useRef<readonly(string|number)[]|null>(null);
+	const originalInput = useRef<readonly(string|bigint)[]|null>(null);
 	const [ignoreBreakpoint, setIgnoreBreakpoint] = useState(false);
 	
 	useEffect(()=>{
@@ -1392,7 +1355,6 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		}
 		
 		// wtf, i like defining stuff before they are used
-		// eslint-disable-next-line prefer-const
 		let int: number|null;
 
 		const intervalDelay = Math.max(200, 1000/edit.stepsPerS);
@@ -1480,13 +1442,13 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		</div>}
 	</div>;
 
-	const stats = <AppTooltip placement="bottom" content={runState && <>
-		<p>{toPrecStat(runState.stats.time, "step")}</p>
-		<p>{toPrecStat(runState.stats.nodes, "node")}</p>
-		<p>{toPrecStat(runState.stats.registers, "register")}</p>
-	</>} disabled={runState==null} ><div>
-		<IconButton disabled={runState==null} icon={<IconChartBar />} />
-	</div></AppTooltip>;
+	const stats = <AppTooltip placement="bottom"
+		content={runState && statsArr(runState.stats).map((x,i)=><p key={i} >{x}</p>)}
+		disabled={runState==null} >
+		<div>
+			<IconButton disabled={runState==null} icon={<IconChartBar />} />
+		</div>
+	</AppTooltip>;
 
 	const inputSection = <>
 		{io.type=="decode" ? <Input value={io.decodedDirty} valueChange={io.setDecoded} />
@@ -1499,7 +1461,10 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		{io.err!=null && <Alert bad title="Invalid input" txt={io.err} />}
 		
 		{io.type=="decode" && <div className={twJoin(blankStyle, "items-stretch px-8")} >
-			{io.decoded.length>0 ? <div className="flex flex-row flex-wrap gap-4 gap-y-1 items-center justify-center" >
+			{io.decoded.length>0 ? <div className={twJoin(
+				"flex flex-wrap gap-4 gap-y-1 items-center justify-center",
+				io.decoded.length+io.encoded.length>30 ? "flex-col" : "flex-row"
+			)} >
 					<Text v="code" >{io.decoded}</Text>
 					<IconArrowsRightLeft />
 					<Text v="code" >{io.encoded}</Text>
@@ -1538,16 +1503,24 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		{sub.resubmitting ? "Res" : "S"}ubmit{sm ? "" : " solution"}
 	</Button>;
 				
-	const procInput = <>
+	const makeInput = (withSubmit: boolean) =>
 		<div className="flex flex-row justify-between gap-2 items-end mt-2 -mb-1" >
 			<Text v="bold" >{puzzle.kind=="decode" ? "Plaintext" : "Input"}</Text>
 			<div className="flex flex-row gap-1" >
-				<Button className="py-1" onClick={io.randomize} >Random</Button>
-				{submitButton(true)}
+				<Button className="py-1" onClick={io.randomize} shortcut="r" >Random</Button>
+				{withSubmit && submitButton(true)}
 			</div>
-		</div>
+		</div>;
+
+	const procInput = <>
+		{makeInput(true)}
 		{inputSection}
 	</>;
+	
+	useShortcuts({
+		shortcut: "enter",
+		onClick: ()=>setOpen(o=>({...o, open: true}))
+	});
 
 	return <div className="grid h-dvh gap-x-4 w-full editor" >
 		<div className="editor-top flex flex-row gap-4 py-1 justify-between items-center pl-4" >
@@ -1562,7 +1535,8 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				{stats}
 				<IconButton icon={<IconPlayerStopFilled className="fill-red-500" />}
 					disabled={runStatus.type=="stopped"}
-					onClick={()=>{ setRunStatus({type: "stopped"}) }} />
+					onClick={()=>{ setRunStatus({type: "stopped"}) }}
+					shortcut="escape" />
 				
 				<IconButton icon={
 					runStatus.type=="done" ? <IconRotate className={"stroke-green-400"} />
@@ -1572,33 +1546,35 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 					onClick={()=>{
 						if (runStatus.type=="running") setRunStatus({type: "paused"});
 						else play({ restart: runStatus.type=="done" });
-					}} />
+					}} shortcut=" " />
 
 				<IconButton icon={<IconPlayerSkipForwardFilled className="fill-green-400 group-disabled:fill-gray-400" />}
 					className="group"
 					disabled={runStatus.type=="running"}
-					onClick={()=>play({ restart: runStatus.type=="done", step: true })} />
+					onClick={()=>play({ restart: runStatus.type=="done", step: true })}
+					shortcut="s" />
 
 				<AppTooltip content={`${ignoreBreakpoint ? "En" : "Dis"}able breakpoints`} >
 					<div>
 						<IconButton icon={
 							ignoreBreakpoint ? <IconCircleOff className="fill-gray-500" />
 							: <IconCircleFilled className="fill-red-500" />
-						} onClick={()=>{ setIgnoreBreakpoint(!ignoreBreakpoint) }} />
+						} onClick={()=>{ setIgnoreBreakpoint(!ignoreBreakpoint) }}
+							shortcut="b" />
 					</div>
 				</AppTooltip>
 
 				<span className="w-2" />
 
 				<IconButton icon={<IconPlayerTrackPrevFilled />} disabled={edit.stepsPerS<0.2}
-					onClick={()=>mod(0.5)} />
+					onClick={()=>mod(0.5)} shortcut="arrowleft" />
 
 				<Button className="py-1 h-fit" onClick={()=>setEdit(e=>({...e, stepsPerS: 5}))} >
 					Speed: {edit.stepsPerS.toFixed(2)}
 				</Button>
 				
 				<IconButton disabled={edit.stepsPerS>2500} icon={<IconPlayerTrackNextFilled />}
-					onClick={()=>mod(2)} />
+					onClick={()=>mod(2)} shortcut="arrowright" />
 				<span className="w-2" />
 
 				<Text v="dim" className="relative" >
@@ -1628,12 +1604,13 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				<Text className="mb-1 italic" >{puzzle.blurb}</Text>
 				{puzzle.extraDesc!=undefined && <Text className="mb-1" >{puzzle.extraDesc}</Text>}
 				
-				<div className="flex flex-row gap-2 -mb-1" >
-					<Text v="dim" >
-						Plaintext
-						<Anchor onClick={io.randomize} className="ml-2" >(randomize)</Anchor>
-					</Text>
-				</div>
+				{puzzle.kind=="simple" ? makeInput(false)
+					: <div className="flex flex-row gap-2 -mb-1" >
+						<Text v="dim" >
+							Plaintext
+							<Anchor onClick={io.randomize} className="ml-2" >(randomize)</Anchor>
+						</Text>
+					</div>}
 
 				{inputSection}
 				
@@ -1666,11 +1643,14 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 			<form onSubmit={(ev)=>{
 				ev.preventDefault();
 				if (ev.currentTarget.reportValidity()) {
-					setEdit(v=>({
-						...v, procs: mapWith(v.procs, v.maxProc, makeProc(newProc.name)),
-						userProcList: [...v.userProcList, v.maxProc],
-						maxProc: v.maxProc+1
-					}));
+					setEdit(v=>{
+						setActive(v.maxProc);
+						return {
+							...v, procs: mapWith(v.procs, v.maxProc, makeProc(newProc.name)),
+							userProcList: [...v.userProcList, v.maxProc],
+							maxProc: v.maxProc+1
+						};
+					});
 
 					setNewProc({...newProc, open: false});
 				}

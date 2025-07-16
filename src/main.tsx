@@ -1,11 +1,11 @@
 import "disposablestack/auto";
-import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, ease, GotoContext, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useGoto, useMd, useTitle } from "./ui";
-import { ComponentChildren, ComponentProps, render, JSX, Fragment } from "preact";
+import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Divider, ease, GotoContext, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useGoto, useMd, useTitle } from "./ui";
+import { ComponentChildren, ComponentProps, render, JSX, Fragment, createElement } from "preact";
 import { useCallback, useContext, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
 import { Editor } from "./editor";
 import { Stage, stages, Story } from "./story";
 import { EditorState, makeEntryProc, Procedure } from "../shared/eval";
-import { IconBrandGithubFilled, IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconPuzzleFilled, IconTriangleFilled } from "@tabler/icons-preact";
+import { IconBookFilled, IconBrandGithubFilled, IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconDownload, IconPuzzleFilled, IconSkull, IconTriangleFilled, IconUpload } from "@tabler/icons-preact";
 import { LocationProvider, Route, Router, useLocation } from "preact-iso";
 import { twMerge, twJoin } from "tailwind-merge";
 import { parseExtra, stringifyExtra } from "../shared/util";
@@ -72,7 +72,6 @@ function Home() {
       className="text-2xl px-4 py-3 border-2 my-4" >Apply now</Button>
   
     <Footer />
-    
   </FadeRoute><BgAnimComponent /></>;
 }
 
@@ -128,6 +127,8 @@ class ProcStorage {
   }
   setProc(i: number, proc: Procedure) {
     if (this.savedProcs.get(i)==proc) return;
+    const oldMaxNode = this.savedProcs.get(i)?.maxNode ?? 0;
+    LocalStorage.numNodesCreated = (LocalStorage.numNodesCreated ?? 0) + proc.maxNode - oldMaxNode;
     this.savedProcs.set(i, proc);
     localStorage.setItem(`proc${i}`, stringifyExtra(proc));
   }
@@ -159,93 +160,125 @@ function Menu() {
   const [importData, setImportData] = useState("");
   const [exporting, setExporting] = useState(false);
 
-  const percentProgress = `${Math.round(activeStages/stages.length * 100)}%`;
+  const percentProgress = `${Math.round(activeStages/stages.length * 90)}%`;
+  const progressBorderRadius = `${Math.round((1-Math.pow(activeStages/stages.length,3)) * 50)}px`;
 
   useTitle("Subrose | Menu");
+  
+  const nextStageRef = useRef<HTMLDivElement>(null);
+  useEffect(()=>{
+    const tm = setTimeout(()=>{
+      nextStageRef.current?.scrollIntoView({block: "center", behavior: "smooth"});
+    }, 100);
+    return ()=>clearTimeout(tm);
+  }, [withDone, activeStages]);
+  const bigTextClass = "tracking-tight text-[3rem]/8 font-big font-black";
+  return <><FadeRoute className="flex flex-row items-stretch gap-20 pt-10 w-3xl" >
+    <div className="flex flex-row gap-5 mt-20 py-10" >
+      <div className="flex flex-col gap-1 items-end" >
+        <Text>progress</Text>
+        <div className={twJoin("mb-10", bigTextClass, textColor.gray)} >{percentProgress}</div>
+        <Text># stages</Text>
+        <div className={twJoin("mb-10", textColor.gray, bigTextClass)} >
+          {activeStages}
+          <span className={twJoin(bgColor.divider, "h-[120%] mb-1.5 align-middle w-2 inline-block mx-2 -skew-x-6")} />
+          {stages.length}
+        </div>
+        <Text>nodes created</Text>
+        <div className={bigTextClass} >{LocalStorage.numNodesCreated ?? 0}</div>
+      </div>
+      <div className={twJoin(bgColor.default, "w-1 relative h-[90%]")} >
+        <div className={twJoin(bgColor.divider, "absolute top-0 left-0 right-0 z-10 animate-[expand-down_2000ms_forwards] origin-top")}
+          style={{height: percentProgress, borderBottomLeftRadius: progressBorderRadius, borderBottomRightRadius: progressBorderRadius}} />
+      </div>
+    </div>
 
-  return <><FadeRoute className="flex flex-col gap-4 pt-20 max-w-xl" >
-    <ConfirmModal confirm={()=>{
-      localStorage.clear();
-      setCompleted(getCompleted());
-    }} msg={"Are you sure you want to clear your progress?"}
-      open={confirmReset} onClose={()=>setConfirmReset(false)} />
-
-    <Modal open={importing} onClose={()=>setImporting(false)} title="Import data" >
-      <Text v="err" >This will overwrite all existing data.</Text>
-
-      <form onSubmit={(ev)=>{
-        ev.preventDefault();
-
-        const save = parseExtra(importData) as Save;
-        for (const k in save.localStorage) {
-          // casting hell
-          (LocalStorage[k as keyof LocalStorage] as unknown) = save.localStorage[k as keyof LocalStorage] as unknown;
-        }
-        
-        new ProcStorage().setProcs(save.procs);
+    <div className="flex flex-col gap-4 grow" >
+      <ConfirmModal confirm={()=>{
+        localStorage.clear();
         setCompleted(getCompleted());
-        setImporting(false);
-      }} className="flex flex-col gap-2" >
-        <Text>Paste an export below:</Text>
-        <Input value={importData} valueChange={setImportData} autofocus />
-        <Button>Import data</Button>
-      </form>
-    </Modal>
+      }} msg={"Are you sure you want to clear your progress?"}
+        open={confirmReset} onClose={()=>setConfirmReset(false)} />
 
-    <Modal open={exporting} onClose={()=>setExporting(false)} title="Exported data" >
-      <Text>Your export has been copied to your clipboard. It might be big.</Text>
-    </Modal>
+      <Modal open={importing} onClose={()=>setImporting(false)} title="Import data" >
+        <Text v="err" >This will overwrite all existing data.</Text>
 
-    <Logo />
-    <Text v="big" >Table of contents</Text>
+        <form onSubmit={(ev)=>{
+          ev.preventDefault();
 
-    <div className={twJoin(bgColor.default, "w-full py-2 px-2 relative -my-2 overflow-hidden")} >
-      <Text v="md" className="relative z-20" >{activeStages}/{stages.length} ({percentProgress})</Text>
-      <div className={twJoin(bgColor.green, "absolute rounded-r-full top-0 bottom-0 left-0 z-10")} style={{width: percentProgress}} />
-    </div>
+          const save = parseExtra(importData) as Save;
+          for (const k in save.localStorage) {
+            // casting hell
+            (LocalStorage[k as keyof LocalStorage] as unknown) = save.localStorage[k as keyof LocalStorage] as unknown;
+          }
+          
+          new ProcStorage().setProcs(save.procs);
+          setCompleted(getCompleted());
+          setImporting(false);
+        }} className="flex flex-col gap-2" >
+          <Text>Paste an export below:</Text>
+          <Input value={importData} valueChange={setImportData} autofocus />
+          <Button>Import data</Button>
+        </form>
+      </Modal>
 
-    {withDone.flat().map(stage=>{
-      const a = stage.i<=activeStages;
-      return <Fragment key={stageUrl(stage)} >
-        {stage.type=="story" && stage.startOf!=undefined
-          && <Text v="md" className="mt-1 -mb-2 flex flex-row gap-2 items-center" ><IconTriangleFilled size={18} />{stage.startOf}</Text>}
-        <button className={twMerge(a && anchorHover, "flex flex-col gap-0.5 p-2 pt-1 group items-start relative pr-10")}
-          onClick={stage.i<=activeStages ? ()=>{
-            goto(stageUrl(stage));          
-          } : undefined} >
-          <div className="flex flex-row gap-2 items-center" >
-            {stage.done ? <IconCircleCheckFilled /> : stage.i<=activeStages && <IconCircleDashedCheck />}
-            <Text v="bold" className={twJoin(a ? anchorUnderline : textColor.dim)} >{stage.name}</Text>
-            {stage.type=="puzzle" && <IconPuzzleFilled />}
-          </div>
-          {stage.i<=activeStages && <IconChevronRight size={36} className="transition-transform group-hover:translate-x-4 absolute top-2 right-4" />}
-          <Text v="sm" className={twJoin(!a && textColor.dim)} >{stage.blurb}</Text>
-        </button>
-        {stage.i==activeStages-1 && stage.i<stages.length-1 && <div className="flex flex-row items-center gap-2 -my-2" >
-          <div className={"border-dashed h-0 border-b-2 bg-none grow dark:border-zinc-400"} />
-          <Text v="md" >Next stage</Text>
-          <div className={"border-dashed h-0 border-b-2 bg-none grow dark:border-zinc-400"} />
-        </div>}
-      </Fragment>;
-    })}
+      <Modal open={exporting} onClose={()=>setExporting(false)} title="Exported data" >
+        <Text>Your export has been copied to your clipboard. It might be big.</Text>
+      </Modal>
 
-    <div className="flex flex-row w-full justify-between mt-2 -mb-5 self-start" >
-      <Anchor className={textColor.red}
-        onClick={()=>setConfirmReset(true)} >Reset progress</Anchor>
-      <Anchor onClick={()=>setImporting(true)} >Import data</Anchor>
-      <Anchor onClick={()=>{
-        const txt = stringifyExtra({
-          localStorage: LocalStorage,
-          procs: new ProcStorage().getAllProcs()
-        } satisfies Save);
+      <Logo />
 
-        void window.navigator.clipboard.writeText(txt);
+      {withDone.flat().map(stage=>{
+        const a = stage.i<=activeStages;
+        const icon = stage.type=="puzzle" ? IconPuzzleFilled : IconBookFilled;
+        return <Fragment key={stageUrl(stage)} >
+          {stage.type=="story" && stage.startOf!=undefined
+            && <Text v="md" className="mt-1 -mb-2 flex flex-row gap-2 items-center" >
+              <IconTriangleFilled size={18} />{stage.startOf} <Divider className="w-auto ml-2 grow" />
+            </Text>}
+          <button className={twMerge(a && anchorHover, "flex flex-col gap-0.5 p-2 pt-1 group items-start relative pr-10")}
+            onClick={stage.i<=activeStages ? ()=>{
+              goto(stageUrl(stage));          
+            } : undefined} >
+            <div className="flex flex-row gap-2 items-center" >
+              {stage.done ? <IconCircleCheckFilled /> : stage.i<=activeStages && <IconCircleDashedCheck />}
+              <Text v="bold" className={twJoin(a ? anchorUnderline : textColor.dim)} >{stage.name}</Text>
+              {createElement(icon, {
+                className: "absolute -left-4 top-2 fill-white/15 -z-10", size: 50
+              })}
+            </div>
+            {stage.i<=activeStages && <IconChevronRight size={36} className="transition-transform group-hover:translate-x-4 absolute top-2 right-4" />}
+            <Text v="sm" className={twJoin(!a && textColor.dim)} >{stage.blurb}</Text>
+          </button>
+          {stage.i==activeStages-1 && stage.i<stages.length-1 && <div className="flex flex-row items-center gap-2 -my-2" ref={nextStageRef} >
+            <div className={"border-dashed h-0 border-b-2 bg-none grow dark:border-zinc-400"} />
+            <Text v="md" >Next stage</Text>
+            <div className={"border-dashed h-0 border-b-2 bg-none grow dark:border-zinc-400"} />
+          </div>}
+        </Fragment>;
+      })}
 
-        setExporting(true);
-      }} >Export data</Anchor>
-    </div>
+      <div className="flex flex-row w-full justify-between mt-2 -mb-5 self-start" >
+        <Anchor className={twJoin(textColor.red, "items-center")} onClick={()=>setConfirmReset(true)} >
+          <IconSkull /> Reset progress
+        </Anchor>
+        <Anchor className="items-center" onClick={()=>setImporting(true)} >
+          <IconDownload /> Import data
+        </Anchor>
+        <Anchor className="items-center" onClick={()=>{
+          const txt = stringifyExtra({
+            localStorage: LocalStorage,
+            procs: new ProcStorage().getAllProcs()
+          } satisfies Save);
+
+          void window.navigator.clipboard.writeText(txt);
+
+          setExporting(true);
+        }} ><IconUpload />Export data</Anchor>
+      </div>
     
-    <Footer />
+      <Footer />
+    </div>
   </FadeRoute><BgAnimComponent /></>;
 }
 
@@ -348,13 +381,6 @@ function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
   useStageCount(stage);
   const logoRef = useRef<HTMLButtonElement>(null);
   
-  const [para, setPara] = useState<ComponentChildren[]|null>(null);
-  useEffect(()=>{
-    const cb = stage.para.onload(setPara);
-    void stage.para.load();
-    return cb;
-  }, [stage.para]);
-
   useEffect(()=>{
     const el = logoRef.current;
     if (!el) return;
@@ -366,12 +392,12 @@ function StoryStage({stage, i}: {stage: Stage&{type: "story"}, i: number}) {
     cb();
     document.addEventListener("scroll", cb);
     return ()=>document.removeEventListener("scroll", cb);
-  }, [para]);
+  }, []);
 
   useTitle(`Subrose | ${stage.name}`);
 
-  return para!=null && <FadeRoute className="w-4xl flex flex-row items-start gap-4 pb-[30dvh] pt-10" >
-    <Story stage={stage} para={para} next={i+1>=stages.length ? undefined : ()=>{
+  return <FadeRoute className="w-4xl flex flex-row items-start gap-4 pb-[30dvh] pt-10" >
+    <Story stage={stage} next={i+1>=stages.length ? undefined : ()=>{
       LocalStorage.readStory = setWith(LocalStorage.readStory??null, stage.key);
       goto(stageUrl(stages[i+1]));
     }} />
@@ -392,6 +418,10 @@ function InnerApp() {
   const md = useMd();
   const loc = useLocation();
 
+  const [{ withDone, activeStages }, setCompleted] = useState(getCompleted());
+  // update completed on route change
+  useEffect(()=>setCompleted(getCompleted()), [loc.url]);
+
   if (err!=undefined) return <ErrorPage err={err} reset={resetErr} />;
 
   if (!md && loc.path!="/") {
@@ -403,8 +433,6 @@ function InnerApp() {
       <Logo className="mt-8" />
     </FadeRoute>;    
   }
-
-  const { withDone, activeStages } = getCompleted();
 
   return <Router>
     <Route path="/" component={Home} />

@@ -1,0 +1,5 @@
+As a keycoder, I think our lower-level programmers deserve more love. While they might not be as skilled as us, or capable of even contributing to our operations, I enjoy everything they do for me. For instance, just last week, one of them built me a high-end coffee setup. Top-tier Gaggia, grinder, steam wand, garden with a beehive for honey, contract with a local farm for beans and milk, the works.
+
+So to reward our amazing collaboration, I've been bearing down on our chemists, and we finally have results! If you look in your desk drawer, we've prepared a special brownie just for you, incorporating the latest developments from our labs. I think you will find it captivating, so make sure to perform these activities **outside of working hours**.
+
+Before we go to production, we'd love to hear your feedback. If you experience any side effects, good or bad, please message our chemistry department with your findings. To guarantee your experiment isn't for nothing, also report to us before you take your first bite. Good luck on your transcendental journey! And remember your NDA!

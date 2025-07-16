@@ -1,12 +1,12 @@
 import { useEffect, useState } from "preact/hooks";
 import { Procedure, ProgramStats, test, Verdict } from "../shared/eval";
-import { API, COUNT_PLAY_INTERVAL_SECONDS, parseExtra, ServerResponse, StageStatsResponse, stringifyExtra, toPrecStat, validUsernameRe } from "../shared/util";
+import { API, COUNT_PLAY_INTERVAL_SECONDS, parseExtra, ServerResponse, StageStatsResponse, statsArr, stringifyExtra, toPrecStat, validUsernameRe } from "../shared/util";
 import Tester from "../shared/worker?worker";
-import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor, PuzzleSolveData } from "./ui";
+import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor, PuzzleSolveData, useToast, Collapse } from "./ui";
 import { StageData, stageUrl } from "../shared/data";
 import { blankStyle } from "./editor";
 import { twMerge, twJoin } from "tailwind-merge";
-import { IconChevronDown } from "@tabler/icons-preact";
+import { IconChevronDown, IconShare } from "@tabler/icons-preact";
 import { Fragment } from "preact";
 import { Puzzle } from "./data";
 
@@ -90,7 +90,7 @@ function Leaderboard({submission: s, puzzle}: {
 			});
 
 			tokenId={
-				token: solve.token, id: solve.id, stats: s.stats,
+				token: solve.token, id: solve.id, stats: solve.stats,
 				username: LocalStorage.username ?? null
 			};
 
@@ -111,7 +111,8 @@ function Leaderboard({submission: s, puzzle}: {
 	}, [data, sort]);
 	
 	const api = useAPI<"setusername">();
-	
+	const toast = useToast();
+
 	if (data?.type=="nosolve") return <></>;
 	if (!data || !stats) return <Loading />;
 
@@ -124,27 +125,39 @@ function Leaderboard({submission: s, puzzle}: {
 	};
 	
 	const appears = stats.some(x=>x.id==data.tokenId.id);
+
 	return <div className={twMerge(blankStyle, "items-start px-5")} >
 		<Text v="md" className="self-center" >Leaderboard</Text>
 
-		{api.loading ? <Loading /> : <form className="flex flex-row gap-2 items-center justify-start mb-4"
+		{api.loading ? <Loading /> : <form className="flex flex-row w-full gap-2 items-center justify-start mb-4"
 			onSubmit={(ev)=>{
 				if (input=="") upName(null);
 				else if (ev.currentTarget.reportValidity()) upName(input);
 			}} >
 			<Text v="smbold" >Username</Text>
-			<Input value={input} valueChange={setInput} pattern={validUsernameRe} className="py-1" />
+			<Input value={input} valueChange={setInput} pattern={validUsernameRe} className="py-1 w-fit" />
 			<Button className={bgColor.sky} >Submit</Button>
+			<Button onClick={()=>{
+				const res = `Solved ${puzzle.name} with:\n${
+					statsArr(data.tokenId.stats)
+						.map((x,i)=>`${["⏰", "📝", "💾"][i]} ${x}`).join("\n")
+				}`;
+				void navigator.clipboard.writeText(res);
+				toast("Copied stats to clipboard");
+			}} icon={<IconShare />} type="button" className="ml-auto" >Share</Button>
 		</form>}
 
-		<div className="max-h-60 overflow-y-auto self-stretch grid grid-cols-[auto_auto_1fr_1fr_1fr] items-stretch justify-stretch border-collapse gap-0" >
+		<div className={twJoin(
+			"max-h-60 overflow-y-auto self-stretch grid grid-cols-[auto_auto_1fr_1fr_1fr] items-stretch justify-stretch border-collapse gap-px border-1",
+			bgColor.border, borderColor.default
+		)} >
 			<div className="contents" >
-				<Text v="smbold" className={twJoin(borderColor.default, "p-2 border-1")} >{"#"}</Text>
-				<Text v="smbold" className={twJoin(borderColor.default, "p-2 border-1")} >Username</Text>
+				<Text v="smbold" className={twJoin("p-2", bgColor.default)} >{"#"}</Text>
+				<Text v="smbold" className={twJoin("p-2", bgColor.default)} >Username</Text>
 				{(["time", "nodes", "registers"] as const).map(x=>
 					<Button key={x} onClick={()=>{
 						setSort(x);
-					}} iconRight={sort==x && <IconChevronDown size={16} />} >
+					}} iconRight={sort==x && <IconChevronDown size={16} />} className="border-0" >
 						{x[0].toUpperCase()}{x.slice(1)}
 					</Button>
 				)}
@@ -162,7 +175,7 @@ function Leaderboard({submission: s, puzzle}: {
 					return <span key={j} className={twJoin(
 						data.tokenId.id==v.id ? bgColor.highlight
 							: (i%2==0 ? bgColor.secondary : bgColor.md),
-						"p-2", borderColor.default, "border-1"
+						"p-2"
 					)} >{cell}</span>
 				})}
 			</Fragment>)}
@@ -209,7 +222,8 @@ export function useSubmission({
 
 			worker.postMessage(stringifyExtra({
 				puzzle: puzzle.key,
-				proc: s.active, procs: s.procs
+				proc: s.active, procs: s.procs,
+				statsSeed: null
 			} satisfies Parameters<typeof test>[0]))
 			
 			const verdictProm = new Promise<Verdict>((res,rej)=>{
@@ -247,11 +261,12 @@ export function Submission({
 	sub: {status, puzzle, nextStage, alreadySolved, acSubmission}
 }: {sub: ReturnType<typeof useSubmission>}) {
 	let inner = <></>;
+
 	if ((status?.type=="done" && status.verdict.type=="AC") || (!status && alreadySolved)) {
 		inner=<>
 			<Alert className={bgColor.green} title="You passed" txt={<>
-				{puzzle.solveBlurb ?? "Congratulations. Onwards!"}
-				<Button onClick={()=>nextStage()} >Continue</Button>
+				{puzzle.solveBlurb ?? "You passed this stage."}
+				<Button onClick={()=>nextStage()} className="self-start" >Continue</Button>
 			</>} />
 		</>;
 	} else if (status?.type=="done" && status.verdict.type!="AC") {
@@ -265,9 +280,13 @@ export function Submission({
 	}
 
 	return <>
-		{inner}
-		<AlertErrorBoundary>
-			<Leaderboard submission={acSubmission} puzzle={puzzle} />
-		</AlertErrorBoundary>
+		<Collapse>
+			{inner}
+		</Collapse>
+		<Collapse>
+			<AlertErrorBoundary>
+				<Leaderboard submission={acSubmission} puzzle={puzzle} />
+			</AlertErrorBoundary>
+		</Collapse>
 	</>;
 }

@@ -1,10 +1,12 @@
-import { ComponentChildren, createContext, Fragment } from "preact";
+import { ComponentChildren, ComponentType, createContext, Fragment, JSX, VNode } from "preact";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, textColor, IconButton, borderColor, mapWith, Modal } from "./ui";
+import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, textColor, IconButton, borderColor, mapWith, Modal, useAsyncEffect } from "./ui";
 import { data, StageData } from "../shared/data";
 import { extraData, Message, messages } from "./data";
 import { IconMailFilled, IconUserCircle } from "@tabler/icons-preact";
-import { twJoin } from "tailwind-merge";
+import { twJoin, twMerge } from "tailwind-merge";
+import { compiler, MarkdownToJSX, RuleType } from "markdown-to-jsx";
+import { AsciiArt } from "./asciiart";
 
 export function useStoryState<T=string>(key: string) {
 	const [x, setX] = useState<T>();
@@ -13,6 +15,131 @@ export function useStoryState<T=string>(key: string) {
 		LocalStorage.storyState = {...LocalStorage.storyState, [key]: newX as unknown};
 		setX(newX);
 	}, [key])] as const;
+}
+
+const titleComponent = (ord: number) => function Title({children}: {children: React.ReactNode}) {
+	return { // avoid key linting
+		0: <Text v="big" className="dark:text-zinc-100" >{children}</Text>,
+		1: <Text v="md" className="dark:text-zinc-100" >{children}</Text>,
+	}[ord] ?? <Text v="bold" className="dark:text-zinc-100" >{children}</Text>;
+};
+
+const titleComponents = Object.fromEntries(
+	[1,2,3,4,5,6].map(x => [`h${x}`, titleComponent(x)])
+);
+
+export class StoryLoader {
+	static storyModules: Record<string, ()=>Promise<{default: string}>> = import.meta.glob<false, "raw", {default: string}>("../content/**/*.md", {
+		eager: false, query: "?raw"
+	});
+
+	constructor(public name: string, public paragraph: boolean) {}
+
+	loadMod(mod: {default: string}) {
+		const visited = new Set<MarkdownToJSX.ParserResult>();
+		const getStrings = (x: MarkdownToJSX.ParserResult, fst=true): {text: string}[] => {
+			if (x.type==RuleType.paragraph && !fst) return [];
+
+			visited.add(x);
+			if ("children" in x && x.children!=undefined) {
+				return x.children.flatMap(v=>getStrings(v,false));
+			} else if (x.type==RuleType.text) {
+				return [x];
+			}
+
+			return [];
+		};
+
+		const vs = compiler(mod.default, {
+			forceWrapper: true,
+			wrapper: null,
+			renderRule(next, node) {
+				if ("children" in node && node.children!=undefined) {
+					const newChild: typeof node.children = [];
+					for (const x of node.children) {
+						const last = newChild[newChild.length-1];
+						if (last!=undefined && last.type==RuleType.text && x.type==RuleType.text) {
+							last.text+=x.text;
+							continue;
+						}
+						newChild.push(x);
+					}
+
+					node.children = newChild;
+				} else if (node.type==RuleType.text) {
+					return node.text
+						.replaceAll(/(?<=\w)'/g, "’").replaceAll(/'(?=\w)/g, "‘")
+						.replaceAll("--", "—");
+				}
+
+				if (!visited.has(node)) {
+					const str = getStrings(node);
+					const lastQuote: Record<string, [{text: string},number]|null> = {
+						"\"": null, "'": null
+					};
+					const map: Record<string,[string,string]> = { "\"": ["“", "”"], "'": ["‘","’"] };
+
+					for (const s of str) {
+						for (let i=0; i<s.text.length; i++) {
+							const c=s.text[i];
+							if (c in map) {
+								if (lastQuote[c]!=null) {
+									s.text = [...s.text].toSpliced(i,1,map[c][1]).join("");
+									lastQuote[c][0].text = [...lastQuote[c][0].text]
+										.toSpliced(lastQuote[c][1],1,map[c][0]).join("");
+									lastQuote[c]=null;
+								} else if (i==0 || s.text[i-1].trim()=="") {
+									lastQuote[c]=[s,i];
+								}
+							}
+						}
+					}
+				}
+
+				return next() as ComponentChildren;
+			},
+			sanitizer: (value)=>value,
+			overrides: {
+				StoryParagraph: {component: StoryParagraph},
+				AsciiArt: {component: AsciiArt},
+				RainbowText: {component: RainbowText},
+				code: {
+					component: function Code({children}: {children?: ComponentChildren}) {
+						return <Text v="code" >{children}</Text>;
+					}
+				},
+				ul: {
+					component: function UL({className, ...attr}: JSX.IntrinsicElements["ul"]&{className?: string}) {
+						return <ul {...attr} className={twMerge("ml-4 list-disc", className)} />;
+					}
+				},
+				...titleComponents
+			}
+		}) as ComponentChildren[];
+		
+		const proc = new Map<ComponentType<never>,(x: VNode)=>ComponentChildren>(this.paragraph ? [
+			[StoryParagraph, (x: VNode)=>x],
+			[AsciiArt, (x: VNode)=><StoryParagraph asciiArt={x} />]
+		] as const : []);
+		
+		return vs.map((v,i)=>{
+			if (v==null || v==false || (typeof v=="string" && v.trim()=="") || (typeof v=="object" && "type" in v)) {
+				const ty = proc.get((v as VNode).type as ComponentType<never>);
+				if (ty) return <Fragment key={i} >{ty(v as VNode)}</Fragment> ;
+			}
+
+			return this.paragraph ? <StoryParagraph key={i} >{v}</StoryParagraph>
+				: <div key={i} >{v}</div>;
+		});
+	}
+	
+	listening=false;
+	async load() {
+		const path = `../content/${this.name}.md`;
+		if (!(path in StoryLoader.storyModules)) throw new Error("chapter not found");
+
+		return this.loadMod(await StoryLoader.storyModules[path]());
+	}
 }
 
 type TerminalEvent = {
@@ -257,7 +384,10 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const src = useRef<HTMLDivElement>(null);
-	const [done, setDone] = useState(noCursor==true);
+
+	const noTxtFx = children==undefined || noCursor==true;
+	const [done, setDone] = useState(noTxtFx);
+
 	const [choice, setChoice] = useState<string|null>(()=>{
 		if (end?.key==null) return null;
 		return LocalStorage.storyState?.[end?.key] as string|undefined ?? null;
@@ -283,12 +413,8 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 	const [skip, setSkip] = useState(false);
 	const isActive = ctx.active && !skip;
 
-	const noTxtFx = children==undefined || noCursor==true;
 	useEffect(()=>{
-		if (!fx || noTxtFx) {
-			setDone(true);
-			return;
-		}
+		if (!fx || noTxtFx) return;
 
 		setDone(!isActive);
 		fx.onEnd = ()=>setDone(true);
@@ -306,6 +432,30 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 	useEffect(()=>{
 		buttonRef.current?.focus({preventScroll: true});
 	}, [done, choice]);
+	
+	const skipper = useRef<HTMLDivElement>(null);
+	const skipPosition = useRef<HTMLSpanElement>(null);
+	useEffect(()=>{
+		const el = skipper.current, el2=skipPosition.current;
+		if (!el) return;
+		if (done || !el2) { el.hidden=true; return; }
+
+		el.hidden=false;
+		let pt=performance.now();
+		let curTop = el2.offsetTop;
+		const frame = ()=>requestAnimationFrame((t)=>{
+			const c = Math.min(t-pt, 50)/1000 * 4;
+			pt=t;
+			curTop = Math.abs(curTop-el2.offsetTop) > 100 ? el2.offsetTop : curTop*(1-c) + el2.offsetTop*c;
+			el.style.left = `${el2.offsetLeft}px`;
+			el.style.width = `${el2.offsetWidth}px`;
+			el.style.top = `${curTop}px`;
+			f=frame();
+		});
+
+		let f=frame();
+		return ()=>cancelAnimationFrame(f);
+	}, [done]);
 
 	return <>
 		{asciiArt!=undefined && <div className={twJoin("self-center text-[10px] text-center", !isActive && "dark:text-zinc-200")} >
@@ -313,7 +463,10 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 		</div>}
 
 		{noCursor!=true && children!=undefined && <div hidden ref={src} >{children}</div>}
-		{children!=undefined && <div key={noCursor} ref={ref} className={twJoin(!ctx.active && "dark:text-zinc-200", "main-text w-full", isActive && "animate-fade-in")} >
+		{children!=undefined && <div key={noCursor} ref={ref} className={twJoin(
+			!ctx.active && "dark:text-zinc-200", "main-text w-full",
+			ctx.active && "story-active", isActive && "animate-fade-in"
+		)} >
 			{noCursor==true && children}
 		</div>}
 
@@ -347,7 +500,24 @@ export function StoryParagraph({ children, end, noCursor, asciiArt }: {
 				<Divider className="w-auto grow" />
 			</>)}
 		</div>}
+		
+		<span className="ignore-scroll w-full" ref={skipPosition} />
+		<div className={twJoin(textColor.dimmer, "pt-8 absolute text-center ignore-scroll")} hidden ref={skipper} >
+			(press any key to skip)
+		</div>
 	</>;
+}
+
+export function RainbowText({children}: {children: string|string[]}) {
+	children = [ ...Array.isArray(children) ? children.join("") : children ];
+	return <span className={"rainbow contents"} >
+		{children.map((x,i)=>
+			<span key={i} style={{
+				animationDelay: `${i/children.length * 7000}ms`,
+				color: `hsl(${i/children.length * 360}, 100%, 80%)`
+			}} >{x}</span>
+		)}
+	</span>;
 }
 
 export type Stage = {
@@ -373,6 +543,10 @@ type MessageProps = {
 };
 
 function MessageView({ message, time, reply, inReply }: MessageProps&{inReply?: boolean}) {
+	const data = useAsyncEffect<JSX.Element[]>(async ()=>{
+		return new StoryLoader(`message/${message.src}`, false).load();
+	}, [message.src]);
+
 	return <div className={twJoin(inReply!=true && "py-3 pb-10 grow overflow-y-auto")} >
 		<div className="flex flex-col gap-2 items-stretch px-3" >
 			<div className="flex flex-row justify-between" >
@@ -390,7 +564,7 @@ function MessageView({ message, time, reply, inReply }: MessageProps&{inReply?: 
 		</div>
 		<Divider />
 		<div className="px-3 flex flex-col gap-2" >
-			{message.content}
+			{data.result}
 			{reply && <div className={twJoin("pl-1 border-l-2", borderColor.blue)} >
 				<MessageView {...reply} inReply={true} />
 			</div>}
@@ -431,15 +605,16 @@ export function Messages({ stage }: { stage: StageData }) {
 		
 		const check = ()=>{
 			const t = new Date();
+			let seen = LocalStorage.seenMessages ?? new Map();
 			for (const msg of available) {
+				if (msg.sequelTo!=undefined && !seen.has(msg.sequelTo)) continue;
+
 				const p = msg.expectedMinutes<=1e-4 || import.meta.env["VITE_ALL_COMPLETED"]=="1"
 					? 1 : -Math.expm1(-1/msg.expectedMinutes);
 				if (Math.random()<p) {
-					LocalStorage.seenMessages = mapWith(LocalStorage.seenMessages??null, msg.key, t.getTime());
+					seen = LocalStorage.seenMessages = mapWith(seen, msg.key, t.getTime());
 					const msgProps = getMessage(msg.key, false);
 					if (msgProps) setMessages(msgs=>[msgProps, ...msgs]);
-				} else {
-					break; // messages arrive in order
 				}
 			}
 		};
@@ -490,24 +665,33 @@ export function Messages({ stage }: { stage: StageData }) {
 	</>;
 }
 
-export function Story({stage, next, para}: {
-	stage: Stage&{type:"story"}, next?: ()=>void,
-	para: ComponentChildren[]
+export function Story({stage, next}: {
+	stage: Stage&{type:"story"}, next?: ()=>void
 }) {
-	const [index, setIndex] = useState(()=>{
-		return Math.min(LocalStorage.storyParagraph?.[stage.key] ?? 0, para.length-1);
-	});
+  const para = useAsyncEffect<JSX.Element[]>(()=>{
+		return new StoryLoader(stage.src, true).load();
+  }, [stage.src]).result;
+
+	const [index, setIndex] = useState<number|null>(null);
+	useEffect(()=>{
+		if (para!=null)
+			setIndex(Math.min(LocalStorage.storyParagraph?.[stage.key] ?? 0, para.length-1));
+	}, [para, stage.key]);
 
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(()=>{
+		if (index==null || para==null) return;
 		if (index>=para.length) next?.();
 		else LocalStorage.storyParagraph = {
 			...LocalStorage.storyParagraph, [stage.key]: index
 		};
-	}, [index, next, stage.key, para.length]);
+	}, [index, next, stage.key, para]);
 
+	const mounted = para!=null && index!=null;
 	useEffect(()=>{
+		if (!mounted) return;
+
 		const container = containerRef.current!;
 		const scroll = document.scrollingElement;
 
@@ -521,6 +705,7 @@ export function Story({stage, next, para}: {
 		let curDelay = 0;
 		const childChangeDelay = 100;
 
+		let ignoreScrollEvent = true;
 		const animateScroll = ()=>requestAnimationFrame((t: number)=>{
 			const dt = Math.min(t-lt, 50);
 			let doScroll=true;
@@ -541,7 +726,8 @@ export function Story({stage, next, para}: {
 					: Math.max(0,lastChild.offsetTop + lastChild.clientHeight/2 - scroll.clientHeight/2);
 
 				const d = targetScrollTop-scroll.scrollTop;
-				const ntop = Math.max(1,scroll.scrollTop + (Math.abs(d)<2 ? d : d*dt*3/1000));
+				const ntop = Math.max(1,scroll.scrollTop + (Math.abs(d)<2 ? d
+					: dt*(ignoreScrollEvent ? d*20 : Math.sqrt(Math.abs(d))*Math.sign(d)*20)/1000));
 				scroll.scrollTo({top: ntop, behavior: "instant"});
 				setScrollTo = scroll.scrollTop;
 			}
@@ -552,8 +738,7 @@ export function Story({stage, next, para}: {
 
 		animFrame=animateScroll();
 
-		let ignoreScrollEvent = true;
-		const tm = setTimeout(()=>{ignoreScrollEvent=false;}, 250);
+		const tm = setTimeout(()=>{ ignoreScrollEvent=false; }, 500);
 
 		const cb = ()=>{
 			if (!ignoreScrollEvent && scroll!=null && Math.abs(scroll.scrollTop-setScrollTo)>2) {
@@ -568,14 +753,20 @@ export function Story({stage, next, para}: {
 			cancelAnimationFrame(animFrame);
 			document.removeEventListener("scroll", cb);
 		};
-	}, []);
+	}, [mounted]);
 
+	const paraNext = useCallback(()=>setIndex(i=>i!+1), []);
+
+	if (index==null || para==null) return <></>;
 	return <div className="mt-5 flex flex-col gap-2 justify-start items-start max-w-2xl grow story-container"
 		ref={containerRef} >
 
 		<div className="flex flex-row self-stretch justify-between gap-2 items-center" >
-			<Text v="big" className="my-4" >{stage.name}</Text>
-			<div className="flex flex-row gap-2 items-end" >
+			<div className="flex flex-col gap-1 mb-4" >
+				<Text v="big" >{stage.name}</Text>
+				<i>{stage.blurb}</i>
+			</div>
+			<div className="flex flex-row gap-2 items-end shrink-0" >
 				<Anchor className={textColor.dim} onClick={()=>setIndex(para.length)} >Skip chapter</Anchor>
 				{index>0 && <>
 					<Divider vert />
@@ -586,9 +777,9 @@ export function Story({stage, next, para}: {
 
 		{para.slice(0, index+1).map((v,i)=><Fragment key={i} >
 			<StoryContext.Provider value={{
-				active: index==i, last: next==undefined ? "end"
-					: i==para.length-1 ? "chapter" : "next",
-				next() { setIndex(i=>i+1); },
+				active: index==i,
+				last: i==para.length-1 ? (next==undefined ? "end" : "chapter") : "next",
+				next: paraNext
 			}} >
 				{v}
 			</StoryContext.Provider>

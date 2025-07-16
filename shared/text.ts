@@ -138,11 +138,19 @@ function fromTextErr(txt: string, maxProc: number): {
 			return out;
 		};
 		
-		const parseNum = ()=>{
+		const parseNum = <Big extends boolean>(big: Big): (Big extends true ? bigint : number)|null =>{
 			const m = line.match(/^-?\d+/);
 			if (m) {
 				line=line.slice(m[0].length);
-				return Number.parseInt(m[0], 10);
+				if (big) {
+					try {
+						return BigInt(m[0]) as Big extends true ? bigint : number;
+					} catch {}
+				} else {
+					const num = Number.parseInt(line,10);
+					if (isFinite(num)) return num as Big extends true ? bigint : number;
+				}
+				return err(`Invalid integer ${quote(line)}`);
 			}
 			return null;
 		};
@@ -157,9 +165,13 @@ function fromTextErr(txt: string, maxProc: number): {
 		} else if (take("register ")) {
 			const name = parseStr();
 			takeErr(" = ");
-			const num = parseNum();
-			toks.push({type: "register", register: {
-				type: "value", name, value: num==null ? parseStr() : num}
+			const num = parseNum(true);
+			toks.push({
+				type: "register",
+				register: {
+					type: "value", name,
+					value: num==null ? parseStr() : num
+				}
 			});
 		} else if (take("parameter ")) {
 			toks.push({type: "register", register: {
@@ -168,10 +180,12 @@ function fromTextErr(txt: string, maxProc: number): {
 		} else if (take("}")) {
 			toks.push({type: "endDef"});
 		} else if (line.length) {
-			if (parseNum()!=null) line=line.trimStart();
+			if (parseNum(false)!=null) line=line.trimStart();
 
 			if (take("goto ")) {
-				const num = take("unset") ? "unset" as const : take("end") ? "end" as const : parseNum();
+				const num = take("unset") ? "unset" as const
+					: take("end") ? "end" as const
+					: parseNum(false);
 				if (num==null) return err("expected number to goto");
 				toks.push({type: "goto", num, cond: take(" ") ? parseStr() : null});
 			} else for (const op of [

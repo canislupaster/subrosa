@@ -11,6 +11,7 @@ export function stringifyExtra(value: unknown) {
 	return JSON.stringify(value, (_,v: unknown)=>{
 		if (v instanceof Map) return { __dtype: "map", value: [...v.entries()] };
 		else if (v instanceof Set) return { __dtype: "set", value: [...v.values()] };
+		else if (typeof v=="bigint") return {__dtype: "bigint", value: v.toString()};
 		return v;
 	});
 }
@@ -18,10 +19,13 @@ export function stringifyExtra(value: unknown) {
 export function parseExtra(str: string|null): unknown {
 	return str==null ? null : JSON.parse(str, (_,v)=>{
 		const v2 = v as { __dtype: "set", value: [unknown][] }
-			|{ __dtype: "map", value: [unknown,unknown][] }|{ __dtype: undefined };
+			|{ __dtype: "map", value: [unknown,unknown][] }
+			|{ __dtype: "bigint", value: string }
+			|{ __dtype: undefined };
 		if (v2!=null && typeof v2=="object") {
 			if (v2.__dtype=="map") return new Map(v2.value);
 			else if (v2.__dtype=="set") return new Set(v2.value);
+			else if (v2.__dtype=="bigint") return BigInt(v2.value);
 		}
 		return v2;
 	});
@@ -38,7 +42,10 @@ export type AddSolve = {
 	token: string|null
 };
 export const validUsernameRe = "^[A-Za-z0-9 _\\-]{5,20}$";
-export type AddSolveResponse = {token: string, id: number, username: string|null};
+export type AddSolveResponse = {
+	token: string, id: number, username: string|null,
+	stats: ProgramStats //stats on hidden testcases
+};
 export type StageStats = { stage: string, orderBy: "time"|"registers"|"nodes" };
 export type StageStatsResponse = (ProgramStats&{username: string|null, id: number})[];
 export type SetUsername = {token: string, username: string|null};
@@ -57,10 +64,19 @@ export type ServerResponse<K extends keyof API> = {
 };
 
 export const strToInt = (s: string)=>{
-	const v = Number.parseInt(s,10);
-	if (!/^-?\d+$/.test(s) || isNaN(v)) return null;
-	return v;
+	if (!/^-?\d+$/.test(s)) return null;
+	try {
+		return BigInt(s);
+	} catch {
+		return null;
+	}
 };
 
 export const toPrecStat = (x: number, y?: string) =>
 	`${x>1e5 ? x.toPrecision(2) : x}${y!=undefined ? ` ${y}${x==1 ? "" : "s"}` : ""}`;
+	
+export const statsArr = (stats: ProgramStats) => [
+	toPrecStat(stats.time, "step"),
+	toPrecStat(stats.nodes, "instruction"),
+	toPrecStat(stats.registers, "register")
+];

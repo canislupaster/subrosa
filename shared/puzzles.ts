@@ -31,8 +31,8 @@ export class RNG {
 export type PuzzleInputSchema = readonly Readonly<{type: "number"|"string", name: string, key: string}>[];
 export type PuzzleInput<T extends PuzzleInputSchema> = Readonly<{
 	[K in T[number]["key"]]: "number"|"string" extends (T[number]&{key: K})["type"]
-		? string|number
-		: (T[number]&{key: K})["type"] extends "string" ? string : number
+		? string|bigint
+		: (T[number]&{key: K})["type"] extends "string" ? string : bigint
 }>;
 
 type SimplePuzzle<T extends PuzzleInputSchema> = {
@@ -40,7 +40,7 @@ type SimplePuzzle<T extends PuzzleInputSchema> = {
 	schema: T,
 	validator?: (x: PuzzleInput<T>)=>string|null, // null for valid, otherwise error
 	generator: (seed?: number)=>PuzzleInput<T>,
-	solve: (x: PuzzleInput<T>)=>string|number
+	solve: (x: PuzzleInput<T>)=>string|bigint
 };
 
 export type PuzzleData = {
@@ -66,15 +66,19 @@ function defaultGen(seed?: number) {
 }
 
 function defaultValidator(s: string) {
-	if (/^[a-z]+$/.test(s)) return null;
+	if (/^[a-z]*$/.test(s)) return null;
 	return "Plaintext should only consist of lowercase alphabetic characters.";
+}
+
+function deriveSeed(s: string) {
+	return [...s].reduce((a,b)=>(a * 13 + charToNum[b]) % 1069,123);
 }
 
 // Adds ct to c[0], wrapping around both directions
 // Skips space
 function charAdd(c: string, ct: number) : string {
-	if (charToNum[c.charAt(0)] == charToNum[" "]) return " ";
-	const cc = (charToNum[c.charAt(0)] + ct % 26 + 26) % 26;
+	if (c==" ") return c;
+	const cc = (charToNum[c.charAt(0)] + ct % alphaLen + alphaLen) % alphaLen;
 	if (cc < 0 || cc >= alphaLen) {
 		throw new Error("Invalid character in charAdd");
 	}
@@ -96,7 +100,10 @@ export const puzzles = [
 		] as const, {
 			generator(seed) {
 				const r = new RNG(seed);
-				return { x: r.nextRange(-200,200), y: r.nextRange(-200,200) };
+				return {
+					x: BigInt(r.nextRange(-200,200)),
+					y: BigInt(r.nextRange(-200,200))
+				};
 			},
 			solve(inp) {
 				return inp.x+inp.y;
@@ -116,10 +123,13 @@ export const puzzles = [
 			generator(seed) {
 				const r = new RNG(seed);
 				const div = r.nextRange(1,200);
-				return { x: div*r.nextRange(0,200) + r.nextRange(0,div-1), y: div };
+				return {
+					x: BigInt(div*r.nextRange(0,200) + r.nextRange(0,div-1)),
+					y: BigInt(div)
+				};
 			},
 			solve(inp) {
-				return Math.floor(inp.x/inp.y);
+				return inp.x/inp.y;
 			},
 			validator(inp) {
 				return inp.x<0 || inp.y<1 ? "x should be nonnegative and y should be positive." : null;
@@ -127,7 +137,6 @@ export const puzzles = [
 		})
 	},
 	{
-		// Reverse
 		name: "Reverse",
 		key: "reverse",
 		...simple([
@@ -169,173 +178,51 @@ export const puzzles = [
 		})
 	},
 	{
-		// Caesar
-		name: "Decrypting your password.",
-		key: "salad",
+		name: "Impact",
+		key: "impact",
 		generator: defaultGen,
 		validator: defaultValidator,
 		kind: "decode",
 		encode(inp) {
-			const key: number = 2;
-			const len: number = inp.length;
-			return fill(len, i=>charAdd(inp.charAt(i), key)).join("");
+			const key = "wang";
+			return fill(inp.length, i=>charAdd(
+				inp.charAt(i), charToNum[key.charAt(i % key.length)]+i
+			)).join("");
 		}
 	},
 	{
-		// Atbash
-		name: "bash",
-		key: "shell",
-		generator: defaultGen,
-		validator: defaultValidator,
-		kind: "decode",
-		encode(inp) {
-			return fill(inp.length, i=>numToChar[alphaLen-1-charToNum[inp.charAt(i)]]).join("");
-		}
-	},
-	{
-		// Incremental Caesar
-		name: "UHhh",
-		key: "olive-oil",
-		generator: defaultGen,
-		validator: defaultValidator,
-		kind: "decode",
-		encode(inp) {
-			const len: number = inp.length;
-			return fill(len, i=>charAdd(inp.charAt(i), i)).join("");
-		}
-	},
-	// assumes alphabet has even length...
-	// {
-	// 	name: "Xor",
-	// 	blurb: "a->b, b->a",
-	// 	generator: defaultGen,
-	// 	solve(inp) {
-	// 		const len: number = inp.length;
-	// 		return fill(len, i=>(inp.charCodeAt(i) % 2 == 1 ? charAdd(inp.charAt(i), 1) : charAdd(inp.charAt(i), -1))).join("");
-	// 	}
-	// },
-	{
-		// Vigenere
-		name: "Secret 2",
-		key: "vinegar",
-		generator: defaultGen,
-		validator: defaultValidator,
-		kind: "decode",
-		encode(inp) {
-			const key = "waas"; // change
-			return fill(inp.length, i=>charAdd(inp.charAt(i), charToNum[key.charAt(i % key.length)])).join("");
-		}
-	},
-	{
-		// Segment Reverse
-		name: "You gotta work for your promotions.",
-		key: "implementation-challenge",
-		validator: defaultValidator,
-		kind: "decode",
+		name: "Impact (x2)",
+		key: "impact-x2",
 		generator(seed?: number) {
 			const rng = new RNG(seed);
-			return fill(rng.nextRange(5,50), ()=>(rng.nextRange(0,9)>=8 ? "x" : rng.nextString(alpha, 1))).join("");
+			return fill(rng.nextRange(5,50), ()=>rng.nextRange(0,5)==0 ? "x" : rng.nextString(alpha, 1)).join("");
 		},
-		encode(inp) {
-			let result = "";
-			const seg: string[] = [];
-			for (const char of inp) {
-				if (char == "x") {
-					result += `${seg.reverse().join("")}x`;
-					seg.length = 0;
-				} else {
-					seg.push(char);
-				}
-			}
-			result += seg.reverse().join("");
-			return result;
-		}
-	},
-	{
-		// Keyword Substitution
-		name: "Can you handle the truth?",
-		key: "keyword",
-		generator: defaultGen,
 		validator: defaultValidator,
 		kind: "decode",
 		encode(inp) {
-			inp=[...inp].filter(x=>x!=" ").join("");
-
-			const key = "mikah"; // change
-			let cipherAlphabet = "";
-			for (const char of key) {
-				if (!cipherAlphabet.includes(char)) {
-					cipherAlphabet += char;
-				}
-			}
-			for (const char of alpha) {
-				if (!cipherAlphabet.includes(char)) {
-					cipherAlphabet += char;
-				}
-			}
-
-			const reverseCipher = fill(cipherAlphabet.length, i=>numToChar[cipherAlphabet.indexOf(numToChar[i])]).join("");
-			return fill(inp.length, i=>reverseCipher[charToNum[inp[i]]]).join("");
+			const rng = new RNG(deriveSeed(inp));
+			return inp.split("x").flatMap(s=>{
+				let i = rng.nextRange(0,s.length);
+				let j = rng.nextRange(0,s.length);
+				if (j<i) [i,j] = [j,i];
+				return [s.slice(0,i), s.slice(i,j), s.slice(j)];
+			}).toReversed().join("x");
 		}
 	},
 	{
-		// Base 13
-		name: "Rot 13",
-		key: "rot-13",
-		validator: defaultValidator,
-		kind: "decode",
-		generator: (seed?: number)=>{
-			const r = new RNG(seed);
-			return r.nextString(alpha, r.nextRange(7,10));
-		},
-		encode(inp) {
-			let sum = 0;
-			const base = 13;
-			for (let i = inp.length-1; i >= 0; --i) {
-				sum *= alphaLen+1;
-				sum += charToNum[inp.charAt(i)]+1;
-			}
-
-			const res: string[] = [];
-			while (sum) {
-				res.push(numToChar[sum % base]);
-				sum = Math.floor(sum / base);
-			}
-			return res.reverse().join("");
-		}
-	},
-	// Probably boring with normal plaintext
-	// {
-	// 	name: "Run Length Encoding",
-	// 	blurb: ""
-	// }
-	{
-		// Half interleave
-		name: "Tricky transposition",
-		key: "leaf",
-		generator: defaultGen,
-		validator: defaultValidator,
-		kind: "decode",
-		encode(inp) {
-			return fill(inp.length, i=>inp.charAt(i % 2 == 0 ? Math.floor(i / 2) : 
-				Math.floor(i / 2) + Math.floor((inp.length + 1) / 2))).join(""); // Start from halfway, rounded up if odd
-		}
-	},
-	{
-		// Alphabet Derangement
 		name: "ABCs",
-		key: "abcdefghijklmnopqrstuvwxyz",
+		key: "abc",
 		kind: "decode",
 		generator(seed?: number) {
 			const rng = new RNG(seed);
 			return rng.nextString(alpha.filter(x=>x!="x"), rng.nextRange(5,50));
 		},
 		validator: s=>{
-			if (![...s].some(x=>x=="x" || !alpha.includes(x))) return null;
-			return "Plaintext should only consist of lowercase alphabetic characters, excluding x.";
+			if (/^[a-wy-z]*$/.test(s)) return null;
+			return "Plaintext should only consist of lowercase alphabetic characters excluding x.";
 		},
 		encode(inp) {
-			const rng = new RNG(123); // fixed seed
+			const rng = new RNG(deriveSeed(inp));
 			const seg: string[] = [];
 			let res = "";
 			for (const char of inp) {
@@ -347,6 +234,84 @@ export const puzzles = [
 			}
 			res += rng.shuffle(seg).join("");
 			return res;
+		}
+	},
+	{
+		name: "Arithmetic",
+		key: "arithmetic",
+		generator(seed?: number) {
+			const rng = new RNG(seed);
+			const l = rng.nextRange(5,50);
+			const c = 1-1/rng.nextRange(1,10)
+			let s = "";
+			for (let i=0; i<l; i++) {
+				if (rng.next()<c && s.length>1) {
+					s+=numToChar[(2*charToNum[s[i-1]] + alphaLen - charToNum[s[i-2]])%alphaLen];
+				} else {
+					s+=rng.nextString(alpha,1);
+				}
+			}
+			return s;
+		},
+		validator: defaultValidator,
+		kind: "decode",
+		encode(inp) {
+			const rng = new RNG(deriveSeed(inp));
+
+			let s = "", i=0;
+			for (; i+1<inp.length; i++) {
+				const j = i;
+				const d = (charToNum[inp[j+1]] + alphaLen - charToNum[inp[j]])%alphaLen;
+				while (i+1-j<alphaLen && i+1<inp.length && (charToNum[inp[i+1]] - charToNum[inp[i]] - d)%alphaLen == 0) {
+					i++;
+				}
+				s+=numToChar[i-j]+numToChar[d]+charAdd(inp[j], -d);
+			}
+
+			if (i+1==inp.length) {
+				const d = rng.nextRange(0,alphaLen-1);
+				s+=numToChar[0]+numToChar[d]+charAdd(inp[i], -d);
+			}
+
+			return s;
+		},
+	},
+	{
+		name: "Rot 13",
+		key: "rot-13",
+		validator: defaultValidator,
+		kind: "decode",
+		generator: defaultGen,
+		encode(inp) {
+			let sum = 0n;
+			const base = 13n;
+			for (const c of inp) {
+				sum *= BigInt(alphaLen+1);
+				sum += BigInt(charToNum[c]+1);
+			}
+
+			const res: string[] = [];
+			while (sum>0) {
+				res.push(numToChar[Number(sum % base)]);
+				sum /= base;
+			}
+			return res.reverse().join("");
+		}
+	},
+	{
+		name: "Taylor Series",
+		key: "taylor-series",
+		validator: defaultValidator,
+		generator: defaultGen,
+		kind: "decode",
+		encode(inp) {
+			let d = [...inp].map(x=>charToNum[x]);
+			let s = "";
+			while (d.length > 0) {
+				s+=numToChar[d[0]];
+				d = fill(d.length-1, i=>(d[i+1]+alphaLen-d[i])%alphaLen);
+			}
+			return s;
 		}
 	}
 ] as const satisfies PuzzleData[];

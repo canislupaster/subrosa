@@ -1,0 +1,7 @@
+That's it. I'm quitting. It's been a long time coming. I think this message should shine a light on how distorted our company's values are.
+
+The first coffee machine was absolute shit. Stupid brand new top of the line Keurig that pissed literal gray water you lowlife swine call coffee. I honestly can't work with any employee who drinks this fucking... *instant* coffee without throwing up. I filed a complaint on my first day.
+
+The high of my life arrived with the next machine, a classic Gaggia. My hopes in this shithole were fully restored. Every hour I would arrive at the break room with eager anticipation of my next fix. My cold metal beauty was kept in immaculate shape by a dedicated maintenance crew. Only the finest beans were sourced at my suggestion.
+
+Until a certain top-level exec (You Know Who) came along, saw our coffee setup, and appropriated it for himself. After all my investment in my team's collective productivity, this blow was too much to take. I asked for it back, I asked for another one, I asked for the fucking Keurig machine after one too many non-late nights. Denied, probably to save money to fund *his* stolen fucking setup and spite someone who knows his coffee better. I want to hurt this asshole. I'm done.

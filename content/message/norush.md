@@ -1,0 +1,1 @@
+in case you don't know, there's no rush. as an intern it's wayy more important that you spend time to absorb all the details and get to know the intricacies of **SUBTXT**... don't just run thru the training

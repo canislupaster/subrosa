@@ -145,6 +145,7 @@ export function Reference({ referenceOpen, setReferenceOpen }: {
 			</div>
 		</Modal>
 		<IconButton icon={<IconBookFilled />} onClick={()=>setReferenceOpen(true)}
-			className={twJoin(referenceOpen && bgColor.highlight2)} />
+			className={twJoin(referenceOpen && bgColor.highlight2)}
+			shortcut="shift-?" />
 	</>;
 }

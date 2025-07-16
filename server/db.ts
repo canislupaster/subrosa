@@ -115,7 +115,10 @@ export async function addSolve({
 		conflict.column("key").doUpdateSet(vs)
 	).executeTakeFirstOrThrow();
 	
-	return { token, id: ret.id, username: ret.username };
+	return {
+		token, id: ret.id, username: ret.username,
+		stats: { time, registers, nodes }
+	};
 }
 
 export async function setUsername(key: string, username: string|null) {
