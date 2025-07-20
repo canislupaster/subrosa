@@ -6,8 +6,6 @@ import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
 import { NodeSelection, Procedure, ProgramStats } from "../shared/eval";
 import { fill, parseExtra, stringifyExtra } from "../shared/util";
 import { createPortal, forwardRef, SetStateAction } from "preact/compat";
-import { animations, performTransfer } from "@formkit/drag-and-drop";
-import { dragAndDrop, ReactDragAndDropConfig } from "@formkit/drag-and-drop/react";
 
 // dump of a bunch of UI & utility stuff ive written...
 
@@ -101,9 +99,8 @@ type ShortcutsProps = {
 	disabled?: boolean
 };
 
-const ShortcutContext = createContext(undefined as unknown as {
-	shortcuts: React.MutableRefObject<Map<string, Set<()=>void>>>,
-});
+const ShortcutContext = createContext(undefined as unknown as
+	React.MutableRefObject<Map<string, Set<()=>void>>>);
 
 export function useShortcuts({shortcuts, shortcut, onClick, disabled}: ShortcutsProps) {
 	const ctx = useContext(ShortcutContext);
@@ -111,14 +108,14 @@ export function useShortcuts({shortcuts, shortcut, onClick, disabled}: Shortcuts
 		if (onClick && disabled!=true) {
 			const remove: (()=>void)[] = [];
 			for (const str of [...shortcuts ?? [], ...shortcut!=undefined ? [shortcut] : []]) {
-				const set = ctx.shortcuts.current.get(str) ?? new Set();
+				const set = ctx.current.get(str) ?? new Set();
 				set.add(onClick);
-				ctx.shortcuts.current.set(str, set);
+				ctx.current.set(str, set);
 				remove.push(()=>set.delete(onClick));
 			}
 			return ()=>remove.forEach(cb=>cb());
 		}
-	}, [ctx.shortcuts, disabled, onClick, shortcut, shortcuts]);
+	}, [ctx, disabled, onClick, shortcut, shortcuts]);
 }
 
 export type ButtonProps = JSX.IntrinsicElements["button"]&{
@@ -329,14 +326,16 @@ export const ShowTransition = forwardRef<HTMLElement, ShowTransitionProps>(({
 
 // init=true -> dont animate expanding initially
 export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&{
-	open?: boolean, init?: boolean, speed?: number
+	open?: boolean, init?: boolean, speed?: number, update?: (show: boolean)=>void
 }>((
-	{children, open, className, style, init, speed, ...props}, ref
+	{children, open, className, style, init, speed, update, ...props}, ref
 )=>{
 	const myRef = useRef<HTMLDivElement>(null);
 	const innerRef = useRef<HTMLDivElement>(null);
 	const initCollapse = useRef(init!=true);
+
 	const [showInner, setShowInner] = useState(open!=false);
+	useEffect(()=>update?.(showInner), [showInner, update]);
 
 	useEffect(()=>{
 		const main=myRef.current, inner = innerRef.current
@@ -356,13 +355,11 @@ export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&
 			let newH = (done ? d : d*dt*(speed ?? 1)/100) + parseFloat(style.height);
 			if (d<0) newH=Math.floor(newH); else newH=Math.ceil(newH);
 			
-			// do not allow collapse if open is not false
-			if (mainInnerHeight<1 && newH>0) setShowInner(true);
-			else if (mainInnerHeight>0 && newH<1 && open==false) setShowInner(false);
 			main.style.height = `${newH}px`;
 
 			lt=t;
 			if (done) frame=lt=null; else frame = cb();
+			if (done && open==false) setShowInner(false);
 		});
 		
 		let tm: number|null=null;
@@ -611,6 +608,8 @@ export const AppTooltip = forwardRef(({
 			for (const [k,v] of cbs) elem.removeEventListener(k, v as ()=>void);
 		};
 	}, [incCount, interact, isOpen, noClick, noHover, reallyOpen, unInteract]);
+	
+	const [uncollapsed, setUncollapsed] = useState(false);
 
 	return <Popover
 		ref={useCloneRef(targetRef, ref)}
@@ -634,14 +633,14 @@ export const AppTooltip = forwardRef(({
 				popoverRect={popoverRect}
 				arrowClassName={borderClass}
 				arrowSize={7} arrowColor="" >
-				<Collapse className={twMerge(containerDefault, "p-2 py-1", className)}
+				<Collapse className={twMerge(containerDefault, "p-2 py-1", className)} update={setUncollapsed}
 					onPointerEnter={interact} onPointerLeave={unInteract} open={isOpen} tabIndex={0} {...props} >
 					{content}
 				</Collapse>
 			</ArrowContainer>;
 		}}
 		containerClassName="max-w-96"
-		isOpen={isOpen} >
+		isOpen={isOpen || uncollapsed} >
 		{children}
 	</Popover>;
 });
@@ -862,7 +861,32 @@ export function Container({children, className, ...props}: {
 		return ()=>document.removeEventListener("keydown", listener);
 	}, [shortcutsRef]);
 
-	return <ShortcutContext.Provider value={{shortcuts: shortcutsRef}} >
+	const inner = <>
+		{createPortal(<div className="fixed bottom-5 left-2 px-10 z-[12000] flex flex-col items-start gap-3" >
+			{toasts.map((x,i)=>
+				<ShowTransition key={x[0]} open={i!=0}
+					openClassName="opacity-100" closedClassName="opacity-0" >
+					<div className={twMerge(
+						containerDefault, bgColor.sky,
+						"p-2 pl-5 gap-5 flex flex-row items-center transition-opacity duration-1000"
+					)} >
+						{x[1]}
+						<button className="ml-auto" onClick={()=>{
+							setToasts(xs=>xs.filter(y=>y[0]!=x[0]));
+						}} ><IconX /></button>
+					</div>
+				</ShowTransition>
+			)}
+		</div>, toastRoot ?? document.body)}
+
+		<div className={twMerge("font-body dark:text-gray-100 text-gray-950 min-h-dvh relative", className)}
+			{...props} >
+			{children}
+			<div className="bg-neutral-100 dark:bg-neutral-950 absolute left-0 top-0 bottom-0 right-0 -z-50" />
+		</div>
+	</>;
+
+	return <ShortcutContext.Provider value={shortcutsRef} >
 		<TitleContext.Provider value={useMemo(()=>({
 			setTitle(title) {
 				const arr = titlesRef.current;
@@ -885,28 +909,9 @@ export function Container({children, className, ...props}: {
 						return ()=>setToastRoot(old=>el==old ? null : old);
 					}, [])
 				}} >
-					{createPortal(<div className="fixed bottom-5 left-2 px-10 z-[12000] flex flex-col items-start gap-3" >
-						{toasts.map((x,i)=>
-							<ShowTransition key={x[0]} open={i!=0}
-								openClassName="opacity-100" closedClassName="opacity-0" >
-								<div className={twMerge(
-									containerDefault, bgColor.sky,
-									"p-2 pl-5 gap-5 flex flex-row items-center transition-opacity duration-1000"
-								)} >
-									{x[1]}
-									<button className="ml-auto" onClick={()=>{
-										setToasts(xs=>xs.filter(y=>y[0]!=x[0]));
-									}} ><IconX /></button>
-								</div>
-							</ShowTransition>
-						)}
-					</div>, toastRoot ?? document.body)}
-
-					<div className={twMerge("font-body dark:text-gray-100 text-gray-950 min-h-dvh relative", className)}
-						{...props} >
-						{children}
-						<div className="bg-neutral-100 dark:bg-neutral-950 absolute left-0 top-0 bottom-0 right-0 -z-50" />
-					</div>
+					<DragProvider>
+						{inner}
+					</DragProvider>
 				</ToastContext.Provider>
 			</PopupCountCtx.Provider>
 		</TitleContext.Provider>
@@ -1248,105 +1253,520 @@ export function ease(t: number) {
 }
 
 export const dragOpts = {
-	dropZoneClass: "drop",
+	pad: 5,
+	ghostOpacity: "0.5",
 	dragHandle: ".draghandle",
-	plugins: [animations()],
-	draggable(el: HTMLElement) { return "drag" in el.dataset; },
-	threshold: { horizontal: Infinity, vertical: 0 },
-} satisfies Partial<ReactDragAndDropConfig<HTMLElement, unknown[]>>;
+	scrollThreshold: 100,
+	scrollVelocity: 0.01,
+	delay: 300,
+	delta: 25
+} as const;
 
-export function useDragList<X, T extends HTMLElement>({values, setValues, dataKey, ...opts}: {
-	values: readonly X[], setValues: (x: X[])=>void, dataKey: (x: X)=>number|string
-}&Partial<ReactDragAndDropConfig<T,X[]>>): Ref<T> {
+type DragKey = string|number;
+type DragState = {
+	lists: Map<HTMLElement, {
+		update: (ev: MouseEvent, drag: boolean, vs: { key: DragKey, data?: unknown }[]) => void,
+		accept: (vs: unknown[]) => { data: unknown, key: DragKey }[]|null,
+	}>,
+	groups: Map<string, HTMLElement[]>,
+	drag: {
+		active: boolean,
+		timeout: number;
+		firstMouseEvent: MouseEvent,
+		lastMouseEvent: MouseEvent,
+		group?: string,
+		currentList: HTMLElement|null,
+		items: unknown[],
+		perListItems: Map<HTMLElement, {data: unknown, key: DragKey}[]>,
+		ghost: { readonly el: HTMLElement, readonly offset: readonly [number,number] }[],
+		onActivate?: ()=>void
+		onCancel?: ()=>void
+	}|null,
+	numTransitions: number,
+	scrollAnimation?: number
+};
+
+const mouseInside = (ev: MouseEvent, el: HTMLElement, pad: number) => {
+	let {top,left,width,height} = el.getBoundingClientRect();
+	top-=pad; left-=pad; width+=pad; height+=pad;
+	return ev.clientY >= top && ev.clientY<=top+height && ev.clientX>=left && ev.clientX<=left+width;
+};
+
+function stopDrag(ev: MouseEvent|null, drag: DragState) {
+	if (!drag.drag) return;
+	if (!drag.drag.active) {
+		clearTimeout(drag.drag.timeout);
+		drag.drag.onCancel?.();
+	}
+
+	if (drag.drag.currentList) {
+		drag.lists.get(drag.drag.currentList)!.update(
+			ev ?? drag.drag.lastMouseEvent, false,
+			drag.drag.perListItems.get(drag.drag.currentList)!
+		);
+	}
+
+	if (drag.scrollAnimation!=undefined) {
+		cancelAnimationFrame(drag.scrollAnimation);
+		delete drag.scrollAnimation;
+	}
+
+	drag.drag.ghost.forEach(x=>{
+		x.el.animate([
+			{opacity: dragOpts.ghostOpacity}, {opacity: 0}
+		], { duration: 400 }).onfinish = ()=>x.el.remove();
+	});
+	drag.drag = null;
+}
+
+function updateDragState(ev: MouseEvent, drag: DragState) {
+	if (!drag.drag) return;
+
+	drag.drag.lastMouseEvent = ev;
+	if (!drag.drag.active) {
+		const first = drag.drag.firstMouseEvent;
+		if (Math.hypot(ev.clientX-first.clientX, ev.clientY-first.clientY) >= dragOpts.delta) {
+			drag.drag.active=true;
+			drag.drag.onActivate?.();
+		} else {
+			return;
+		}
+	}
+
+	for (const g of drag.drag.ghost) {
+		g.el.style.left = `${ev.clientX + g.offset[0]}px`;
+		g.el.style.top = `${ev.clientY + g.offset[1]}px`;
+	}
+	
+	if (drag.numTransitions>0) return;
+
+	if (drag.drag.currentList && !mouseInside(ev, drag.drag.currentList, dragOpts.pad)) {
+		drag.lists.get(drag.drag.currentList)!.update(
+			ev, false,
+			drag.drag.perListItems.get(drag.drag.currentList)!.map(v=>({ key: v.key }))
+		);
+		drag.drag.currentList = null;
+	}
+
+	if (!drag.drag.currentList) {
+		const otherLists = new Set([
+			...drag.drag.group!=undefined	? drag.groups.get(drag.drag.group) ?? [] : [],
+			...drag.drag.perListItems.keys()
+		]);
+
+		for (const other of otherLists) {
+			if (mouseInside(ev, other, dragOpts.pad)) {
+				const listData = drag.lists.get(other)!;
+				const listItems = drag.drag.perListItems.get(other);
+				if (listItems) {
+					drag.drag.currentList = other;
+					break;
+				}
+
+				const res = listData.accept(drag.drag.items);
+				if (res) {
+					drag.drag.currentList = other;
+					drag.drag.perListItems.set(other, res);
+					break;
+				}
+			}
+		}
+	}
+	
+	if (drag.drag.currentList) {
+		const l = drag.drag.currentList;
+		const rect = l.getBoundingClientRect();
+		const a = (rect.top + 2*rect.bottom)/3, b = (2*rect.top + rect.bottom)/3;
+
+		if (drag.scrollAnimation!=undefined) {
+			cancelAnimationFrame(drag.scrollAnimation);
+			delete drag.scrollAnimation;
+		}
+
+		let lt = performance.now();
+		const scroll = (y: number, down: boolean)=>{
+			const d = down ? ev.clientY - y : y - ev.clientY;
+			const space = down ? l.scrollHeight - l.scrollTop - l.offsetHeight : l.scrollTop;
+			if (d>0 && space>0) {
+				drag.scrollAnimation = requestAnimationFrame(t=>{
+					l.scrollBy({ top: (ev.clientY - y)*(t-lt)*dragOpts.scrollVelocity });
+
+					lt=t;
+					scroll(y,down);
+				});
+			} else {
+				delete drag.scrollAnimation;
+			}
+		};
+
+		scroll(Math.max(a, rect.bottom - dragOpts.scrollThreshold), true);
+		scroll(Math.min(b, rect.top + dragOpts.scrollThreshold), false);
+
+		drag.lists.get(l)!.update(
+			ev, true, drag.drag.perListItems.get(l)!
+		);
+	}
+}
+
+const DragContext = createContext(undefined as unknown as React.MutableRefObject<DragState>);
+
+export function DragProvider({children}: {children: ComponentChildren}) {
+	const state = useRef<DragState>({
+		lists: new Map(), groups: new Map(), drag: null, numTransitions: 0
+	});
+	
+	useEffect(()=>{
+		const move = (ev: MouseEvent) => {
+			updateDragState(ev, state.current);
+		};
+
+		const up = (ev: MouseEvent) => {
+			if (state.current.drag!=null) {
+				stopDrag(ev, state.current);
+				ev.preventDefault();
+			}
+		};
+		
+		document.addEventListener("mousemove", move);
+		document.addEventListener("mouseup", up);
+		document.addEventListener("mouseleave", up);
+		return ()=>{
+			document.removeEventListener("mousemove", move);
+			document.removeEventListener("mouseup", up);
+			document.removeEventListener("mouseleave", up);
+		};
+	}, [state]);
+
+	return <DragContext.Provider value={state} >{children}</DragContext.Provider>
+}
+
+export function useDragList<X, T extends HTMLElement>({ group, ...props }: {
+	values: readonly X[], setValues?: (x: X[])=>void, dataKey: (x: X)=>DragKey,
+	group?: string, acceptData?: (data: unknown)=>X|null, selection?: ReadonlySet<DragKey>
+}): {
+	ref: Ref<T>,
+	draggingKeys: ReadonlySet<DragKey>
+} {
 	const ref = useRef<T>(null);
-	const animating = useRef<Set<HTMLElement>>(new Set());
+	const state = useContext(DragContext).current;
+	const listState = useRef<(typeof props)&{
+		keyToValue: ReadonlyMap<string, [DragKey,X]>,
+	}>({ keyToValue: new Map(), ...props });
+	const [draggingKeys, setDraggingKeys] = useState<ReadonlySet<DragKey>>(()=>new Set());
+
+	useEffect(()=>{
+		Object.assign(listState.current, props);
+		listState.current.keyToValue = new Map(props.values.map(v=>{
+			const k = props.dataKey(v);
+			return [k.toString(), [k,v]];
+		}));
+	});
+
 	useEffect(()=>{
 		const el = ref.current;
 		if (!el) return;
 
-		const removed = new Set<HTMLElement>();
-		const toRemove = new Set<HTMLElement>();
+		const added = new Set<Element>(el.children);
+		const skip = new Set<Element>();
+		const toRemoveFromSkip = new Set<Element>();
+
+		const animateHeightProps = ["height", "paddingTop", "paddingBottom", "borderTop", "borderBottom", "marginTop", "marginBottom"] as const;
+
+		const animateHeight = (node: HTMLElement, collapse: boolean) => {
+			const style = getComputedStyle(node);
+			const frames: Keyframe[] = [
+				{ opacity: "0", overflow: "clip" }, { opacity: style.opacity }
+			];
+
+			for (const k of animateHeightProps) {
+				frames[0][k] = "1px";
+				frames[1][k] = style[k];
+			}
+			
+			if (collapse) frames.reverse();
+
+			const anim = node.animate(frames, { duration: 200, fill: "none" });
+			anim.onfinish = ()=>{
+				if (collapse) {
+					node.remove();
+					toRemoveFromSkip.add(node);
+				} else {
+					offsets.set(node, node.offsetTop);
+					transitionOrder();
+				}
+			};
+		};
+		
+		const cleanDatasetAnim = (child: HTMLElement) => {
+			for (const k in child.dataset) delete child.dataset[k];
+			child.getAnimations().forEach(x=>x.pause());
+		};
+
+		const offsets = new Map<HTMLElement, number>(
+			([...el.children] as HTMLElement[]).map(el=>[el, el.offsetTop])
+		);
+		const getOrder = ()=>([...el.children] as HTMLElement[])
+			.filter(el=>offsets.has(el))
+			.map((child,i)=>[child,i] as const);
+
+		const transitionAnims = new Map<HTMLElement,Animation>();
+
+		const upOffsets = ()=>{
+			for (const child of offsets.keys()) {
+				if (transitionAnims.has(child)) continue;
+				offsets.set(child, child.offsetTop);
+			}
+		};
+
+		let order = getOrder();
+		upOffsets();
+
+		const transitionOrder = () => {
+			const newOrder = getOrder();
+			const newMap = new Map(newOrder);
+			let lastIndex = 0;
+			if (!order.some(([el]) => {
+				const i = newMap.get(el);
+				if (i!=undefined) {
+					if (i < lastIndex) return true;
+					lastIndex = i;
+				}
+				return false;
+			})) {
+				order = newOrder;
+				upOffsets();
+				return;
+			}
+
+			for (const [child] of order) {
+				const transition = transitionAnims.get(child);
+
+				let oldTop = offsets.get(child), newTop = child.offsetTop;
+				if (oldTop==undefined) continue;
+
+				if (transition) {
+					oldTop += child.offsetTop;
+					const oldTime = transition.currentTime;
+					transition.finish();
+					oldTop -= child.offsetTop;
+					newTop = child.offsetTop;
+					transition.currentTime = oldTime;
+				}
+				
+				if (Math.abs(newTop - oldTop) < 10) continue;
+
+				if (transition) {
+					transitionAnims.delete(child);
+					transition.cancel();
+				} else {
+					state.numTransitions++;
+				}
+
+				const {width, height} = child.getBoundingClientRect();
+				const common = {
+					position: "relative",
+					width: `${width}px`, height: `${height}px`
+				};
+				
+				offsets.set(child, newTop);
+				const anim = child.animate([
+					{top: `${oldTop - newTop}px`, ...common}, {top: "0px", ...common}
+				], { duration: 200, fill: "backwards" });
+
+				transitionAnims.set(child, anim);
+				anim.onfinish = anim.oncancel = ()=>{
+					if (transitionAnims.get(child)!=anim) return;
+					transitionAnims.delete(child);
+					offsets.set(child, child.offsetTop);
+
+					if (--state.numTransitions == 0 && state.drag?.lastMouseEvent) {
+						updateDragState(state.drag.lastMouseEvent, state);
+					}
+				};
+			}
+
+			order = newOrder;
+			upOffsets();
+		};
 
 		const observer = new MutationObserver((mut)=>{
 			for (const record of mut) {
-				const cbs: (()=>void)[] = [];
-				const anim = async (node: globalThis.Node, add: boolean) => {
+				const anim = (node: globalThis.Node, add: boolean) => {
 					if (!(node instanceof HTMLElement)) return;
-					const remove = removed.has(node);
+					if (skip.has(node)) {
+						if (!add && toRemoveFromSkip.has(node)) {
+							toRemoveFromSkip.delete(node);
+							skip.delete(node);
+							added.delete(node);
+						}
 
-					if (!add) {
-						if (remove) return;
+						return;
+					}
 
-						toRemove.add(node);
-						await new Promise<void>(res=>cbs.push(res));
-						if (!toRemove.has(node)) return;
+					if (add) {
+						if (added.has(node)) return;
+						added.add(node);
+						animateHeight(node, false);
+					} else {
+						offsets.delete(node);
 
 						const node2 = node.cloneNode(true) as HTMLElement;
-						removed.add(node2);
+						node2.inert = true;
+						cleanDatasetAnim(node2);
+
+						skip.add(node2);
 						if (record.nextSibling?.parentNode!=null) {
 							el.insertBefore(node2, record.nextSibling);
 						} else if (record.previousSibling instanceof HTMLElement && record.previousSibling?.parentNode) {
 							record.previousSibling.after(node2);
 						}
 
-						return;
-					} else if (toRemove.has(node)) {
-						toRemove.delete(node);
-						return;
+						animateHeight(node2, true);
 					}
-
-					const style = getComputedStyle(node);
-					const frames: Keyframe[] = [
-						{ opacity: "0" }, { opacity: style.getPropertyValue("opacity") }
-					];
-
-					for (const k of ["height", "paddingTop", "paddingBottom", "borderTop", "borderBottom", "marginTop", "marginBottom"] as const) {
-						frames[0][k] = "1px";
-						frames[1][k] = style.getPropertyValue(k);
-					}
-					
-					if (remove) frames.reverse();
-					node.style.overflow = "clip";
-
-					animating.current.add(node);
-					node.animate(frames, {
-						duration: 100,
-						fill: "both"
-					}).onfinish = ()=>{
-						if (remove) node.remove();
-						else node.style.overflow = style.overflow;
-						animating.current.delete(node);
-					};
 				};
 
-				for (const node of record.removedNodes) void anim(node, false);
+				for (const node of record.removedNodes) {
+					if (!document.contains(node)) void anim(node, false);
+				}
 				for (const node of record.addedNodes) void anim(node, true);
-				cbs.forEach(cb=>cb());
+			}
+
+			transitionOrder();
+		});
+	
+		const getKv = (child: Node|null|undefined) => {
+			if (!(child instanceof HTMLElement)) return null;
+			const strK = child.dataset.key;
+			if (strK==undefined) return null;
+			const v = listState.current.keyToValue.get(strK)
+			if (v==undefined) return null;
+			return {k: v[0], v: v[1], el: child};
+		};
+
+		let draggingKeysCmp = new Set();
+		state.lists.set(el, {
+			update(ev, drag, vs) {
+				if (!listState.current.setValues) return;
+
+				const vsKeys = new Set(vs.map(v=>v.key));
+				if (!drag && draggingKeysCmp.size) {
+					draggingKeysCmp.clear();
+					setDraggingKeys(new Set());
+				} else if (drag && vs.some(v=>!draggingKeysCmp.has(v))) {
+					draggingKeysCmp = vsKeys;
+					setDraggingKeys(vsKeys);
+				}
+				
+				const notVs = listState.current.values
+					.filter(v=>!vsKeys.has(listState.current.dataKey(v)));
+
+				const kvs = [...el.children].map(getKv).filter(x=>x!=null);
+
+				let topEdge = false;
+				const insertBefore = kvs.find(child=>{
+					if (vsKeys.has(child.k)) {
+						topEdge = true;
+						return false;
+					}
+					const rect = child.el.getBoundingClientRect();
+					return (topEdge ? rect.top : rect.bottom) > ev.clientY;
+				});
+				
+				let i = notVs.length;
+				if (insertBefore) i = notVs.findIndex(x=>x==insertBefore.v);
+
+				const insertion = vs.filter(v=>v.data!=undefined);
+				if (insertion.length>0 && (listState.current.values.length<=i || listState.current.values[i]!=insertion[0].data)) {
+					notVs.splice(i, 0, ...insertion.map(v=>v.data as X));
+					listState.current.setValues(notVs);
+				}
+			},
+			accept: (vs)=>{
+				const cb = listState.current.acceptData;
+				if (!cb) return null;
+				return vs.map(cb).filter(v=>v!=null)
+					.map(v=>({ key: listState.current.dataKey(v), data: v }));
 			}
 		});
+		
+		if (group!=undefined) {
+			state.groups.set(group, [...state.groups.get(group) ?? [], el]);
+		}
+		
+		const getDragChild = (target: Element)=>{
+			const sel = [...el.querySelectorAll(dragOpts.dragHandle)].find(x=>x.contains(target));
+			if (!sel) return null;
+			return [...el.children].find(x=>x.contains(sel)) ?? null;
+		};
 
+		const down = (ev: MouseEvent)=>{
+			const target = ev.target as HTMLElement;
+			const child = getDragChild(target);
+			const kv = getKv(child);
+			if (!kv) return;
+
+			let items = [{data: kv.v, key: kv.k}];
+			if (listState.current.selection!=undefined) {
+				const ks = listState.current.selection;
+				if (ks.has(kv.k)) {
+					items = listState.current.values
+						.map(x=>({data: x, key: listState.current.dataKey(x)}))
+						.filter(x=>ks.has(x.key));
+				}
+			}
+
+			stopDrag(ev, state);
+
+			const {left,top,width,height} = child!.getBoundingClientRect();
+			const makeGhost = (ev: MouseEvent) => {
+				const ghost = child!.cloneNode(true) as HTMLElement;
+				cleanDatasetAnim(ghost);
+				ghost.style.position = "fixed";
+				ghost.style.width=`${width}px`;
+				ghost.style.height=`${height}px`;
+				ghost.style.opacity = dragOpts.ghostOpacity;
+				ghost.style.zIndex="100";
+				ghost.inert = true;
+				document.body.appendChild(ghost);
+				return {offset: [left - ev.clientX, top - ev.clientY], el: ghost} as const;
+			};
+
+			const newDragState: NonNullable<DragState["drag"]> = {
+				lastMouseEvent: ev, group, currentList: el,
+				items: items.map(x=>x.data), active: false,
+				perListItems: new Map([[el, items]]), ghost: [],
+				firstMouseEvent: ev,
+				timeout: setTimeout(()=>{
+					if (newDragState.active) return;
+					newDragState.active=true;
+					newDragState.onActivate?.();
+					updateDragState(ev, state);
+				}, dragOpts.delay),
+				onActivate: ()=>setTimeout(()=>{
+					if (state.drag == newDragState)
+						newDragState.ghost.push(makeGhost(ev));
+				}, 50),
+				onCancel() {
+					target.parentElement?.dispatchEvent(ev);
+					(child as HTMLElement).click();
+				}
+			}
+
+			state.drag = newDragState;
+			updateDragState(ev, state);
+			ev.preventDefault();
+			ev.stopPropagation();
+		};
+		
+		el.addEventListener("mousedown", down);
 		observer.observe(el, {childList: true});
 		return ()=>{
+			stopDrag(null, state);
 			observer.disconnect();
+			transitionAnims.values().forEach(a=>a.cancel());
+			el.removeEventListener("mousedown", down);
 		};
-	}, [ref]);
+	}, [ref, group, state]);
 
-	useEffect(()=>{
-		const keys = new Set<unknown>(values.map(x=>dataKey(x).toString()));
-		dragAndDrop<HTMLUListElement, X>({
-			parent: ref.current,
-			state: [ values as X[], setValues as Dispatch<SetStateAction<X[]>> ],
-			...dragOpts,
-			draggable(x) {
-				return (animating.current.size==0 || animating.current.has(x)) && "key" in x.dataset && keys.has(x.dataset.key);
-			},
-			...opts,
-			performTransfer(d) {
-				if (opts.performTransfer) opts.performTransfer(d);
-				else performTransfer(d);
-			}
-		});
-	}, [values, setValues, opts, dataKey]);
-
-	return ref;
+	return useMemo(()=>({ref, draggingKeys}), [ref, draggingKeys]);
 }

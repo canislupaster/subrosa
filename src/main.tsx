@@ -178,11 +178,11 @@ function Menu() {
       <div className="flex flex-col gap-1 items-end" >
         <Text>progress</Text>
         <div className={twJoin("mb-10", bigTextClass, textColor.gray)} >{percentProgress}</div>
-        <Text># stages</Text>
+        <Text>chapters</Text>
         <div className={twJoin("mb-10", textColor.gray, bigTextClass)} >
           {activeStages}
           <span className={twJoin(bgColor.divider, "h-[120%] mb-1.5 align-middle w-2 inline-block mx-2 -skew-x-6")} />
-          {stages.length}
+          <span className={bgColor.divider} >{stages.length}</span>
         </div>
         <Text>nodes created</Text>
         <div className={bigTextClass} >{LocalStorage.numNodesCreated ?? 0}</div>
