@@ -12,7 +12,7 @@ export function toText({procs, entry}: {
 
 	const chooseName = (x: string)=>{
 		let i=1, v=x;
-		while (names.has(v)) v=`${x}${i++}`;
+		while (names.has(v)) v=`${x}${++i}`;
 		names.add(v);
 		return v;
 	};
@@ -94,7 +94,7 @@ function fromTextErr(txt: string, maxProc: number): {
 	}|{
 		type: "goto", num: number|"unset"|"end", cond: string|null
 	}|{
-		type: "op", op: Exclude<Node["op"], "goto">, params: string[]
+		type: "op", op: Exclude<Node["op"], "goto">, params: (string|null)[]
 	}|{
 		type: "def", name: string, main: boolean
 	}|{
@@ -147,10 +147,10 @@ function fromTextErr(txt: string, maxProc: number): {
 						return BigInt(m[0]) as Big extends true ? bigint : number;
 					} catch {}
 				} else {
-					const num = Number.parseInt(line,10);
+					const num = Number.parseInt(m[0],10);
 					if (isFinite(num)) return num as Big extends true ? bigint : number;
 				}
-				return err(`Invalid integer ${quote(line)}`);
+				return err(`Invalid integer ${quote(m[0])}`);
 			}
 			return null;
 		};
@@ -192,8 +192,8 @@ function fromTextErr(txt: string, maxProc: number): {
 				"access", "add", "breakpoint", "sub", "inc", "dec", "call", "setIdx", "set"
 			] as const satisfies Node["op"][]) {
 				if (take(op=="setIdx" ? "set_idx" : op)) {
-					const params: string[] = [];
-					while (take(" ")) params.push(parseStr());
+					const params: (string|null)[] = [];
+					while (take(" ")) params.push(take("unknown") ? null : parseStr());
 					toks.push({ type: "op", op, params });
 					break;
 				}
@@ -244,8 +244,8 @@ function fromTextErr(txt: string, maxProc: number): {
 		} else {
 			const nodeI = curProc.maxNode++;
 			curProc.nodeList.push(nodeI);
-			const get = (x: string|undefined) => {
-				if (x==undefined) throw new TextParseError("missing parameter to operation");
+			const get = (x: string|null|undefined) => {
+				if (x==undefined) return -1;
 				const v = regMap.get(x);
 				if (v==undefined) throw new TextParseError(`register ${quote(x)} not found`);
 				return v;
@@ -266,7 +266,7 @@ function fromTextErr(txt: string, maxProc: number): {
 			} else if (tok.op=="breakpoint") {
 				node={op: "breakpoint", conditional: tok.params.length==0 ? null : get(tok.params[0])};
 			} else if (tok.op=="call") {
-				if (tok.params.length==0) throw new TextParseError("expected proc name for call operation");
+				if (tok.params[0]==undefined) throw new TextParseError("expected proc name for call operation");
 				node={op: "call", procRef: getProcI(tok.params[0]), params: tok.params.slice(1).map(get)};
 			} else {
 				throw new Error("unreachable");

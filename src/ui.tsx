@@ -3,8 +3,7 @@ import { Dispatch, useCallback, useContext, useEffect, useErrorBoundary, useMemo
 import { IconChevronDown, IconChevronUp, IconInfoCircleFilled, IconInfoTriangleFilled, IconLoader2, IconX } from "@tabler/icons-preact";
 import { twMerge, twJoin } from "tailwind-merge";
 import { ArrowContainer, Popover, PopoverState } from "react-tiny-popover";
-import { NodeSelection, Procedure, ProgramStats } from "../shared/eval";
-import { fill, parseExtra, stringifyExtra } from "../shared/util";
+import { fill } from "../shared/util";
 import { createPortal, forwardRef, SetStateAction } from "preact/compat";
 
 // dump of a bunch of UI & utility stuff ive written...
@@ -143,7 +142,7 @@ export const IconButton = ({className, children, icon, ...props}: {icon?: Compon
 }
 
 type AnchorProps = JSX.AnchorHTMLAttributes<HTMLAnchorElement>&ShortcutsProps&{className?: string};
-export const anchorHover = "transition-all hover:text-black dark:hover:text-gray-50 hover:bg-cyan-100/5 cursor-pointer";
+export const anchorHover = "transition-all hover:text-black dark:hover:text-gray-50 hover:bg-cyan-100/5 enabled:cursor-pointer";
 export const anchorUnderline = "text-gray-600 dark:text-gray-300 inline-flex flex-row align-baseline items-baseline gap-1 underline decoration-dashed decoration-1 underline-offset-2";
 export const anchorStyle = twJoin(anchorHover, anchorUnderline);
 
@@ -355,7 +354,7 @@ export const Collapse = forwardRef<HTMLDivElement, JSX.IntrinsicElements["div"]&
 			let newH = (done ? d : d*dt*(speed ?? 1)/100) + parseFloat(style.height);
 			if (d<0) newH=Math.floor(newH); else newH=Math.ceil(newH);
 			
-			main.style.height = `${newH}px`;
+			main.style.height = px(newH);
 
 			lt=t;
 			if (done) frame=lt=null; else frame = cb();
@@ -455,38 +454,56 @@ export function Text({className, children, v, ...props}:
 }
 
 const ModalContext = createContext<null|RefObject<HTMLDialogElement>>(null);
+const px = (x: number|undefined) => x!=undefined ? `${x}px` : "";
 
-function ModalBackground({className}: {className?: string}) {
-	const [dims, setDims] = useState<null|[number,number,number]>(null);
+function ModalBackground({className, bgClassName}: {className?: string, bgClassName?: string}) {
+	const [dims, setDims] = useState<null|{
+		nx: number, ny: number, side: number, 
+		offY: number, iy: number, offX: number, ix: number,
+		top: number, left: number, height: number, width: number
+	}>(null);
 	const modalCtx = useContext(ModalContext);
 	useEffect(()=>{
 		const el = modalCtx?.current;
 		if (!el) return;
-		const observer = new ResizeObserver(()=>{
+		const cb = ()=>{
 			const nx = Math.ceil(10 * el.clientWidth / window.innerWidth) + 1;
-			const len = Math.ceil(el.clientWidth / nx);
-			const ny = Math.ceil(el.clientHeight / len);
-			setDims([nx, ny, len]);
-		});
+			const side = Math.ceil(el.clientWidth / nx);
+			const ny = Math.ceil(el.clientHeight / side) + 1;
+			const rect = el.getBoundingClientRect();
+			setDims({
+				nx, ny, side,
+				offX: el.scrollLeft%side, offY: el.scrollTop%side,
+				ix: Math.floor(el.scrollLeft/side), iy: Math.floor(el.scrollTop/side),
+				height: rect.height, width: rect.width, left: rect.left, top: rect.top
+			});
+		};
 
+		const observer = new ResizeObserver(cb);
 		observer.observe(el);
+		el.addEventListener("scroll", cb);
+		window.addEventListener("resize", cb);
 		return ()=>{
 			observer.disconnect();
+			el.removeEventListener("scroll", cb);
+			window.removeEventListener("resize", cb);
 			setDims(null);
 		};
 	}, [modalCtx]);
 	
-	return <>
-		{dims && fill(dims[0], i=>fill(dims[1], j=>{
-			return <div key={j*dims[0] + i} className={twMerge("in-[.show]:animate-[fade-in_200ms_forwards] opacity-0 in-[.not-show]:animate-[fade-out_10ms_forwards] -z-10 absolute", className)}
+	return <div className={twMerge("-z-10 rounded-md fixed overflow-clip border", className)} style={{
+			width: px(dims?.width), height: px(dims?.height), top: px(dims?.top), left: px(dims?.left)
+		}} >
+		{dims && fill(dims.nx, i=>fill(dims.ny, j=>{
+			return <div key={(j+dims.iy)*dims.nx + i+dims.ix} className={twMerge("in-[.show]:animate-[fade-in_200ms_forwards] opacity-0 in-[.not-show]:animate-[fade-out_10ms_forwards] absolute", bgClassName)}
 				style={{
 					animationFillMode: "both",
-					animationDelay: `${20*(j*dims[0]*0.5 + i)}ms`,
-					top: `${j*dims[2]}px`, left: `${i*dims[2]}px`,
-					width: `${dims[2]}px`, height: `${dims[2]}px`,
+					animationDelay: `${20*(j*dims.nx*0.5 + i)}ms`,
+					top: px(j*dims.side-dims.offY), left: px(i*dims.side-dims.offX),
+					width: px(dims.side), height: px(dims.side),
 				}} />;
 		})).flat()}
-	</>;
+	</div>;
 }
 
 export const transparentNoHover = "[:not(:hover)]:theme:bg-transparent [:not(:hover)]:border-transparent";
@@ -512,7 +529,7 @@ export function Modal({bad, open, onClose, closeButton, title, children, classNa
 	}, [open]);
 
 	return <ShowTransition open={open} openClassName="show" closedClassName="not-show" update={setShow} ref={modalRef} >
-		<dialog className={twMerge(bad??false ? borderColor.red : borderColor.default, "bg-transparent border opacity-0 [:not(.show)]:pointer-events-none transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 pt-4 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0 gap-2 group [.show]:opacity-100 [.show]:pointer-events-auto", className)}
+		<dialog className={twMerge("bg-transparent opacity-0 [:not(.show)]:pointer-events-none transition-opacity duration-500 mx-auto md:mt-[15dvh] mt-10 text-inherit outline-none rounded-md z-50 p-5 pt-4 container flex items-stretch flex-col max-h-[calc(min(50rem,70dvh))] overflow-auto fixed left-0 top-0 md:max-w-2xl right-0 gap-2 group [.show]:opacity-100 [.show]:pointer-events-auto", className)}
 			onClose={(ev)=>{
 				ev.preventDefault();
 				onClose?.();
@@ -531,7 +548,8 @@ export function Modal({bad, open, onClose, closeButton, title, children, classNa
 
 			{children}
 
-			<ModalBackground className={bad??false ? bgColor.red : bgColor.md} />
+			<ModalBackground className={bad??false ? borderColor.red : borderColor.default}
+				bgClassName={bad??false ? bgColor.red : bgColor.md} />
 			<div className="fixed bg-black/30 left-0 right-0 top-0 bottom-0 -z-20"
 				onClick={()=>onClose?.()} />
 	</ModalContext.Provider></dialog></ShowTransition>;
@@ -714,9 +732,6 @@ export function Dropdown({parts, trigger, className, onOpenChange, ...props}: {
 	</AppTooltip>;
 }
 
-//mounted in popover
-//if it focuses too soon, then popover has not measured itself yet and we scroll to a random ass place
-//what the fuck.
 function LazyAutoFocusSearch({search,setSearch,onSubmit}:{
 	search: string, setSearch: (x:string)=>void, onSubmit?: ()=>void
 }) {
@@ -838,9 +853,9 @@ export function Container({children, className, ...props}: {
 	useEffect(()=>{
 		const shortcuts = shortcutsRef.current;
 		const listener = (ev: KeyboardEvent)=>{
-			if (ev.target instanceof HTMLElement && [
+			if (ev.target instanceof HTMLElement && ([
 				"INPUT", "TEXTAREA", "SELECT", "DIALOG", "BUTTON"
-			].includes(ev.target.tagName)) return;
+			].includes(ev.target.tagName) || ev.target.contentEditable=="true")) return;
 		
 			const keyStr: string[] = [];
 			if (ev.metaKey) keyStr.push("cmd");
@@ -1099,71 +1114,6 @@ export function throttle(ms: number, callOnDispose?: boolean) {
 	} as const;
 }
 
-export type PuzzleSolveData = {
-	token: string, id: number, username: string|null, stats: ProgramStats
-};
-
-export type LocalStorage = Partial<{
-	storyState: Record<string, unknown>,
-	storyParagraph: Record<string, number>,
-	solvedPuzzles: Set<string>,
-	readStory: Set<string>,
-
-	userProcs: number[],
-	maxProc: number,
-	puzzleProcs: Map<string, number|Procedure>,
-
-	// prevent editing in multiple tabs
-	// updates with last timestamp
-	// cleared with onbeforeunload
-	currentlyEditing: number;
-
-	stepsPerS: number,
-	// timestamp of when stage last counted
-	lastStageCount: Map<string, number>,
-	puzzleSolve: Map<string, PuzzleSolveData>,
-	username: string,
-	
-	seenReference: boolean,
-	referencePage: string,
-	numNodesCreated: number,
-
-	clipboard: NodeSelection,
-	seenMessages: Map<string, number> //time message received
-}>&{
-	toJSON(): unknown
-};
-
-const localStorageKeys: (Exclude<keyof LocalStorage,"toJSON">)[] = [
-	"storyState", "puzzleProcs", "readStory",
-	"solvedPuzzles", "stepsPerS",
-	"userProcs", "storyParagraph",
-	"lastStageCount", "puzzleSolve",
-	"username", "currentlyEditing", "numNodesCreated",
-	"clipboard", "maxProc", "seenMessages",
-	"seenReference"
-];
-
-export const LocalStorage = {
-	toJSON() {
-		return Object.fromEntries(localStorageKeys.map(k=>[k, parseExtra(localStorage.getItem(k))]));
-	}
-} as unknown as LocalStorage;
-
-for (const k of localStorageKeys) {
-	Object.defineProperty(LocalStorage, k, {
-		get() {
-			const vStr = localStorage.getItem(k);
-			return vStr!=null ? parseExtra(vStr) : undefined;
-		},
-		set(newV) {
-			if (newV==undefined) localStorage.removeItem(k);
-			else localStorage.setItem(k, stringifyExtra(newV));
-			return newV as unknown;
-		}
-	});
-}
-
 export function useDisposable(effect: ()=>Disposable|undefined, deps?: unknown[]) {
 	useEffect(()=>{
 		const obj = effect();
@@ -1259,7 +1209,8 @@ export const dragOpts = {
 	scrollThreshold: 100,
 	scrollVelocity: 0.01,
 	delay: 300,
-	delta: 25
+	delta: 25,
+	easing: "ease-out"
 } as const;
 
 type DragKey = string|number;
@@ -1312,9 +1263,10 @@ function stopDrag(ev: MouseEvent|null, drag: DragState) {
 	}
 
 	drag.drag.ghost.forEach(x=>{
-		x.el.animate([
-			{opacity: dragOpts.ghostOpacity}, {opacity: 0}
-		], { duration: 400 }).onfinish = ()=>x.el.remove();
+		x.el.animate(
+			[ {opacity: dragOpts.ghostOpacity}, {opacity: 0} ],
+			{ duration: 400, easing: dragOpts.easing }
+		).onfinish = ()=>x.el.remove();
 	});
 	drag.drag = null;
 }
@@ -1334,8 +1286,8 @@ function updateDragState(ev: MouseEvent, drag: DragState) {
 	}
 
 	for (const g of drag.drag.ghost) {
-		g.el.style.left = `${ev.clientX + g.offset[0]}px`;
-		g.el.style.top = `${ev.clientY + g.offset[1]}px`;
+		g.el.style.left = px(ev.clientX + g.offset[0]);
+		g.el.style.top = px(ev.clientY + g.offset[1]);
 	}
 	
 	if (drag.numTransitions>0) return;
@@ -1444,8 +1396,7 @@ export function useDragList<X, T extends HTMLElement>({ group, ...props }: {
 	values: readonly X[], setValues?: (x: X[])=>void, dataKey: (x: X)=>DragKey,
 	group?: string, acceptData?: (data: unknown)=>X|null, selection?: ReadonlySet<DragKey>
 }): {
-	ref: Ref<T>,
-	draggingKeys: ReadonlySet<DragKey>
+	ref: Ref<T>, draggingKeys: ReadonlySet<DragKey>, clearAnims: ()=>void
 } {
 	const ref = useRef<T>(null);
 	const state = useContext(DragContext).current;
@@ -1462,6 +1413,7 @@ export function useDragList<X, T extends HTMLElement>({ group, ...props }: {
 		}));
 	});
 
+	const heightAnimsRef = useRef(new Set<Animation>());
 	useEffect(()=>{
 		const el = ref.current;
 		if (!el) return;
@@ -1470,6 +1422,7 @@ export function useDragList<X, T extends HTMLElement>({ group, ...props }: {
 		const skip = new Set<Element>();
 		const toRemoveFromSkip = new Set<Element>();
 
+		const heightAnims = heightAnimsRef.current;
 		const animateHeightProps = ["height", "paddingTop", "paddingBottom", "borderTop", "borderBottom", "marginTop", "marginBottom"] as const;
 
 		const animateHeight = (node: HTMLElement, collapse: boolean) => {
@@ -1485,8 +1438,10 @@ export function useDragList<X, T extends HTMLElement>({ group, ...props }: {
 			
 			if (collapse) frames.reverse();
 
-			const anim = node.animate(frames, { duration: 200, fill: "none" });
+			const anim = node.animate(frames, { duration: 200, fill: "none", easing: dragOpts.easing });
+			heightAnims.add(anim);
 			anim.onfinish = ()=>{
+				heightAnims.delete(anim);
 				if (collapse) {
 					node.remove();
 					toRemoveFromSkip.add(node);
@@ -1565,13 +1520,13 @@ export function useDragList<X, T extends HTMLElement>({ group, ...props }: {
 				const {width, height} = child.getBoundingClientRect();
 				const common = {
 					position: "relative",
-					width: `${width}px`, height: `${height}px`
+					width: px(width), height: px(height)
 				};
 				
 				offsets.set(child, newTop);
 				const anim = child.animate([
-					{top: `${oldTop - newTop}px`, ...common}, {top: "0px", ...common}
-				], { duration: 200, fill: "backwards" });
+					{top: px(oldTop - newTop), ...common}, {top: "0px", ...common}
+				], { duration: 200, fill: "backwards", easing: dragOpts.easing });
 
 				transitionAnims.set(child, anim);
 				anim.onfinish = anim.oncancel = ()=>{
@@ -1693,15 +1648,15 @@ export function useDragList<X, T extends HTMLElement>({ group, ...props }: {
 			state.groups.set(group, [...state.groups.get(group) ?? [], el]);
 		}
 		
-		const getDragChild = (target: Element)=>{
-			const sel = [...el.querySelectorAll(dragOpts.dragHandle)].find(x=>x.contains(target));
-			if (!sel) return null;
-			return [...el.children].find(x=>x.contains(sel)) ?? null;
-		};
-
+		const ignoreEvents = new Set<Event>();
 		const down = (ev: MouseEvent)=>{
+			if (ignoreEvents.has(ev)) {
+				ignoreEvents.delete(ev)
+				return;
+			}
+
 			const target = ev.target as HTMLElement;
-			const child = getDragChild(target);
+			const child = [...el.children].find(x=>x.contains(target)) ?? null;
 			const kv = getKv(child);
 			if (!kv) return;
 
@@ -1722,8 +1677,8 @@ export function useDragList<X, T extends HTMLElement>({ group, ...props }: {
 				const ghost = child!.cloneNode(true) as HTMLElement;
 				cleanDatasetAnim(ghost);
 				ghost.style.position = "fixed";
-				ghost.style.width=`${width}px`;
-				ghost.style.height=`${height}px`;
+				ghost.style.width=px(width);
+				ghost.style.height=px(height);
 				ghost.style.opacity = dragOpts.ghostOpacity;
 				ghost.style.zIndex="100";
 				ghost.inert = true;
@@ -1743,18 +1698,24 @@ export function useDragList<X, T extends HTMLElement>({ group, ...props }: {
 					updateDragState(ev, state);
 				}, dragOpts.delay),
 				onActivate: ()=>setTimeout(()=>{
+					window.getSelection()?.empty();
 					if (state.drag == newDragState)
 						newDragState.ghost.push(makeGhost(ev));
 				}, 50),
 				onCancel() {
-					target.parentElement?.dispatchEvent(ev);
-					(child as HTMLElement).click();
+					setTimeout(()=>{
+						if (!target.dispatchEvent(ev)) window.getSelection()?.empty();
+					}, 0);
+					ignoreEvents.add(ev);
 				}
+			}
+
+			if ([...el.querySelectorAll(dragOpts.dragHandle)].some(x=>x.contains(target))) {
+				ev.preventDefault();
 			}
 
 			state.drag = newDragState;
 			updateDragState(ev, state);
-			ev.preventDefault();
 			ev.stopPropagation();
 		};
 		
@@ -1764,9 +1725,14 @@ export function useDragList<X, T extends HTMLElement>({ group, ...props }: {
 			stopDrag(null, state);
 			observer.disconnect();
 			transitionAnims.values().forEach(a=>a.cancel());
+			heightAnims.forEach(a=>a.finish());
 			el.removeEventListener("mousedown", down);
 		};
 	}, [ref, group, state]);
 
-	return useMemo(()=>({ref, draggingKeys}), [ref, draggingKeys]);
+	const clearAnims = useCallback(()=>{
+		heightAnimsRef.current.forEach(a=>a.finish());
+	}, [heightAnimsRef]);
+
+	return useMemo(()=>({ref, draggingKeys, clearAnims}), [draggingKeys, clearAnims]);
 }

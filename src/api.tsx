@@ -2,13 +2,14 @@ import { useEffect, useState } from "preact/hooks";
 import { Procedure, ProgramStats, test, Verdict } from "../shared/eval";
 import { API, COUNT_PLAY_INTERVAL_SECONDS, parseExtra, ServerResponse, StageStatsResponse, statsArr, stringifyExtra, toPrecStat, validUsernameRe } from "../shared/util";
 import Tester from "../shared/worker?worker";
-import { Alert, bgColor, Button, LocalStorage, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor, PuzzleSolveData, useToast, Collapse } from "./ui";
+import { Alert, bgColor, Button, mapWith, setWith, useAsync, useAsyncEffect, Text, Input, AlertErrorBoundary, Loading, borderColor, useToast, Collapse } from "./ui";
 import { StageData, stageUrl } from "../shared/data";
 import { blankStyle } from "./editor";
 import { twMerge, twJoin } from "tailwind-merge";
 import { IconChevronDown, IconShare } from "@tabler/icons-preact";
 import { Fragment } from "preact";
 import { Puzzle } from "./data";
+import { LocalStorage, PuzzleSolveData } from "./storage";
 
 export type Submission = { active: number, procs: ReadonlyMap<number,Procedure> };
 

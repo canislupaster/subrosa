@@ -178,8 +178,8 @@ export const puzzles = [
 		})
 	},
 	{
-		name: "Impact",
-		key: "impact",
+		name: "Classic",
+		key: "classic",
 		generator: defaultGen,
 		validator: defaultValidator,
 		kind: "decode",
@@ -191,22 +191,23 @@ export const puzzles = [
 		}
 	},
 	{
-		name: "Impact (x2)",
-		key: "impact-x2",
-		generator(seed?: number) {
-			const rng = new RNG(seed);
-			return fill(rng.nextRange(5,50), ()=>rng.nextRange(0,5)==0 ? "x" : rng.nextString(alpha, 1)).join("");
-		},
+		name: "Leapfrog",
+		key: "leapfrog",
+		generator: defaultGen,
 		validator: defaultValidator,
 		kind: "decode",
 		encode(inp) {
-			const rng = new RNG(deriveSeed(inp));
-			return inp.split("x").flatMap(s=>{
-				let i = rng.nextRange(0,s.length);
-				let j = rng.nextRange(0,s.length);
-				if (j<i) [i,j] = [j,i];
-				return [s.slice(0,i), s.slice(i,j), s.slice(j)];
-			}).toReversed().join("x");
+			let i=0;
+			const visited = new Set<number>();
+			let out = "";
+			while (visited.size < inp.length) {
+				while (visited.has(i%inp.length)) i++;
+				i%=inp.length;
+				out+=inp[i];
+				visited.add(i);
+				i+=charToNum[inp[i]]+1;
+			}
+			return out;
 		}
 	},
 	{
@@ -277,6 +278,22 @@ export const puzzles = [
 		},
 	},
 	{
+		name: "Taylor Series",
+		key: "taylor-series",
+		validator: defaultValidator,
+		generator: defaultGen,
+		kind: "decode",
+		encode(inp) {
+			let d = [...inp].map(x=>charToNum[x]);
+			let s = "";
+			while (d.length > 0) {
+				s+=numToChar[d[0]];
+				d = fill(d.length-1, i=>(d[i+1]+alphaLen-d[i])%alphaLen);
+			}
+			return s;
+		}
+	},
+	{
 		name: "Rot 13",
 		key: "rot-13",
 		validator: defaultValidator,
@@ -298,20 +315,4 @@ export const puzzles = [
 			return res.reverse().join("");
 		}
 	},
-	{
-		name: "Taylor Series",
-		key: "taylor-series",
-		validator: defaultValidator,
-		generator: defaultGen,
-		kind: "decode",
-		encode(inp) {
-			let d = [...inp].map(x=>charToNum[x]);
-			let s = "";
-			while (d.length > 0) {
-				s+=numToChar[d[0]];
-				d = fill(d.length-1, i=>(d[i+1]+alphaLen-d[i])%alphaLen);
-			}
-			return s;
-		}
-	}
 ] as const satisfies PuzzleData[];

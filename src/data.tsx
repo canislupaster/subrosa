@@ -56,7 +56,7 @@ export const extraData: ExtraData = {
 		src: "ch3"
 	},
 	reverse: {
-		blurb: <>Let's turn things around. <img src="/img/unoreverse.png" className="h-8 inline -mt-1" /></>,
+		blurb: <>Let's switch things up.</>,
 		extraDesc: "Reverse the string!",
 		solveBlurb: "The new era of string operations begins."
 	},
@@ -73,8 +73,8 @@ export const extraData: ExtraData = {
 		blurb: "Everything can change.",
 		src: "ch5"
 	},
-	impact: {
-		blurb: "Hit the ground running.",
+	classic: {
+		blurb: "A good old fashioned puzzle.",
 		extraDesc: <>Crack your first <b>SUBKEY</b>.</>,
 		solveBlurb: "Access granted."
 	},
@@ -82,9 +82,8 @@ export const extraData: ExtraData = {
 		blurb: "A new perspective offers clarity.",
 		src: "ch6"
 	},
-	"impact-x2": {
-		blurb: <>An e<span className="font-extrabold font-sans" >x</span>citing follow-up.</>,
-		extraDesc: "Tip: instead of typing garbage, try using the generator! It also generates the system tests, so it is designed to suggest edge cases."
+	"leapfrog": {
+		blurb: "",
 	},
 	abc: {
 		blurb: "An alphabetic exercise in decreasing entropy.",
@@ -154,13 +153,13 @@ export const messages = [
 		src: "braindamage"
 	}, {
 		key: "random5",
-		minStageKey: "permutation",
+		minStageKey: "classic",
 		expectedMinutes: 90,
 		from: "Egor Gagushin", subject: "Advisory on register naming",
 		src: "naming"
 	}, {
 		key: "interns",
-		minStageKey: "permutation",
+		minStageKey: "leapfrog",
 		expectedMinutes: 120,
 		from: "Cyril Sharma", subject: "Tips for interns",
 		src: "interns"

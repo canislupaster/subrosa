@@ -1,5 +1,10 @@
+// hi i hope you enjoy my codebase
+// i'm experimenting with a style i call "psycho"
+// in which i write insane code with no comments
+// have fun :)
+
 import "disposablestack/auto";
-import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Divider, ease, GotoContext, Input, LocalStorage, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useGoto, useMd, useTitle } from "./ui";
+import { Anchor, anchorHover, anchorUnderline, bgColor, Button, ConfirmModal, Container, Divider, ease, GotoContext, Input, mapWith, Modal, setWith, Text, textColor, Theme, ThemeContext, throttle, useAsyncEffect, useFnRef, useGoto, useMd, useTitle } from "./ui";
 import { ComponentChildren, ComponentProps, render, JSX, Fragment, createElement } from "preact";
 import { useCallback, useContext, useEffect, useErrorBoundary, useMemo, useRef, useState } from "preact/hooks";
 import { Editor } from "./editor";
@@ -8,12 +13,12 @@ import { EditorState, makeEntryProc, Procedure } from "../shared/eval";
 import { IconBookFilled, IconBrandGithubFilled, IconChevronRight, IconCircleCheckFilled, IconCircleDashedCheck, IconDeviceDesktopFilled, IconDownload, IconPuzzleFilled, IconSkull, IconTriangleFilled, IconUpload } from "@tabler/icons-preact";
 import { LocationProvider, Route, Router, useLocation } from "preact-iso";
 import { twMerge, twJoin } from "tailwind-merge";
-import { parseExtra, stringifyExtra } from "../shared/util";
 import { stageUrl } from "../shared/data";
 import { useStageCount } from "./api";
 import { BgAnimComponent } from "./bganim";
 import { LogoBack } from "./logo";
 import { forwardRef } from "preact/compat";
+import { exportSave, getCompleted, importSave, LocalStorage, useProcStorage } from "./storage";
 
 export function FadeRoute({className, ...props}: JSX.IntrinsicElements["div"]&{
   className?: string
@@ -45,8 +50,8 @@ export function FadeRoute({className, ...props}: JSX.IntrinsicElements["div"]&{
 function Footer() {
   return <div className={`mt-5 ${textColor.dim} pl-3 mb-10 flex flex-col items-center gap-2`} >
     <p>
-      <span className="-ml-6" />
-      A game by <Anchor href="https://thomasqm.com" target="_blank" >Thomas Marlowe</Anchor>,<br />
+      <span className="-ml-8" />
+      A game handcrafted by <Anchor href="https://thomasqm.com" target="_blank" >Thomas Marlowe</Anchor>,<br />
       {" "}<Anchor href="https://github.com/kartva" target="_blank" >Kartavya Vashishtha</Anchor>,
       {" "}and <Anchor href="https://linkedin.com/in/peterjin25/" target="_blank" >Peter Jin</Anchor>.
     </p>
@@ -101,55 +106,6 @@ function ErrorPage({errName, err, reset, children}: {
   </div>;
 }
 
-type Save = {
-  localStorage: LocalStorage,
-  procs: [number, Procedure][]
-};
-
-class ProcStorage {
-  savedProcs = new Map<number, Procedure|null>();
-  constructor() {}
-  getProc(i: number): Procedure|null {
-    const proc = parseExtra(localStorage.getItem(`proc${i}`)) as Procedure|null;
-    this.savedProcs.set(i, proc);
-    return proc;
-  }
-  getUserProcs() {
-    return (LocalStorage.userProcs ?? [])
-      .map((i): [number,Procedure]=>[i, this.getProc(i)!]);
-  }
-  getAllProcs() {
-    return [
-      ...LocalStorage.userProcs ?? [],
-      ...[...LocalStorage.puzzleProcs?.values() ?? []]
-        .filter((x: unknown): x is number => typeof x=="number")
-    ].map((i): [number,Procedure]=>[i, this.getProc(i)!]);
-  }
-  setProc(i: number, proc: Procedure) {
-    if (this.savedProcs.get(i)==proc) return;
-    const oldMaxNode = this.savedProcs.get(i)?.maxNode ?? 0;
-    LocalStorage.numNodesCreated = (LocalStorage.numNodesCreated ?? 0) + proc.maxNode - oldMaxNode;
-    this.savedProcs.set(i, proc);
-    localStorage.setItem(`proc${i}`, stringifyExtra(proc));
-  }
-  setProcs(procs: [number, Procedure][]) {
-    for (const [i,x] of procs) this.setProc(i,x);
-  }
-}
-
-function getCompleted() {
-  const story =  LocalStorage.readStory ?? new Set();
-  const puzzle =  LocalStorage.solvedPuzzles ?? new Set();
-  const withDone = stages.map((stage,i)=>({
-    ...stage, i,
-    done: stage.type=="puzzle" ? puzzle.has(stage.key) : story.has(stage.key)
-  }));
-
-  const activeStages = import.meta.env["VITE_ALL_COMPLETED"]=="1" ? withDone.length
-    : withDone.find(x=>x.type=="puzzle" && !x.done)?.i ?? withDone.length;
-  return { story, puzzle, withDone, activeStages } as const;
-}
-
 function Menu() {
   const [{withDone, activeStages}, setCompleted] = useState(getCompleted);
   
@@ -160,7 +116,7 @@ function Menu() {
   const [importData, setImportData] = useState("");
   const [exporting, setExporting] = useState(false);
 
-  const percentProgress = `${Math.round(activeStages/stages.length * 90)}%`;
+  const percentProgress = `${Math.round(activeStages/stages.length * 100)}%`;
   const progressBorderRadius = `${Math.round((1-Math.pow(activeStages/stages.length,3)) * 50)}px`;
 
   useTitle("Subrose | Menu");
@@ -182,7 +138,7 @@ function Menu() {
         <div className={twJoin("mb-10", textColor.gray, bigTextClass)} >
           {activeStages}
           <span className={twJoin(bgColor.divider, "h-[120%] mb-1.5 align-middle w-2 inline-block mx-2 -skew-x-6")} />
-          <span className={bgColor.divider} >{stages.length}</span>
+          <span className={textColor.divider} >{stages.length}</span>
         </div>
         <Text>nodes created</Text>
         <div className={bigTextClass} >{LocalStorage.numNodesCreated ?? 0}</div>
@@ -205,14 +161,7 @@ function Menu() {
 
         <form onSubmit={(ev)=>{
           ev.preventDefault();
-
-          const save = parseExtra(importData) as Save;
-          for (const k in save.localStorage) {
-            // casting hell
-            (LocalStorage[k as keyof LocalStorage] as unknown) = save.localStorage[k as keyof LocalStorage] as unknown;
-          }
-          
-          new ProcStorage().setProcs(save.procs);
+          importSave(importData);
           setCompleted(getCompleted());
           setImporting(false);
         }} className="flex flex-col gap-2" >
@@ -236,7 +185,7 @@ function Menu() {
             && <Text v="md" className="mt-1 -mb-2 flex flex-row gap-2 items-center" >
               <IconTriangleFilled size={18} />{stage.startOf} <Divider className="w-auto ml-2 grow" />
             </Text>}
-          <button className={twMerge(a && anchorHover, "flex flex-col gap-0.5 p-2 pt-1 group items-start relative pr-10")}
+          <button className={twMerge(a && anchorHover, "flex flex-col gap-0.5 p-2 pt-1 group items-start relative pr-10")} disabled={!a}
             onClick={stage.i<=activeStages ? ()=>{
               goto(stageUrl(stage));          
             } : undefined} >
@@ -266,13 +215,7 @@ function Menu() {
           <IconDownload /> Import data
         </Anchor>
         <Anchor className="items-center" onClick={()=>{
-          const txt = stringifyExtra({
-            localStorage: LocalStorage,
-            procs: new ProcStorage().getAllProcs()
-          } satisfies Save);
-
-          void window.navigator.clipboard.writeText(txt);
-
+          void window.navigator.clipboard.writeText(exportSave());
           setExporting(true);
         }} ><IconUpload />Export data</Anchor>
       </div>
@@ -285,19 +228,18 @@ function Menu() {
 function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
   const throttleSave = useFnRef(()=>throttle(2000, true), []);
   useStageCount(stage);
-  const procStorage = useRef<ProcStorage>(null);
-  useEffect(()=>{ procStorage.current = new ProcStorage(); }, []);
+  const procStorage = useProcStorage();
 
   const [edit, setEdit] = useState<EditorState|null>(null);
 
   useEffect(()=>{
-    const userProcs = procStorage.current!.getUserProcs();
+    const userProcs = procStorage.getUserProcs();
     // backwards compat for like 2 people
     let maxProc = LocalStorage.maxProc ?? Math.max(0, ...userProcs.map(([i])=>i+1));
     let entryProcI = LocalStorage.puzzleProcs?.get(stage.key);
     let entryProc: Procedure;
     if (typeof entryProcI=="number") {
-      entryProc = procStorage.current!.getProc(entryProcI)!;
+      entryProc = procStorage.getProc(entryProcI)!;
     } else if (entryProcI && typeof entryProcI=="object") {
       entryProc = entryProcI;
       entryProcI = maxProc++;
@@ -307,26 +249,21 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
     }
 
     setEdit({
-      // occasionally, very rarely, hopefully never, maybe once
-      // stupid fucking drag and drop library didnt call perform transfer
-      // and it polluted my node list
-      procs: new Map(([...userProcs, [entryProcI, entryProc]] as const).map(
-        ([k,v])=>[k, {...v, nodeList: v.nodeList.filter(x=>typeof x=="number")}]
-      )),
+      procs: new Map(([...userProcs, [entryProcI, entryProc]])),
       userProcList: userProcs.map(([i])=>i),
       maxProc, entryProc: entryProcI,
       stepsPerS: LocalStorage.stepsPerS ?? 5,
       solved: LocalStorage.solvedPuzzles?.has(stage.key) ?? false,
       undoHistory: [], curNumUndo: 0
     });
-  }, [stage]);
+  }, [procStorage, stage]);
   
   const setEdit2 = useCallback((cb: (old: EditorState)=>EditorState)=>setEdit(old=>{
     const ns = cb(old!);
 
     throttleSave.current?.call(()=>{
       LocalStorage.stepsPerS = ns.stepsPerS;
-      procStorage.current!.setProcs(
+      procStorage.setProcs(
         [...ns.procs.entries()].map(([k,v]): [number, Procedure]=>[k, v])
       );
 
@@ -336,7 +273,7 @@ function PuzzleStage({stage, i}: {stage: Stage&{type: "puzzle"}, i: number}) {
     });
 
     return ns;
-  }), [stage.key, throttleSave]);
+  }), [procStorage, stage.key, throttleSave]);
 
   const goto = useGoto();
   useTitle(`Subrose | ${stage.name}`);

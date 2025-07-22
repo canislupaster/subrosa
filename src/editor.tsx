@@ -1,6 +1,6 @@
 import { MutableRef, useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Procedure, Node, Register, EditorState, clone, step, ProgramState, InterpreterError, RegisterRefClone, strLenLimit, makeState, NodeSelection, toSelection, fromSelection, makeProc, numTests } from "../shared/eval";
-import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, interactiveContainerDefault, LocalStorage, mapWith, Modal, Select, SetFn, setWith, Text, ThemeSpinner, toSearchString, useDragList, useFnRef, useGoto, useShortcuts, useToast } from "./ui";
+import { Alert, Anchor, anchorStyle, AppTooltip, bgColor, borderColor, Button, ConfirmModal, containerDefault, debounce, Divider, HiddenInput, IconButton, Input, interactiveContainerDefault, mapWith, Modal, Select, SetFn, setWith, Text, ThemeSpinner, toSearchString, useDragList, useFnRef, useGoto, useShortcuts, useToast } from "./ui";
 import { twMerge, twJoin } from "tailwind-merge";
 import { IconArrowsRightLeft, IconChartBar, IconChevronCompactDown, IconChevronLeft, IconCircleCheckFilled, IconCircleFilled, IconCircleOff, IconHelp, IconInfoCircle, IconLogin2, IconPencil, IconPlayerPauseFilled, IconPlayerPlayFilled, IconPlayerSkipForwardFilled, IconPlayerStopFilled, IconPlayerTrackNextFilled, IconPlayerTrackPrevFilled, IconPlus, IconRotate, IconTrash, IconX } from "@tabler/icons-preact";
 import { ComponentChild, ComponentChildren, RefObject } from "preact";
@@ -12,6 +12,9 @@ import { Reference } from "./reference";
 import { LogoBack } from "./logo";
 import { addFromText, toText } from "../shared/text";
 import { Puzzle } from "./data";
+import { LocalStorage } from "./storage";
+
+const maxUndoSteps = 100;
 
 const nodeStyle = twMerge(containerDefault, `rounded-sm px-4 py-2 flex flex-row gap-2 items-center pl-1.5 text-sm relative`);
 export const blankStyle = twMerge(nodeStyle, bgColor.secondary, "flex flex-col items-center justify-center py-4 px-2");
@@ -81,11 +84,13 @@ type EditData = {
 	regParam: ReadonlyMap<number, number>,
 	nodeMap: ReadonlyMap<number|"end", number>,
 	runRegisters: ReadonlyMap<number, RegisterRefClone>|null,
+	gotoToInfo: ReadonlyMap<number, { col: number, fromI?: number, toI?: number }>;
 
-	// i dont like how i pass some state deeply
-	// and then theres just this
 	setSelectingGoto: (x: number|null)=>void,
-	selectingGoto: number|null
+	selectingGoto: number|null,
+	
+	setHighlightedRegister: (x: number|null)=>void,
+	highlightedRegister: number|null
 };
 
 const regLabel = (i: number, v: Register)=>`#${i+1}${v.name!=undefined ? `: ${v.name}` : ""}`;
@@ -95,7 +100,10 @@ function RegisterPicker<Create extends boolean = false>({p, x, setX, desc, creat
 	setX?: (x: Create extends true ? number|"create" : number)=>void,
 	desc?: string, create?: Create, className?: string
 }) {
-	return <div className="flex flex-col" >
+	const sel = x!=-1 && p.highlightedRegister==x;
+	return <div className="flex flex-col"
+		onMouseEnter={x!="create" && x!=-1 ? ()=>p.setHighlightedRegister(x) : undefined}
+		onMouseLeave={sel ? ()=>p.setHighlightedRegister(null) : undefined} >
 		{desc!=undefined && <Text v="sm" >{desc}</Text>}
 		<Select options={[
 				...create==true ? [{ label: "(create)", value: "create" as unknown as number }] : [],
@@ -109,7 +117,7 @@ function RegisterPicker<Create extends boolean = false>({p, x, setX, desc, creat
 			disabled={setX==undefined}
 			placeholder={"(unset)"}
 			value={x} setValue={setX}
-			className={className} />
+			className={twMerge(sel && bgColor.highlight2, "transition-colors", className)} />
 	</div>;
 }
 
@@ -158,23 +166,24 @@ function GotoArrow({p, node, nodeI}: {
 			const yo = parent.scrollTop;
 			const arrowHeight = arrow.getBoundingClientRect().height;
 			
-			// adjust for border...
-			arrow.style.top = `${b.y + b.height/2 - c.top - arrowHeight/2 
+			const info = p.gotoToInfo.get(nodeI)!;
+			let {fromI, toI} = info;
+			toI??=.5; fromI??=.5;
+
+			arrow.style.top = `${b.y + b.height*toI - c.top - arrowHeight/2 
 				+ (a.y < b.y ? -1 : 1) + yo}px`;
 			arrow.style.right = `${c.right - b.left - 1}px`;
 
-			const params = [b.y + yo, b.height,a.y + yo, a.height];
-			// schedule another update if still hot
+			const params = [b.y + yo, b.height, a.y + yo, a.height];
 			if (params.some((v,i)=>Math.abs(lastParams[i]-v) > 1)) dispatch();
 			lastParams=params;
 
-			if (a.y > b.y) [a,b] = [b,a];
-			const depth = 0.7*(2.4*(b.bottom - a.top)/parent.scrollHeight + ((127.8234*nodeI)%1.2324)*1.1);
+			if (a.y > b.y) [a,b,fromI,toI] = [b,a,toI,fromI];
 			const obj = {
-				top: `${a.y + a.height/2 - c.top + yo}px`,
-				bottom: `${c.bottom - (b.y + b.height/2) - yo}px`,
-				right: `${c.right - Math.max(a.left, b.left)}px`,//`${c.right - Math.min(a.right, b.right)}px`,
-				left: `calc(${Math.max(a.left, b.left) - c.left}px - ${12.5*(2*depth+1)}px)`
+				top: `${a.y + a.height*fromI - c.top + yo}px`,
+				bottom: `${c.bottom - (b.y + b.height*toI) - yo}px`,
+				right: `${c.right - Math.max(a.left, b.left)}px`,
+				left: `calc(${Math.max(a.left, b.left) - c.left}px - ${20 + info.col*55}px)`
 			} as const;
 			
 			type ObjKey = keyof typeof obj;
@@ -190,7 +199,7 @@ function GotoArrow({p, node, nodeI}: {
 			observer.disconnect();
 			window.removeEventListener("resize", updateArrow);
 		};
-	}, [node, node.ref, nodeI, p.nodeRefs, p.proc.nodeList, p.proc.nodes]);
+	}, [node, node.ref, nodeI, p.gotoToInfo, p.nodeRefs, p.proc.nodeList, p.proc.nodes]);
 
 	return <>
 		<div className="absolute w-4" hidden ref={arrowRef} >
@@ -200,9 +209,13 @@ function GotoArrow({p, node, nodeI}: {
 	</>;
 }
 
+const selectionHandleClass = "selectable";
 const getClickNode = (ev: MouseEvent, refs: EditData["nodeRefs"], strict: boolean)=>{
 	const candidates =  [...refs.current.entries()]
-		.filter(([,y])=>strict ? ev.target==y : y.contains(ev.target as globalThis.Node|null))
+		.filter(([,y])=>strict ? (
+				y==ev.target || [...y.querySelectorAll(`.${selectionHandleClass}`)]
+					.some(z=>z.contains(ev.target as HTMLElement|null))
+			) : y.contains(ev.target as HTMLElement|null))
 	return candidates.length==0 ? null : candidates[0][0];
 }
 
@@ -224,19 +237,23 @@ function GotoInner({p, node, setNode, nodeI}: {
 			p.setSelectingGoto(null);
 		};
 
-		document.addEventListener("click", cb, true);
-		return ()=>document.removeEventListener("click", cb, true);
+		document.addEventListener("mousedown", cb, true);
+		return ()=>document.removeEventListener("mousedown", cb, true);
 	}, [node, nodeI, p, selecting, setNode]);
 	
-	const to = node.ref=="unset" ? null : p.nodeMap.get(node.ref);
-
 	return <>
-		<Button onClick={()=>{
-			if (setNode!=undefined) p.setSelectingGoto(selecting ? null : nodeI);
+		<Button onClick={setNode!=undefined ? ()=>{
+			p.setSelectingGoto(selecting ? null : nodeI);
+		} : undefined} tabIndex={0} onBlur={selecting ? ()=>{
+			p.setSelectingGoto(null);
+		} : undefined} onKeyDown={(ev)=>{
+			if (ev.key=="Escape") ev.currentTarget.blur();		
 		}} className={
 			selecting ? bgColor.highlight : node.ref=="unset" && setNode ? bgColor.red : ""
 		} >
-			{to==undefined ? "Jump to..." : `Jump: ${to+1}`}
+			{node.ref=="unset" ? "Jump to..."
+				: node.ref=="end" ? "Jump to end"
+				: `Jump: ${node.ref+1}`}
 		</Button>
 		<RegisterPicker desc="cond" p={p} x={node.conditional ?? -1} setX={
 			setNode ? v=>setNode({...node, conditional: v<0 ? null : v}) : undefined
@@ -338,7 +355,7 @@ function ProcNode({p, node, setNode: setNode2, openProc, nodeI, idx, status, set
 				(el: HTMLDivElement|null)=>nodeI!=undefined && setRef?.(nodeI, el),
 				[nodeI, setRef]
 			)} data-key={nodeI} >
-		<img src={iconURL(node)} className="w-10 cursor-move draghandle mb-4" />
+		<img src={iconURL(node)} className={twJoin("w-10 cursor-move draghandle mb-4", selectionHandleClass)} />
 		{idx!=undefined && <Text v="dim" className="absolute left-1 bottom-1" >{idx}</Text>}
 		{inner}
 		{setNode ? <button onClick={()=>{ setNode(null); }}
@@ -403,17 +420,18 @@ function RegisterEditor({p, reg, setReg, drag}: {
 		setRunValue(newV ?? x);
 	};
 
+	const sel = p.highlightedRegister==reg;
 	return <div className={twMerge(nodeStyle, drag && draggingStyle, "flex flex-col pl-2 items-stretch gap-1 pr-1")}
 		data-key={reg} >
 		<div className="flex flex-row gap-2 mb-1 items-center" >
 			<Text v="bold" className="cursor-move draghandle" >{"#"}{regI+1}</Text>
-			<HiddenInput placeholder={"(unnamed)"}
+			<HiddenInput placeholder={"(unnamed)"} className={sel ? bgColor.highlight2 : ""}
 				{...useValidity(
 					regV.name==null ? "" : regV.name,
 					v=>setReg({ ...regV, name: v.length==0 ? null : v }, reg)
 				)}
 				{...nameInputProps} />
-			<IconButton className="ml-auto" icon={<IconX />} onClick={()=>{
+			<IconButton className="ml-auto" icon={<IconX size={20} />} onClick={()=>{
 				setReg(null, reg);
 			}} />
 		</div>
@@ -479,8 +497,6 @@ type UserProcs = {
 	setProcList: (vs: number[])=>void
 };
 
-const MAX_UNDO_STEPS = 100;
-
 function NodeAdder({add, procs, procList, i}: {
 	add: (i: number, drag: DragNode)=>void, i: number,
 	procs: ReadonlyMap<number, Procedure>, procList: number[]
@@ -529,24 +545,84 @@ function ProcEditor({
 	runState: ProcRunState|null, stack?: ComponentChildren,
 	undo: (redo: boolean)=>void, input: ComponentChildren
 }&UserProcs) {
-	const isUserProc = entryProc!=procI; // whether proc is editable
+	const isUserProc = entryProc!=procI;
 	const nodeRefs = useRef(new Map<number|"end",HTMLDivElement>());
 	const [selectingGoto, setSelectingGoto] = useState<number|null>(null);
+	const [highlightedRegister, setHighlightedRegister] = useState<number|null>(null);
+	const nodeMap = useMemo(()=>new Map<number|"end", number>([
+		...proc.nodeList.map((v,i)=>[v,i] satisfies [number|"end", number]),
+		["end", proc.nodeList.length]
+	]), [proc.nodeList]);
+
+	const gotoToInfo = useMemo(()=>{
+		const gotoIntervals = proc.nodeList.flatMap((v,i)=>{
+			const x = proc.nodes.get(v);
+			if (!x || x.op!="goto" || x.ref=="unset") return null;
+			const to = x.ref!="end" ? nodeMap.get(x.ref) : null;
+			const dist = to==null ? Infinity : Math.abs(i-to);
+			return (to!=null ? [i, to].sort((a,b)=>a-b) : [i]).map(
+				(x,j)=>[x, v, j==0, dist] as const
+			);
+		}).filter(x=>x!=null).sort((a,b)=>
+			a[0]<b[0] || (a[0]==b[0] && a[2] && !b[2])
+			|| (a[0]==b[0] && a[2]==b[2] && a[3]>b[3]) ? -1 : 1
+		);
+
+		let numGotoCols = 0;
+		const nodeOrderedGotos = new Map<number, {
+			node: number, col: number, starting: boolean
+		}[]>();
+		const gotoToColumn = new Map<number,number>();
+		const unusedGotoCols = new Set<number>();
+		for (const [i, nodeI, starting] of gotoIntervals) {
+			let col;
+			if (starting) {
+				if (unusedGotoCols.size>0) {
+					col=Math.min(...unusedGotoCols.keys());
+					unusedGotoCols.delete(col);
+				} else {
+					col=numGotoCols++;
+				}
+				gotoToColumn.set(nodeI, col);
+			} else {
+				col = gotoToColumn.get(nodeI)!;
+				unusedGotoCols.add(col);
+			}
+			
+			const gotos = nodeOrderedGotos.get(proc.nodeList[i]) ?? [];
+			gotos.push({node: nodeI, col, starting});
+			nodeOrderedGotos.set(proc.nodeList[i], gotos);
+		}
+		
+		const fromI = new Map<number,number>(), toI = new Map<number,number>();
+		for (const [k,x] of nodeOrderedGotos) {
+			for (const [node,i] of x.sort((a,b)=>
+				b.starting && !a.starting || (a.starting==b.starting && (
+					a.starting ? a.col<b.col : a.col>b.col
+				)) ? -1 : 1
+			).map(({node}, i)=>[node, (i+1)/(x.length+1)])) {
+				if (node==k) fromI.set(node, i); else toI.set(node, i);
+			}
+		}
+
+		return new Map(gotoToColumn.entries().map(([a,b])=>[ a, {
+				col: numGotoCols==1 ? 0.5 : (numGotoCols-1-b)/(numGotoCols-1),
+				fromI: fromI.get(a), toI: toI.get(a)
+		} ] as const));
+	}, [nodeMap, proc.nodeList, proc.nodes]);
+		
 	const data: EditData = useMemo(()=>{
 		return {
 			i: procI, proc, procs,
 			selectingGoto, setSelectingGoto,
-			nodeRefs,
+			highlightedRegister, setHighlightedRegister,
+			nodeRefs, nodeMap, gotoToInfo,
 			regMap: new Map(proc.registerList.map((v,i)=>[v,i])),
 			regParam: new Map(proc.registerList.filter(a=>proc.registers.get(a)?.type=="param")
 				.map((x,i)=>[x,i])),
-			nodeMap: new Map<number|"end", number>([
-				...proc.nodeList.map((v,i)=>[v,i] satisfies [number|"end", number]),
-				["end", proc.nodeList.length]
-			]),
-			runRegisters: runState?.registers ?? null
+			runRegisters: runState?.registers ?? null,
 		} as const;
-	}, [procI, proc, procs, selectingGoto, runState?.registers]);
+	}, [procI, proc, procs, selectingGoto, highlightedRegister, nodeMap, gotoToInfo, runState?.registers]);
 
 	const nodeForUserProc = useCallback((i: number): Node => {
 		const proc = procs.get(i)!;
@@ -573,7 +649,7 @@ function ProcEditor({
 		return nodeI;
 	}, [nodeForUserProc, setProc]);
 
-	const {ref: nodeListRef, draggingKeys: draggingNodes} = useDragList<number, HTMLUListElement>({
+	const {ref: nodeListRef, draggingKeys: draggingNodes, clearAnims: clearNodeAnims} = useDragList<number, HTMLUListElement>({
 		values: proc.nodeList, group: "proc",
 		setValues: useCallback((xs: number[])=>setProc(p=>({...p, nodeList: xs })), [setProc]),
 		dataKey: v=>v, selection,
@@ -635,13 +711,18 @@ function ProcEditor({
 		const active = runState?.scrollNode;
 		if (active==undefined) return;
 
+		clearNodeAnims();
 		const ref = nodeRefs.current.get(active);
-		ref?.scrollIntoView({ behavior: "smooth", block: "center" });
-	}, [runState?.scrollNode]);
+		const tm = setTimeout(()=>{
+			ref?.scrollIntoView({ behavior: "smooth", block: "center" });
+		}, 100);
+		return ()=>clearTimeout(tm);
+	}, [clearNodeAnims, runState?.scrollNode]);
 	
 	const highlightGotoSelection = useMemo(()=>
 		new Set(proc.nodes.entries().flatMap(([k,v])=>{
-			if (v.op=="goto" && typeof v.ref=="number" && (selection.has(k) || selection.has(v.ref)))
+			if (v.op=="goto" && v.ref!="unset"
+				&& (selection.has(k) || (v.ref!="end" && selection.has(v.ref))))
 				return [k, v.ref];
 			return [];
 		})),
@@ -772,11 +853,13 @@ function ProcEditor({
 						.toSpliced(Math.max(0,idx), 0, ...selection)
 				}));
 			} else if (upDown && proc.nodeList.length>0) {
-				setSelection(s=>new Set(s.size>0
-					? s.keys().map(x=>data.nodeMap.get(x))
+				setSelection(s=>{
+					const ns = s.size>0 ? s.keys().map(x=>data.nodeMap.get(x))
 						.filter(x=>x!=undefined)
 						.map(v=>proc.nodeList[(v+proc.nodeList.length+off)%proc.nodeList.length])
-					: [proc.nodeList[up ? proc.nodeList.length-1 : 0]]));
+					: [proc.nodeList[up ? proc.nodeList.length-1 : 0]];
+					return new Set(ev.shiftKey ? [...ns, ...s] : ns);
+				});
 			} else {
 				return;
 			}
@@ -887,7 +970,7 @@ function ProcEditor({
 						];
 					})}
 				
-					<div className={twJoin(blankStyle, selectingGoto!=null && twJoin(bgColor.hover, "cursor-pointer"))} ref={endNodeRef} >
+					<div className={twMerge(blankStyle, highlightGotoSelection.has("end") && bgColor.md, selectingGoto!=null && twJoin(bgColor.hover, "cursor-pointer"))} ref={endNodeRef} >
 						{proc.nodeList.length==0 ? <>
 							<IconHelp />
 							<Text v="sm" >Use the library on the right to add nodes</Text>
@@ -1136,9 +1219,24 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 
 	const toast = useToast();
 	const activeProc = edit.procs.get(active);
+
+	const openProc = useCallback((i?: number)=>{
+		const newProcHistory = [...procHistory];
+		if (i!=null) {
+			if (i!=active) newProcHistory.push(active);
+		} else {
+			while (i==null || !edit.procs.has(i)) {
+				i = newProcHistory.pop() ?? edit.entryProc;
+			}
+		}
+
+		setActive(i);
+		setProcHistory(newProcHistory);
+	}, [active, edit.entryProc, edit.procs, procHistory]);
+
 	useEffect(()=>{
-		if (!activeProc) setActive(edit.entryProc);
-	}, [activeProc, edit.entryProc]);
+		if (!activeProc) openProc();
+	}, [activeProc, edit.entryProc, openProc]);
 
 	const setProc = useCallback((n: (x: Procedure)=>Procedure)=>{
 		setEdit(v=>{
@@ -1147,7 +1245,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				[active, v.procs.get(active)!] as const
 			];
 
-			if (newUndo.length>MAX_UNDO_STEPS) newUndo.shift();
+			if (newUndo.length>maxUndoSteps) newUndo.shift();
 
 			return {
 				...v, procs: mapWith(v.procs, active, n(v.procs.get(active)!)),
@@ -1183,10 +1281,16 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	const [frameScrollNode, setFrameScrollNode] = useState<number|null>(null);
 	const frame = frameI==null ? undefined : runState?.stack[frameI];
 	
+	const lastProcAndNodeI = useRef<[number,number]>();
 	useEffect(()=>{
-		if (runState && frame && frameI==runState.stack.length-1 && runStatus.type=="paused") {
+		if (runState && frame && runStatus.type=="paused") {
+			if (frame.proc==lastProcAndNodeI.current?.[0] && frame.i==lastProcAndNodeI.current?.[1]) {
+				return;
+			}
+		
+			lastProcAndNodeI.current = [frame.proc, frame.i];
 			const p = edit.procs.get(frame.proc);
-			setFrameScrollNode(p?.nodeList[runState.stack[frameI].i] ?? null);
+			setFrameScrollNode(p?.nodeList[frame.i] ?? null);
 		} else {
 			setFrameScrollNode(null);
 		}
@@ -1297,7 +1401,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				}
 			});
 
-			cont&&=xd;
+			cont &&= xd;
 
 			// after first step, re-enable breakpoints
 			v.stopOnBreakpoint = !ignoreBreakpoint;
@@ -1354,7 +1458,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 		if (LocalStorage.seenReference!=true) {
 			setReferenceOpen(true);
 			LocalStorage.seenReference=true;
-		} else {
+		} else if (import.meta.env["VITE_OPEN_DASHBOARD"]!="0") {
 			doOpen();
 		}
 	}, []);
@@ -1362,20 +1466,6 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 	const setSolved = useCallback(()=>setEdit(e=>({...e, solved: true})), [setEdit]);
 
 	const goto = useGoto();
-
-	const openProc = (i?: number)=>{
-		const newProcHistory = [...procHistory];
-		if (i!=null) {
-			if (i!=active) newProcHistory.push(active);
-		} else {
-			while (i==null || !edit.procs.has(i)) {
-				i = newProcHistory.pop() ?? edit.entryProc;
-			}
-		}
-
-		setActive(i);
-		setProcHistory(newProcHistory);
-	};
 
 	const stack = runStatus.type=="stopped" ? undefined : <div className="flex flex-col editor-right-down gap-2 min-h-0 pb-4" >
 		<Divider className="mb-0" />
@@ -1434,7 +1524,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				
 		{output[0]==io.programInput && (
 			output[1]==io.programOutput ? <Alert className={bgColor.green} title="Test passed"
-				txt={<>
+				txt={output[1]=="" ? "Your program correctly output nothing." : <>
 					<p>Your program correctly output:</p>
 					<Text v="code" >{output[1].toString()}</Text>
 				</>} />
@@ -1492,7 +1582,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				<IconButton icon={<IconPlayerStopFilled className="fill-red-500" />}
 					disabled={runStatus.type=="stopped"}
 					onClick={()=>{ setRunStatus({type: "stopped"}) }}
-					shortcut="escape" />
+					shortcut={runStatus.type!="stopped" ? "escape" : undefined} />
 				
 				<IconButton icon={
 					runStatus.type=="done" ? <IconRotate className={"stroke-green-400"} />
@@ -1600,7 +1690,7 @@ export function Editor({edit, setEdit, nextStage, puzzle}: {
 				ev.preventDefault();
 				if (ev.currentTarget.reportValidity()) {
 					setEdit(v=>{
-						setActive(v.maxProc);
+						openProc(v.maxProc);
 						return {
 							...v, procs: mapWith(v.procs, v.maxProc, makeProc(newProc.name)),
 							userProcList: [...v.userProcList, v.maxProc],

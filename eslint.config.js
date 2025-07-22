@@ -29,6 +29,9 @@ export default [
       common
     ],
     settings: { },
+    rules: {
+      "@typescript-eslint/require-array-sort-compare": "warn"
+    },
     languageOptions: {
       globals: {...globals.browser},
       parserOptions: { projectService: true },

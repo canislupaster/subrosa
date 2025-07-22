@@ -1,12 +1,13 @@
 import { ComponentChildren, ComponentType, createContext, Fragment, JSX, VNode } from "preact";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { bgColor, Button, LocalStorage, Text, Divider, anchorStyle, Anchor, textColor, IconButton, borderColor, mapWith, Modal, useAsyncEffect } from "./ui";
+import { bgColor, Button, Text, Divider, anchorStyle, Anchor, textColor, IconButton, borderColor, mapWith, Modal, useAsyncEffect } from "./ui";
 import { data, StageData } from "../shared/data";
 import { extraData, Message, messages } from "./data";
 import { IconMailFilled, IconUserCircle } from "@tabler/icons-preact";
 import { twJoin, twMerge } from "tailwind-merge";
 import { compiler, MarkdownToJSX, RuleType } from "markdown-to-jsx";
 import { AsciiArt } from "./asciiart";
+import { LocalStorage } from "./storage";
 
 export function useStoryState<T=string>(key: string) {
 	const [x, setX] = useState<T>();

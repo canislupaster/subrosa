@@ -1,8 +1,9 @@
 import { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
-import { anchorStyle, bgColor, Divider, IconButton, LocalStorage, Modal, Select, Text, textColor, transparentNoHover } from "./ui";
+import { anchorStyle, bgColor, Divider, IconButton, Modal, Select, Text, textColor, transparentNoHover } from "./ui";
 import { IconBookFilled, IconChevronLeft, IconChevronRight, IconX } from "@tabler/icons-preact";
 import { twJoin } from "tailwind-merge";
+import { LocalStorage } from "./storage";
 
 type ReferencePage = {
 	key: string,
