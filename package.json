@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "format": "npx dprint fmt",
+    "prepare": "husky"
   },
   "dependencies": {
     "@tabler/icons-preact": "^3",
@@ -23,9 +25,11 @@
     "@preact/preset-vite": "^2",
     "@tailwindcss/vite": "^4",
     "@types/node": "^22",
+    "dprint": "^0.50",
     "eslint": "^9",
     "eslint-config-preact": "^2",
     "globals": "^16",
+    "husky": "^9",
     "typescript": "^5",
     "typescript-eslint": "^8",
     "vite": "^7"

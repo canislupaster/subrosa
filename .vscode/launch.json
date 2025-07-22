@@ -1,0 +1,24 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"request": "launch",
+			"name": "Server",
+			"type": "node",
+			"program": "${workspaceFolder}/server/main.ts",
+			"cwd": "${workspaceFolder}/server",
+			"runtimeExecutable": "deno",
+			"envFile": "${workspaceFolder}/server/.env",
+			"runtimeArgs": [
+				"run",
+				"--inspect-wait",
+				"--allow-net",
+				"--allow-env",
+				"--allow-read",
+				"--allow-ffi"
+			],
+			"console": "integratedTerminal",
+			"attachSimplePort": 0
+		}
+	]
+}

@@ -1,0 +1,11 @@
+{
+  "deno.enablePaths": [
+    "./server"
+  ],
+  "dprint.path": "node_modules/dprint/dprint",
+  "editor.defaultFormatter": "dprint.dprint",
+  "editor.formatOnSave": true,
+  "files.associations": {
+    "dprint.json": "jsonc"
+  },
+}

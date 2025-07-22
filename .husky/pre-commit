@@ -1,0 +1,1 @@
+npx dprint check && npx eslint .
